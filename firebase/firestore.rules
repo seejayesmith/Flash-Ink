@@ -12,5 +12,11 @@ service cloud.firestore {
       // Alternatively, allow creation if authenticated and the uid matches the document ID
       allow create: if request.auth != null && request.auth.uid == userId;
     }
+
+    // Allow read-only access to core configs for authenticated users
+    match /core_config/{configId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
   }
 }
