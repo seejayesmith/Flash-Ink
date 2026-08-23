@@ -3,6 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_radius.dart';
+import '../theme/app_buttons.dart';
 import 'phone_verification_screen.dart';
 import 'aesthetics_selection_screen.dart';
 
@@ -29,7 +32,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
         ),
         backgroundColor: const Color(0xFFEF4444),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: AppBorderRadius.md),
       ),
     );
   }
@@ -72,11 +75,11 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
       builder: (dialogContext) {
         return AlertDialog(
           backgroundColor: const Color(0xFF1E2020),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: AppShapes.card,
           title: Row(
             children: [
               const Icon(Icons.info_outline, color: Color(0xFFEEC200)),
-              const SizedBox(width: 10),
+              AppGaps.gapSm,
               Expanded(
                 child: Text(
                   'Anonymous Sign-In Disabled',
@@ -186,18 +189,16 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
       context: context,
       backgroundColor: const Color(0xFF1E2020),
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: AppBorderRadius.topLg),
       builder: (modalContext) {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Padding(
               padding: EdgeInsets.only(
-                left: 24.0,
-                right: 24.0,
-                top: 20.0,
-                bottom: MediaQuery.of(modalContext).viewInsets.bottom + 32.0,
+                left: AppSpacing.spaceLg,
+                right: AppSpacing.spaceLg,
+                top: AppSpacing.spaceLg,
+                bottom: MediaQuery.of(modalContext).viewInsets.bottom + AppSpacing.spaceXl,
               ),
               child: Form(
                 key: formKey,
@@ -211,11 +212,11 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                         height: 5,
                         decoration: BoxDecoration(
                           color: const Color(0xFF4D5252),
-                          borderRadius: BorderRadius.circular(3),
+                          borderRadius: BorderRadius.circular(3), // Small pill
                         ),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    AppGaps.gapLg,
                     Center(
                       child: Text(
                         isSignUp ? 'Create with Email' : 'Sign in with Email',
@@ -226,7 +227,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    AppGaps.gapLg,
                     Text(
                       'Email Address',
                       style: GoogleFonts.epilogue(
@@ -235,7 +236,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    AppGaps.gapXs,
                     TextFormField(
                       controller: emailController,
                       keyboardType: TextInputType.emailAddress,
@@ -248,16 +249,16 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                         filled: true,
                         fillColor: const Color(0xFF121414),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: AppBorderRadius.md,
                           borderSide: const BorderSide(color: Color(0xFF262929)),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: AppBorderRadius.md,
                           borderSide: const BorderSide(color: Color(0xFFEEC200)),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    AppGaps.gapMd,
                     Text(
                       'Password',
                       style: GoogleFonts.epilogue(
@@ -266,7 +267,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    AppGaps.gapXs,
                     TextFormField(
                       controller: passwordController,
                       obscureText: true,
@@ -279,77 +280,59 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                         filled: true,
                         fillColor: const Color(0xFF121414),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: AppBorderRadius.md,
                           borderSide: const BorderSide(color: Color(0xFF262929)),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: AppBorderRadius.md,
                           borderSide: const BorderSide(color: Color(0xFFEEC200)),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: isModalLoading
-                          ? null
-                          : () async {
-                              if (!formKey.currentState!.validate()) return;
-                              setModalState(() => isModalLoading = true);
-                              final rootNavigator = Navigator.of(context);
-                              final modalNavigator = Navigator.of(modalContext);
-                              try {
-                                UserCredential credential;
-                                if (isSignUp) {
-                                  credential = await _authService.signUpWithEmailAndPassword(
-                                    emailController.text,
-                                    passwordController.text,
-                                  );
-                                } else {
-                                  credential = await _authService.signInWithEmailAndPassword(
-                                    emailController.text,
-                                    passwordController.text,
-                                  );
-                                }
+                    AppGaps.gapLg,
+                    AppButtons.primaryCTA(
+                      isLoading: isModalLoading,
+                      onPressed: () async {
+                        if (!formKey.currentState!.validate()) return;
+                        setModalState(() => isModalLoading = true);
+                        final rootNavigator = Navigator.of(context);
+                        final modalNavigator = Navigator.of(modalContext);
+                        try {
+                          UserCredential credential;
+                          if (isSignUp) {
+                            credential = await _authService.signUpWithEmailAndPassword(
+                              emailController.text,
+                              passwordController.text,
+                            );
+                          } else {
+                            credential = await _authService.signInWithEmailAndPassword(
+                              emailController.text,
+                              passwordController.text,
+                            );
+                          }
 
-                                if (credential.user != null) {
-                                  try {
-                                    await FirebaseFirestore.instance
-                                        .collection('users')
-                                        .doc(credential.user!.uid)
-                                        .set({'role': widget.role}, SetOptions(merge: true));
-                                  } catch (_) {}
-                                }
+                          if (credential.user != null) {
+                            try {
+                              await FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(credential.user!.uid)
+                                  .set({'role': widget.role}, SetOptions(merge: true));
+                            } catch (_) {}
+                          }
 
-                                modalNavigator.pop();
-                                rootNavigator.pushAndRemoveUntil(
-                                  MaterialPageRoute(builder: (_) => const PhoneVerificationScreen()),
-                                  (route) => false,
-                                );
-                              } catch (e) {
-                                setModalState(() => isModalLoading = false);
-                                _showErrorSnackBar(e.toString());
-                              }
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFEEC200),
-                        foregroundColor: const Color(0xFF121414),
-                        minimumSize: const Size(double.infinity, 54),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(27),
-                        ),
-                      ),
-                      child: isModalLoading
-                          ? const SizedBox(
-                              height: 24,
-                              width: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text(
-                              isSignUp ? 'CREATE ACCOUNT' : 'SIGN IN',
-                              style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
-                            ),
+                          modalNavigator.pop();
+                          rootNavigator.pushAndRemoveUntil(
+                            MaterialPageRoute(builder: (_) => const PhoneVerificationScreen()),
+                            (route) => false,
+                          );
+                        } catch (e) {
+                          setModalState(() => isModalLoading = false);
+                          _showErrorSnackBar(e.toString());
+                        }
+                      },
+                      text: isSignUp ? 'CREATE ACCOUNT' : 'SIGN IN',
                     ),
-                    const SizedBox(height: 12),
+                    AppGaps.gapSm,
                     Center(
                       child: TextButton(
                         onPressed: () {
@@ -405,7 +388,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 20.0),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceXl, vertical: AppSpacing.spaceLg),
                 physics: const BouncingScrollPhysics(),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -420,7 +403,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                             color: const Color(0xFFEEC200),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        AppGaps.gapXs,
                         const Icon(
                           Icons.electric_bolt,
                           color: Color(0xFFEEC200),
@@ -428,7 +411,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    AppGaps.gapXs,
                     Text(
                       'Create an account or continue as guest to start exploring exclusive flash designs.',
                       textAlign: TextAlign.center,
@@ -438,72 +421,39 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                         height: 1.4,
                       ),
                     ),
-                    const SizedBox(height: 36),
+                    AppGaps.gapXl,
                     // Primary Account Creation Options
                     Column(
                       children: [
                         // Google OAuth Button
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.g_mobiledata, size: 30),
-                          label: const Text(
-                            'Continue with Google',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                          ),
-                          onPressed: _isLoading
-                              ? null
-                              : () => _handleOAuth(_authService.signInWithGoogle),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFF9FAFA),
-                            foregroundColor: const Color(0xFF121414),
-                            minimumSize: const Size(double.infinity, 54),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(27),
-                            ),
-                          ),
+                        AppButtons.primaryCTA(
+                          icon: Icons.g_mobiledata,
+                          text: 'Continue with Google',
+                          onPressed: _isLoading ? null : () => _handleOAuth(_authService.signInWithGoogle),
+                          backgroundColor: const Color(0xFFF9FAFA),
+                          foregroundColor: const Color(0xFF121414),
                         ),
-                        const SizedBox(height: 14),
+                        AppGaps.gapSm,
                         // Apple OAuth Button
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.apple, size: 26),
-                          label: const Text(
-                            'Continue with Apple',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                          ),
-                          onPressed: _isLoading
-                              ? null
-                              : () => _handleOAuth(_authService.signInWithApple),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1E2020),
-                            foregroundColor: const Color(0xFFF9FAFA),
-                            minimumSize: const Size(double.infinity, 54),
-                            side: const BorderSide(color: Color(0xFF4D5252), width: 1.5),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(27),
-                            ),
-                          ),
+                        AppButtons.primaryCTA(
+                          icon: Icons.apple,
+                          text: 'Continue with Apple',
+                          onPressed: _isLoading ? null : () => _handleOAuth(_authService.signInWithApple),
+                          backgroundColor: const Color(0xFF1E2020),
+                          foregroundColor: const Color(0xFFF9FAFA),
                         ),
-                        const SizedBox(height: 14),
+                        AppGaps.gapSm,
                         // Email / Password Button
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.mail_outline, size: 22),
-                          label: const Text(
-                            'Continue with Email',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                          ),
+                        AppButtons.primaryCTA(
+                          icon: Icons.mail_outline,
+                          text: 'Continue with Email',
                           onPressed: _isLoading ? null : _showEmailAuthModal,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF262929),
-                            foregroundColor: const Color(0xFFF9FAFA),
-                            minimumSize: const Size(double.infinity, 54),
-                            side: const BorderSide(color: Color(0xFF333737), width: 1.5),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(27),
-                            ),
-                          ),
+                          backgroundColor: const Color(0xFF262929),
+                          foregroundColor: const Color(0xFFF9FAFA),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 28),
+                    const SizedBox(height: AppSpacing.spaceXl),
                     // Visual Divider with "OR"
                     Row(
                       children: [
@@ -514,7 +464,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                           ),
                         ),
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          padding: AppPadding.screenHorizontal,
                           child: Text(
                             'OR',
                             style: GoogleFonts.epilogue(
@@ -533,7 +483,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 24),
+                    AppGaps.gapLg,
                     // Guest Mode Action
                     TextButton(
                       onPressed: _isLoading ? null : _handleGuestMode,

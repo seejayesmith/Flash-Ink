@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_radius.dart';
+import '../theme/app_buttons.dart';
 import 'account_creation_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
@@ -34,11 +37,11 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
       onTap: () => setState(() => _selectedRole = role),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        margin: const EdgeInsets.only(bottom: AppSpacing.spaceMd),
+        padding: const EdgeInsets.all(AppSpacing.spaceLg),
         decoration: BoxDecoration(
           color: const Color(0xFF1E2020),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: AppBorderRadius.lg,
           border: Border.all(
             color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF262929),
             width: isSelected ? 2.5 : 1.5,
@@ -59,7 +62,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(width: 24), // Balance spacing
+                AppGaps.gapLg, // Balance spacing
                 Container(
                   width: 60,
                   height: 60,
@@ -84,7 +87,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            AppGaps.gapMd,
             Text(
               title,
               style: GoogleFonts.epilogue(
@@ -93,7 +96,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 8),
+            AppGaps.gapXs,
             Text(
               description,
               textAlign: TextAlign.center,
@@ -118,7 +121,10 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
         body: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.spaceLg,
+                vertical: AppSpacing.spaceLg,
+              ),
               physics: const BouncingScrollPhysics(),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -133,7 +139,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                       height: 1.15,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  AppGaps.gapSm,
                   Text(
                     'Tell us how you\'ll be using the\nplatform so we can tailor your\nexperience.',
                     style: GoogleFonts.epilogue(
@@ -142,7 +148,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                       height: 1.4,
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: AppSpacing.spaceXl),
                   // Grouped Role Cards
                   _buildRoleCard(
                     role: 'client',
@@ -158,28 +164,17 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                         'Manage bookings, showcase your\nportfolio, and connect with\nclients.',
                     icon: Icons.brush,
                   ),
-                  const SizedBox(height: 12),
+                  AppGaps.gapSm,
                   // Continue button tightly grouped directly below cards
-                  ElevatedButton(
+                  AppButtons.primaryCTA(
                     onPressed: _selectedRole == null ? null : _handleContinue,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEEC200),
-                      foregroundColor: const Color(0xFF121414),
-                      minimumSize: const Size(double.infinity, 56),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      disabledBackgroundColor: const Color(0xFF4D5252),
-                      disabledForegroundColor: const Color(0xFF919696),
-                    ),
-                    child: const Text(
-                      'CONTINUE',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
-                        fontSize: 16,
-                      ),
-                    ),
+                    text: 'CONTINUE',
+                    backgroundColor: _selectedRole == null
+                        ? const Color(0xFF4D5252)
+                        : const Color(0xFFEEC200),
+                    foregroundColor: _selectedRole == null
+                        ? const Color(0xFF919696)
+                        : const Color(0xFF121414),
                   ),
                 ],
               ),

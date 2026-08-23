@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_radius.dart';
+import '../theme/app_buttons.dart';
 import 'splash_screen.dart';
 
 class MainFeedScreen extends StatefulWidget {
@@ -23,16 +26,16 @@ class _MainFeedScreenState extends State<MainFeedScreen> {
       context: context,
       backgroundColor: const Color(0xFF1E2020),
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      shape: RoundedRectangleBorder(
+        borderRadius: AppBorderRadius.topLg,
       ),
       builder: (modalContext) {
         return Padding(
           padding: EdgeInsets.only(
-            left: 24.0,
-            right: 24.0,
-            top: 20.0,
-            bottom: MediaQuery.of(modalContext).viewInsets.bottom + 32.0,
+            left: AppSpacing.spaceLg,
+            right: AppSpacing.spaceLg,
+            top: AppSpacing.spaceLg,
+            bottom: MediaQuery.of(modalContext).viewInsets.bottom + AppSpacing.spaceXl,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -45,13 +48,13 @@ class _MainFeedScreenState extends State<MainFeedScreen> {
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
-              const SizedBox(height: 24),
+              AppGaps.gapLg,
               const Icon(
                 Icons.lock_person_outlined,
                 color: Color(0xFFEEC200),
                 size: 48,
               ),
-              const SizedBox(height: 16),
+              AppGaps.gapMd,
               Text(
                 'Create an account to $actionName',
                 textAlign: TextAlign.center,
@@ -61,7 +64,7 @@ class _MainFeedScreenState extends State<MainFeedScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 12),
+              AppGaps.gapSm,
               Text(
                 'Save your collection, claim one-of-a-kind flash, and connect directly with verified tattoo artists.',
                 textAlign: TextAlign.center,
@@ -71,13 +74,10 @@ class _MainFeedScreenState extends State<MainFeedScreen> {
                   height: 1.4,
                 ),
               ),
-              const SizedBox(height: 28),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.g_mobiledata, size: 28),
-                label: const Text(
-                  'Upgrade with Google',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+              AppGaps.gapXl,
+              AppButtons.primaryCTA(
+                icon: Icons.g_mobiledata,
+                text: 'Upgrade with Google',
                 onPressed: () async {
                   nav.pop();
                   setState(() => _isLoading = true);
@@ -100,22 +100,13 @@ class _MainFeedScreenState extends State<MainFeedScreen> {
                     if (mounted) setState(() => _isLoading = false);
                   }
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF9FAFA),
-                  foregroundColor: const Color(0xFF121414),
-                  minimumSize: const Size(double.infinity, 52),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(26),
-                  ),
-                ),
+                backgroundColor: const Color(0xFFF9FAFA),
+                foregroundColor: const Color(0xFF121414),
               ),
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.apple, size: 24),
-                label: const Text(
-                  'Upgrade with Apple',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+              AppGaps.gapSm,
+              AppButtons.primaryCTA(
+                icon: Icons.apple,
+                text: 'Upgrade with Apple',
                 onPressed: () async {
                   nav.pop();
                   setState(() => _isLoading = true);
@@ -138,17 +129,10 @@ class _MainFeedScreenState extends State<MainFeedScreen> {
                     if (mounted) setState(() => _isLoading = false);
                   }
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF121414),
-                  foregroundColor: const Color(0xFFF9FAFA),
-                  minimumSize: const Size(double.infinity, 52),
-                  side: const BorderSide(color: Color(0xFF4D5252)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(26),
-                  ),
-                ),
+                backgroundColor: const Color(0xFF121414),
+                foregroundColor: const Color(0xFFF9FAFA),
               ),
-              const SizedBox(height: 8),
+              AppGaps.gapXs,
             ],
           ),
         );
@@ -203,7 +187,7 @@ class _MainFeedScreenState extends State<MainFeedScreen> {
           actions: [
             if (isGuest)
               Padding(
-                padding: const EdgeInsets.only(right: 8.0),
+                padding: const EdgeInsets.only(right: AppSpacing.spaceXs),
                 child: Chip(
                   label: const Text(
                     'Guest',
@@ -227,15 +211,15 @@ class _MainFeedScreenState extends State<MainFeedScreen> {
         body: Stack(
           children: [
             Padding(
-              padding: const EdgeInsets.all(24.0),
+              padding: AppPadding.screenHorizontal.add(const EdgeInsets.symmetric(vertical: AppSpacing.spaceLg)),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(AppSpacing.spaceLg),
                     decoration: BoxDecoration(
                       color: const Color(0xFF1E2020),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: AppBorderRadius.lg,
                       border: Border.all(color: const Color(0xFF262929)),
                     ),
                     child: Column(
@@ -245,7 +229,7 @@ class _MainFeedScreenState extends State<MainFeedScreen> {
                           color: Color(0xFFEEC200),
                           size: 48,
                         ),
-                        const SizedBox(height: 16),
+                        AppGaps.gapMd,
                         Text(
                           'Welcome to Flash.Ink',
                           style: GoogleFonts.epilogue(
@@ -254,7 +238,7 @@ class _MainFeedScreenState extends State<MainFeedScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        AppGaps.gapXs,
                         Text(
                           isGuest
                               ? 'Browsing as Guest. Certain features are locked behind an Auth Wall.'
@@ -269,33 +253,21 @@ class _MainFeedScreenState extends State<MainFeedScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 32),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.bookmark_add),
-                    label: const Text('Claim Flash Piece (Deposit)'),
+                  AppGaps.gapXl,
+                  AppButtons.primaryCTA(
+                    icon: Icons.bookmark_add,
+                    text: 'Claim Flash Piece (Deposit)',
                     onPressed: () => _handleRestrictedAction('claim a flash piece'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF3B82F6),
-                      foregroundColor: const Color(0xFFF9FAFA),
-                      minimumSize: const Size(double.infinity, 54),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(27),
-                      ),
-                    ),
+                    backgroundColor: const Color(0xFF3B82F6),
+                    foregroundColor: const Color(0xFFF9FAFA),
                   ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.person_add),
-                    label: const Text('Follow Artist'),
+                  AppGaps.gapMd,
+                  AppButtons.primaryCTA(
+                    icon: Icons.person_add,
+                    text: 'Follow Artist',
                     onPressed: () => _handleRestrictedAction('follow an artist'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF22C55E),
-                      foregroundColor: const Color(0xFFF9FAFA),
-                      minimumSize: const Size(double.infinity, 54),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(27),
-                      ),
-                    ),
+                    backgroundColor: const Color(0xFF22C55E),
+                    foregroundColor: const Color(0xFFF9FAFA),
                   ),
                 ],
               ),

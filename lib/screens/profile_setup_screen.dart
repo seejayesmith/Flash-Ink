@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_radius.dart';
+import '../theme/app_buttons.dart';
 import 'aesthetics_selection_screen.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
@@ -99,13 +102,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         ),
         body: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            padding: AppPadding.screenHorizontal,
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 16),
+                  AppGaps.gapMd,
                   Center(
                     child: Stack(
                       children: [
@@ -137,7 +140,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  AppGaps.gapXl,
                   Text(
                     'Full Name',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -145,7 +148,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                   ),
-                  const SizedBox(height: 8),
+                  AppGaps.gapXs,
                   TextFormField(
                     controller: _nameController,
                     style: const TextStyle(color: Color(0xFFF9FAFA)),
@@ -157,20 +160,20 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       filled: true,
                       fillColor: const Color(0xFF1E2020),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: AppBorderRadius.md,
                         borderSide: const BorderSide(color: Color(0xFF262929)),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: AppBorderRadius.md,
                         borderSide: const BorderSide(color: Color(0xFF262929)),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: AppBorderRadius.md,
                         borderSide: const BorderSide(color: Color(0xFFEEC200)),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  AppGaps.gapLg,
                   Text(
                     'Username',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -178,7 +181,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                   ),
-                  const SizedBox(height: 8),
+                  AppGaps.gapXs,
                   TextFormField(
                     controller: _usernameController,
                     style: const TextStyle(color: Color(0xFFF9FAFA)),
@@ -196,20 +199,20 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       filled: true,
                       fillColor: const Color(0xFF1E2020),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: AppBorderRadius.md,
                         borderSide: const BorderSide(color: Color(0xFF262929)),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: AppBorderRadius.md,
                         borderSide: const BorderSide(color: Color(0xFF262929)),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: AppBorderRadius.md,
                         borderSide: const BorderSide(color: Color(0xFFEEC200)),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  AppGaps.gapLg,
                   Text(
                     'Bio / City (Optional)',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -217,7 +220,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                   ),
-                  const SizedBox(height: 8),
+                  AppGaps.gapXs,
                   TextFormField(
                     controller: _bioController,
                     maxLines: 3,
@@ -228,46 +231,26 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       filled: true,
                       fillColor: const Color(0xFF1E2020),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: AppBorderRadius.md,
                         borderSide: const BorderSide(color: Color(0xFF262929)),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: AppBorderRadius.md,
                         borderSide: const BorderSide(color: Color(0xFF262929)),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: AppBorderRadius.md,
                         borderSide: const BorderSide(color: Color(0xFFEEC200)),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 36),
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _saveProfile,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEEC200),
-                      foregroundColor: const Color(0xFF121414),
-                      minimumSize: const Size(double.infinity, 56),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text(
-                            'CONTINUE',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1,
-                              fontSize: 16,
-                            ),
-                          ),
+                  AppGaps.gapXl,
+                  AppButtons.primaryCTA(
+                    isLoading: _isLoading,
+                    onPressed: _saveProfile,
+                    text: 'CONTINUE',
                   ),
-                  const SizedBox(height: 24),
+                  AppGaps.gapLg,
                 ],
               ),
             ),

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_radius.dart';
+import '../theme/app_buttons.dart';
 import 'main_feed_screen.dart';
 
 class AestheticsSelectionScreen extends StatefulWidget {
@@ -117,11 +120,11 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
         backgroundColor: const Color(0xFF121414),
         body: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            padding: AppPadding.screenHorizontal,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 16),
+                AppGaps.gapMd,
                 Text(
                   'Choose your aesthetics',
                   style: GoogleFonts.epilogue(
@@ -130,7 +133,7 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 8),
+                AppGaps.gapXs,
                 Text(
                   'Select styles to curate your personalized feed. You can change this later.',
                   style: GoogleFonts.epilogue(
@@ -139,14 +142,14 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
                     height: 1.4,
                   ),
                 ),
-                const SizedBox(height: 20),
+                AppGaps.gapLg,
                 Expanded(
                   child: GridView.builder(
                     physics: const BouncingScrollPhysics(),
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
+                      crossAxisSpacing: AppSpacing.spaceMd,
+                      mainAxisSpacing: AppSpacing.spaceMd,
                       childAspectRatio: 0.82,
                     ),
                     itemCount: _aestheticsOptions.length,
@@ -160,7 +163,7 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: AppBorderRadius.lg,
                             border: Border.all(
                               color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF262929),
                               width: isSelected ? 2.5 : 1.5,
@@ -181,7 +184,7 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
                                 : null,
                           ),
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: AppBorderRadius.md,
                             child: Stack(
                               children: [
                                 // Background image with graceful fallback
@@ -204,9 +207,9 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
                                 ),
                                 // Label & selection checkmark
                                 Positioned(
-                                  bottom: 16,
-                                  left: 12,
-                                  right: 12,
+                                  bottom: AppSpacing.spaceMd,
+                                  left: AppSpacing.spaceSm,
+                                  right: AppSpacing.spaceSm,
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
@@ -223,7 +226,7 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
                                         ),
                                       ),
                                       if (isSelected) ...[
-                                        const SizedBox(width: 6),
+                                        AppGaps.gapXs,
                                         const Icon(
                                           Icons.check_circle,
                                           color: Color(0xFFEEC200),
@@ -241,33 +244,13 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
                     },
                   ),
                 ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _saveAesthetics,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEEC200),
-                    foregroundColor: const Color(0xFF121414),
-                    minimumSize: const Size(double.infinity, 56),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text(
-                          'CONTINUE',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.2,
-                            fontSize: 16,
-                          ),
-                        ),
+                AppGaps.gapMd,
+                AppButtons.primaryCTA(
+                  isLoading: _isLoading,
+                  onPressed: _saveAesthetics,
+                  text: 'CONTINUE',
                 ),
-                const SizedBox(height: 16),
+                AppGaps.gapMd,
               ],
             ),
           ),

@@ -3,6 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_radius.dart';
+import '../theme/app_buttons.dart';
 import 'profile_setup_screen.dart';
 import 'role_selection_screen.dart';
 
@@ -109,11 +112,11 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
         ),
         body: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            padding: AppPadding.screenHorizontal,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(height: 24),
+                AppGaps.gapLg,
                 Container(
                   width: 64,
                   height: 64,
@@ -127,7 +130,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                     size: 32,
                   ),
                 ),
-                const SizedBox(height: 32),
+                AppGaps.gapXl,
                 Text(
                   'Verify your phone\nnumber',
                   textAlign: TextAlign.center,
@@ -138,7 +141,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                     height: 1.2,
                   ),
                 ),
-                const SizedBox(height: 16),
+                AppGaps.gapMd,
                 Text(
                   'We\'ve sent a 6-digit verification code\nto your device. Please enter it below.',
                   textAlign: TextAlign.center,
@@ -148,7 +151,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                     height: 1.4,
                   ),
                 ),
-                const SizedBox(height: 48),
+                AppGaps.gapXxl,
                 // OTP Field
                 TextField(
                   controller: _codeController,
@@ -165,17 +168,17 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                     counterText: '',
                     filled: true,
                     fillColor: const Color(0xFF121414),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 20),
+                    contentPadding: const EdgeInsets.symmetric(vertical: AppSpacing.spaceLg),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: AppBorderRadius.lg,
                       borderSide: const BorderSide(color: Color(0xFF262929)),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: AppBorderRadius.lg,
                       borderSide: const BorderSide(color: Color(0xFF262929), width: 1.5),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: AppBorderRadius.lg,
                       borderSide: const BorderSide(color: Color(0xFFEEC200), width: 2),
                     ),
                   ),
@@ -186,35 +189,10 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                   },
                 ),
                 const SizedBox(height: 40),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _verifyCode,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEEC200),
-                    foregroundColor: const Color(0xFF121414),
-                    minimumSize: const Size(double.infinity, 56),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                    disabledBackgroundColor: const Color(0xFF614700),
-                    disabledForegroundColor: const Color(0xFF919696),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF121414)),
-                          ),
-                        )
-                      : const Text(
-                          'VERIFY',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.2,
-                            fontSize: 16,
-                          ),
-                        ),
+                AppButtons.primaryCTA(
+                  isLoading: _isLoading,
+                  onPressed: _verifyCode,
+                  text: 'VERIFY',
                 ),
                 const Spacer(),
                 Row(
@@ -244,7 +222,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                AppGaps.gapLg,
               ],
             ),
           ),

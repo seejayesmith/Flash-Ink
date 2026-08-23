@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_buttons.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -68,30 +70,23 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const Spacer(flex: 1),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                  padding: AppPadding.screenHorizontal,
                   child: Column(
                     children: [
-                      ElevatedButton(
+                      AppButtons.primaryCTA(
                         onPressed: _isLoading ? null : () => _handleSignIn(_authService.signInWithGoogle),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFF9FAFA),
-                          foregroundColor: const Color(0xFF121414),
-                          minimumSize: const Size(double.infinity, 50),
-                        ),
-                        child: const Text('Continue with Google'),
+                        text: 'Continue with Google',
+                        backgroundColor: const Color(0xFFF9FAFA),
+                        foregroundColor: const Color(0xFF121414),
                       ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
+                      AppGaps.gapMd,
+                      AppButtons.primaryCTA(
                         onPressed: _isLoading ? null : () => _handleSignIn(_authService.signInWithApple),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1E2020),
-                          foregroundColor: const Color(0xFFF9FAFA),
-                          minimumSize: const Size(double.infinity, 50),
-                          side: const BorderSide(color: Color(0xFF4D5252)),
-                        ),
-                        child: const Text('Continue with Apple'),
+                        text: 'Continue with Apple',
+                        backgroundColor: const Color(0xFF1E2020),
+                        foregroundColor: const Color(0xFFF9FAFA),
                       ),
-                      const SizedBox(height: 24),
+                      AppGaps.gapLg,
                       TextButton(
                         onPressed: _isLoading ? null : () => _handleSignIn(_authService.signInAnonymously),
                         child: const Text(
@@ -102,7 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 48),
+                AppGaps.gapXxl,
               ],
             ),
           ),

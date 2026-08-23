@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../theme/app_spacing.dart';
 import 'role_selection_screen.dart';
 import 'main_feed_screen.dart';
 
@@ -103,7 +104,7 @@ class _SplashScreenState extends State<SplashScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    AppGaps.gapXs,
                     const Icon(
                       Icons.electric_bolt,
                       color: Color(0xFFEEC200),
@@ -111,7 +112,7 @@ class _SplashScreenState extends State<SplashScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                AppGaps.gapXs,
                 Text(
                   'TATTOO DISCOVERY & BOOKING',
                   style: GoogleFonts.epilogue(
@@ -125,7 +126,7 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
           ),
           Positioned(
-            bottom: 48,
+            bottom: AppSpacing.spaceXxl,
             left: 0,
             right: 0,
             child: Center(
