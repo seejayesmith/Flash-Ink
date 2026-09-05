@@ -66,13 +66,11 @@ class _SplashScreenState extends State<SplashScreen> {
       backgroundColor: const Color(0xFF121414),
       body: Stack(
         children: [
-          // Splash background placeholder
+          // Splash background image
           Container(
             decoration: const BoxDecoration(
               image: DecorationImage(
-                image: NetworkImage(
-                  'https://images.unsplash.com/photo-1598371839696-5c5bb00bdc28?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-                ),
+                image: AssetImage('assets/images/tattoo_setup.png'),
                 fit: BoxFit.cover,
                 colorFilter: ColorFilter.mode(
                   Colors.black87,
@@ -115,7 +113,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 AppGaps.gapXs,
                 Text(
                   'TATTOO DISCOVERY & BOOKING',
-                  style: GoogleFonts.epilogue(
+                  style: GoogleFonts.plusJakartaSans(
                     color: const Color(0xFF919696),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,

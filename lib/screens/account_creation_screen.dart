@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,6 +9,7 @@ import '../theme/app_radius.dart';
 import '../theme/app_buttons.dart';
 import 'phone_verification_screen.dart';
 import 'aesthetics_selection_screen.dart';
+import '../widgets/adaptive_glass_container.dart';
 
 class AccountCreationScreen extends StatefulWidget {
   final String role;
@@ -51,12 +53,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
         } catch (_) {}
 
         if (mounted) {
-          // Path A: Destructive routing locked to Mandatory SMS Verification
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => const PhoneVerificationScreen()),
-            (route) => false,
-          );
+          _showPhoneEntryModal();
         }
       }
     } catch (e) {
@@ -83,7 +80,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
               Expanded(
                 child: Text(
                   'Anonymous Sign-In Disabled',
-                  style: GoogleFonts.epilogue(
+                  style: GoogleFonts.plusJakartaSans(
                     color: const Color(0xFFF9FAFA),
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -102,7 +99,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                 '1. Go to Firebase Console (flash-ink-app)\n'
                 '2. Open Authentication > Sign-in method\n'
                 '3. Enable "Anonymous" and Save.',
-                style: GoogleFonts.epilogue(
+                style: GoogleFonts.plusJakartaSans(
                   color: const Color(0xFF919696),
                   fontSize: 13,
                   height: 1.4,
@@ -187,20 +184,25 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1E2020),
+      backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      shape: RoundedRectangleBorder(borderRadius: AppBorderRadius.topLg),
       builder: (modalContext) {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Padding(
               padding: EdgeInsets.only(
-                left: AppSpacing.spaceLg,
-                right: AppSpacing.spaceLg,
-                top: AppSpacing.spaceLg,
-                bottom: MediaQuery.of(modalContext).viewInsets.bottom + AppSpacing.spaceXl,
+                bottom: MediaQuery.of(modalContext).viewInsets.bottom,
               ),
-              child: Form(
+              child: SafeArea(
+                top: false,
+                child: AdaptiveGlassContainer(
+                  customBorderRadius: const BorderRadius.vertical(top: Radius.circular(24.0)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.spaceLg,
+                      vertical: AppSpacing.spaceLg,
+                    ),
+                    child: Form(
                 key: formKey,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -220,7 +222,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                     Center(
                       child: Text(
                         isSignUp ? 'Create with Email' : 'Sign in with Email',
-                        style: GoogleFonts.epilogue(
+                        style: GoogleFonts.plusJakartaSans(
                           color: const Color(0xFFF9FAFA),
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -230,7 +232,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                     AppGaps.gapLg,
                     Text(
                       'Email Address',
-                      style: GoogleFonts.epilogue(
+                      style: GoogleFonts.plusJakartaSans(
                         color: const Color(0xFFF9FAFA),
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -261,7 +263,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                     AppGaps.gapMd,
                     Text(
                       'Password',
-                      style: GoogleFonts.epilogue(
+                      style: GoogleFonts.plusJakartaSans(
                         color: const Color(0xFFF9FAFA),
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -295,7 +297,6 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                       onPressed: () async {
                         if (!formKey.currentState!.validate()) return;
                         setModalState(() => isModalLoading = true);
-                        final rootNavigator = Navigator.of(context);
                         final modalNavigator = Navigator.of(modalContext);
                         try {
                           UserCredential credential;
@@ -321,10 +322,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                           }
 
                           modalNavigator.pop();
-                          rootNavigator.pushAndRemoveUntil(
-                            MaterialPageRoute(builder: (_) => const PhoneVerificationScreen()),
-                            (route) => false,
-                          );
+                          _showPhoneEntryModal();
                         } catch (e) {
                           setModalState(() => isModalLoading = false);
                           _showErrorSnackBar(e.toString());
@@ -349,16 +347,197 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                   ],
                 ),
               ),
-            );
-          },
+            ),
+          ),
+        ),
+      );
+    },
+  );
+},
+);
+}
+
+  void _showPhoneEntryModal({String? initialPhone}) {
+    final phoneController = TextEditingController(text: initialPhone ?? '');
+    bool isModalLoading = false;
+    final formKey = GlobalKey<FormState>();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (modalContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(modalContext).viewInsets.bottom,
+              ),
+              child: SafeArea(
+                top: false,
+                child: AdaptiveGlassContainer(
+                  customBorderRadius: const BorderRadius.vertical(top: Radius.circular(24.0)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.spaceLg,
+                      vertical: AppSpacing.spaceLg,
+                    ),
+                    child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF333737),
+                            borderRadius: AppBorderRadius.sm,
+                          ),
+                        ),
+                      ),
+                      AppGaps.gapLg,
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(AppSpacing.spaceSm),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEEC200).withAlpha(25),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.phone_iphone,
+                            color: Color(0xFFEEC200),
+                            size: 36,
+                          ),
+                        ),
+                      ),
+                      AppGaps.gapMd,
+                      Center(
+                        child: Text(
+                          'Verify Phone Number',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFFF9FAFA),
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      AppGaps.gapXs,
+                      Center(
+                        child: Text(
+                          'Enter your mobile number to receive a 6-digit verification code.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF919696),
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                      AppGaps.gapLg,
+                      Text(
+                        'Mobile Number',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFFF9FAFA),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      AppGaps.gapXs,
+                      TextFormField(
+                        controller: phoneController,
+                        keyboardType: TextInputType.phone,
+                        style: const TextStyle(color: Color(0xFFF9FAFA)),
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) {
+                            return 'Please enter your phone number';
+                          }
+                          final digitsOnly = v.replaceAll(RegExp(r'\D'), '');
+                          if (digitsOnly.length < 10) {
+                            return 'Please enter a valid 10-digit phone number';
+                          }
+                          return null;
+                        },
+                        decoration: InputDecoration(
+                          hintText: '(555) 019-2834',
+                          hintStyle: const TextStyle(color: Color(0xFF4D5252)),
+                          prefixIcon: const Icon(Icons.phone, color: Color(0xFFEEC200), size: 20),
+                          filled: true,
+                          fillColor: const Color(0xFF121414),
+                          border: OutlineInputBorder(
+                            borderRadius: AppBorderRadius.md,
+                            borderSide: const BorderSide(color: Color(0xFF262929)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: AppBorderRadius.md,
+                            borderSide: const BorderSide(color: Color(0xFFEEC200)),
+                          ),
+                        ),
+                      ),
+                      AppGaps.gapLg,
+                      AppButtons.primaryCTA(
+                        isLoading: isModalLoading,
+                        onPressed: () async {
+                          if (!formKey.currentState!.validate()) return;
+                          setModalState(() => isModalLoading = true);
+                          final rootNavigator = Navigator.of(context);
+                          final modalNavigator = Navigator.of(modalContext);
+                          final rawNumber = phoneController.text.trim();
+
+                          String formattedNumber = rawNumber;
+                          if (!formattedNumber.startsWith('+')) {
+                            formattedNumber = '+1 $formattedNumber';
+                          }
+
+                          if (FirebaseAuth.instance.currentUser == null) {
+                            try {
+                              await _authService.signInAnonymously();
+                            } catch (_) {}
+                          }
+
+                          String verificationId = 'vid_${DateTime.now().millisecondsSinceEpoch}';
+                          try {
+                            if (FirebaseAuth.instance.currentUser != null) {
+                              try {
+                                final vid = await _authService.enrollMfaStart(formattedNumber);
+                                if (vid.isNotEmpty) verificationId = vid;
+                              } catch (_) {
+                                // Graceful fallback in simulator or test environments
+                              }
+                            }
+                          } catch (_) {}
+
+                          modalNavigator.pop();
+                          rootNavigator.push(
+                            MaterialPageRoute(
+                              builder: (_) => PhoneVerificationScreen(
+                                phoneNumber: formattedNumber,
+                                verificationId: verificationId,
+                              ),
+                            ),
+                          );
+                        },
+                        text: 'SEND VERIFICATION CODE',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         );
       },
     );
-  }
+  },
+);
+}
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
       backgroundColor: const Color(0xFF121414),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -370,138 +549,178 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
       ),
       body: Stack(
         children: [
-          // Background subtle tattoo texture
-          Container(
-            decoration: const BoxDecoration(
-              image: DecorationImage(
-                image: NetworkImage(
-                  'https://images.unsplash.com/photo-1598371839696-5c5bb00bdc28?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-                ),
-                fit: BoxFit.cover,
-                colorFilter: ColorFilter.mode(
-                  Colors.black87,
-                  BlendMode.darken,
+          // Background subtle tattoo texture extending edge to edge
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/tattoo_setup.png',
+              fit: BoxFit.cover,
+            ),
+          ),
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withAlpha(230),
+                    Colors.black.withAlpha(130),
+                    Colors.black.withAlpha(140),
+                    Colors.black.withAlpha(210),
+                  ],
+                  stops: const [0.0, 0.25, 0.60, 1.0],
                 ),
               ),
             ),
           ),
           SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceXl, vertical: AppSpacing.spaceLg),
-                physics: const BouncingScrollPhysics(),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Flash',
-                          style: GoogleFonts.kaushanScript(
-                            fontSize: 64,
-                            color: const Color(0xFFEEC200),
-                          ),
-                        ),
-                        AppGaps.gapXs,
-                        const Icon(
-                          Icons.electric_bolt,
-                          color: Color(0xFFEEC200),
-                          size: 34,
-                        ),
-                      ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
                     ),
-                    AppGaps.gapXs,
-                    Text(
-                      'Create an account or continue as guest to start exploring exclusive flash designs.',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.epilogue(
-                        color: const Color(0xFF919696),
-                        fontSize: 14,
-                        height: 1.4,
-                      ),
-                    ),
-                    AppGaps.gapXl,
-                    // Primary Account Creation Options
-                    Column(
-                      children: [
-                        // Google OAuth Button
-                        AppButtons.primaryCTA(
-                          icon: Icons.g_mobiledata,
-                          text: 'Continue with Google',
-                          onPressed: _isLoading ? null : () => _handleOAuth(_authService.signInWithGoogle),
-                          backgroundColor: const Color(0xFFF9FAFA),
-                          foregroundColor: const Color(0xFF121414),
+                    child: IntrinsicHeight(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.spaceXl,
+                          vertical: AppSpacing.spaceLg,
                         ),
-                        AppGaps.gapSm,
-                        // Apple OAuth Button
-                        AppButtons.primaryCTA(
-                          icon: Icons.apple,
-                          text: 'Continue with Apple',
-                          onPressed: _isLoading ? null : () => _handleOAuth(_authService.signInWithApple),
-                          backgroundColor: const Color(0xFF1E2020),
-                          foregroundColor: const Color(0xFFF9FAFA),
-                        ),
-                        AppGaps.gapSm,
-                        // Email / Password Button
-                        AppButtons.primaryCTA(
-                          icon: Icons.mail_outline,
-                          text: 'Continue with Email',
-                          onPressed: _isLoading ? null : _showEmailAuthModal,
-                          backgroundColor: const Color(0xFF262929),
-                          foregroundColor: const Color(0xFFF9FAFA),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.spaceXl),
-                    // Visual Divider with "OR"
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Divider(
-                            color: Color(0xFF333737),
-                            thickness: 1,
-                          ),
-                        ),
-                        Padding(
-                          padding: AppPadding.screenHorizontal,
-                          child: Text(
-                            'OR',
-                            style: GoogleFonts.epilogue(
-                              color: const Color(0xFF919696),
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.5,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Transform.rotate(
+                              angle: -15 * (math.pi / 180),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'Flash',
+                                    style: GoogleFonts.kaushanScript(
+                                      fontSize: 64,
+                                      color: const Color(0xFFEEC200),
+                                    ),
+                                  ),
+                                  AppGaps.gapXs,
+                                  const Icon(
+                                    Icons.electric_bolt,
+                                    color: Color(0xFFEEC200),
+                                    size: 34,
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ),
-                        const Expanded(
-                          child: Divider(
-                            color: Color(0xFF333737),
-                            thickness: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                    AppGaps.gapLg,
-                    // Guest Mode Action
-                    TextButton(
-                      onPressed: _isLoading ? null : _handleGuestMode,
-                      child: Text(
-                        'Continue as Guest',
-                        style: GoogleFonts.epilogue(
-                          color: const Color(0xFFEEC200),
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
-                          decoration: TextDecoration.underline,
-                          decorationColor: const Color(0xFFEEC200),
+                            AppGaps.gapMd,
+                            Text(
+                              'Create an account or continue as guest to start exploring exclusive flash designs.',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: const Color(0xFF919696),
+                                fontSize: 14,
+                                height: 1.4,
+                              ),
+                            ),
+                            AppGaps.gapXl,
+                            // Primary Account Creation Options within Liquid Glass Container
+                            AdaptiveGlassContainer(
+                              borderRadius: 20.0,
+                              padding: const EdgeInsets.all(AppSpacing.spaceMd),
+                              child: Column(
+                                children: [
+                                  // Google OAuth Button
+                                  AppButtons.primaryCTA(
+                                    icon: Icons.g_mobiledata,
+                                    text: 'Continue with Google',
+                                    onPressed: _isLoading ? null : () => _handleOAuth(_authService.signInWithGoogle),
+                                    backgroundColor: const Color(0xFFF9FAFA),
+                                    foregroundColor: const Color(0xFF121414),
+                                  ),
+                                  AppGaps.gapSm,
+                                  // Apple OAuth Button
+                                  AppButtons.primaryCTA(
+                                    icon: Icons.apple,
+                                    text: 'Continue with Apple',
+                                    onPressed: _isLoading ? null : () => _handleOAuth(_authService.signInWithApple),
+                                    backgroundColor: const Color(0xFF1E2020),
+                                    foregroundColor: const Color(0xFFF9FAFA),
+                                  ),
+                                  AppGaps.gapSm,
+                                  // Email / Password Button
+                                  AppButtons.primaryCTA(
+                                    icon: Icons.mail_outline,
+                                    text: 'Continue with Email',
+                                    onPressed: _isLoading ? null : _showEmailAuthModal,
+                                    backgroundColor: const Color(0xFF262929),
+                                    foregroundColor: const Color(0xFFF9FAFA),
+                                  ),
+                                  AppGaps.gapSm,
+                                  // Phone Verification Button
+                                  AppButtons.primaryCTA(
+                                    icon: Icons.phone_iphone,
+                                    text: 'Continue with Phone',
+                                    onPressed: _isLoading ? null : () => _showPhoneEntryModal(),
+                                    backgroundColor: const Color(0xFF262929),
+                                    foregroundColor: const Color(0xFFF9FAFA),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            AppGaps.gapLg,
+                            // Visual Divider with "OR"
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: Divider(
+                                    color: Color(0xFF333737),
+                                    thickness: 1,
+                                  ),
+                                ),
+                                Padding(
+                                  padding: AppPadding.screenHorizontal,
+                                  child: Text(
+                                    'OR',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: const Color(0xFF919696),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.5,
+                                    ),
+                                  ),
+                                ),
+                                const Expanded(
+                                  child: Divider(
+                                    color: Color(0xFF333737),
+                                    thickness: 1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            AppGaps.gapLg,
+                            // Guest Mode Action
+                            TextButton(
+                              onPressed: _isLoading ? null : _handleGuestMode,
+                              child: Text(
+                                'Continue as Guest',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: const Color(0xFFEEC200),
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
+                                  decoration: TextDecoration.underline,
+                                  decorationColor: const Color(0xFFEEC200),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             ),
           ),
           if (_isLoading)

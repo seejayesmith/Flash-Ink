@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_buttons.dart';
+import '../widgets/adaptive_glass_container.dart';
 import 'aesthetics_selection_screen.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
@@ -87,9 +88,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       canPop: false, // Prevent back navigation from bypassing profile setup
       child: Scaffold(
         backgroundColor: const Color(0xFF121414),
+        extendBodyBehindAppBar: true,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
+          flexibleSpace: const AdaptiveGlassContainer(
+            borderRadius: 0,
+            unselectedBorderWidth: 0,
+            child: SizedBox.expand(),
+          ),
           automaticallyImplyLeading: false,
           title: const Text(
             'Profile Setup',
@@ -100,161 +107,211 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           ),
           centerTitle: true,
         ),
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: AppPadding.screenHorizontal,
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  AppGaps.gapMd,
-                  Center(
-                    child: Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 48,
-                          backgroundColor: const Color(0xFF1E2020),
-                          child: const Icon(
-                            Icons.person,
-                            size: 52,
-                            color: Color(0xFFEEC200),
-                          ),
-                        ),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFEEC200),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.camera_alt,
-                              size: 18,
-                              color: Color(0xFF121414),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  AppGaps.gapXl,
-                  Text(
-                    'Full Name',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: const Color(0xFFF9FAFA),
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  AppGaps.gapXs,
-                  TextFormField(
-                    controller: _nameController,
-                    style: const TextStyle(color: Color(0xFFF9FAFA)),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Please enter your name' : null,
-                    decoration: InputDecoration(
-                      hintText: 'e.g. Alex Morgan',
-                      hintStyle: const TextStyle(color: Color(0xFF4D5252)),
-                      filled: true,
-                      fillColor: const Color(0xFF1E2020),
-                      border: OutlineInputBorder(
-                        borderRadius: AppBorderRadius.md,
-                        borderSide: const BorderSide(color: Color(0xFF262929)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: AppBorderRadius.md,
-                        borderSide: const BorderSide(color: Color(0xFF262929)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: AppBorderRadius.md,
-                        borderSide: const BorderSide(color: Color(0xFFEEC200)),
-                      ),
-                    ),
-                  ),
-                  AppGaps.gapLg,
-                  Text(
-                    'Username',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: const Color(0xFFF9FAFA),
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  AppGaps.gapXs,
-                  TextFormField(
-                    controller: _usernameController,
-                    style: const TextStyle(color: Color(0xFFF9FAFA)),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Please choose a username'
-                        : null,
-                    decoration: InputDecoration(
-                      prefixText: '@ ',
-                      prefixStyle: const TextStyle(
-                        color: Color(0xFFEEC200),
-                        fontWeight: FontWeight.bold,
-                      ),
-                      hintText: 'alex_ink',
-                      hintStyle: const TextStyle(color: Color(0xFF4D5252)),
-                      filled: true,
-                      fillColor: const Color(0xFF1E2020),
-                      border: OutlineInputBorder(
-                        borderRadius: AppBorderRadius.md,
-                        borderSide: const BorderSide(color: Color(0xFF262929)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: AppBorderRadius.md,
-                        borderSide: const BorderSide(color: Color(0xFF262929)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: AppBorderRadius.md,
-                        borderSide: const BorderSide(color: Color(0xFFEEC200)),
-                      ),
-                    ),
-                  ),
-                  AppGaps.gapLg,
-                  Text(
-                    'Bio / City (Optional)',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: const Color(0xFFF9FAFA),
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  AppGaps.gapXs,
-                  TextFormField(
-                    controller: _bioController,
-                    maxLines: 3,
-                    style: const TextStyle(color: Color(0xFFF9FAFA)),
-                    decoration: InputDecoration(
-                      hintText: 'Tattoo enthusiast based in Austin, TX...',
-                      hintStyle: const TextStyle(color: Color(0xFF4D5252)),
-                      filled: true,
-                      fillColor: const Color(0xFF1E2020),
-                      border: OutlineInputBorder(
-                        borderRadius: AppBorderRadius.md,
-                        borderSide: const BorderSide(color: Color(0xFF262929)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: AppBorderRadius.md,
-                        borderSide: const BorderSide(color: Color(0xFF262929)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: AppBorderRadius.md,
-                        borderSide: const BorderSide(color: Color(0xFFEEC200)),
-                      ),
-                    ),
-                  ),
-                  AppGaps.gapXl,
-                  AppButtons.primaryCTA(
-                    isLoading: _isLoading,
-                    onPressed: _saveProfile,
-                    text: 'CONTINUE',
-                  ),
-                  AppGaps.gapLg,
-                ],
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: Image.asset(
+                'assets/images/tattoo_setup.png',
+                fit: BoxFit.cover,
               ),
             ),
-          ),
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withAlpha(230),
+                      Colors.black.withAlpha(90),
+                      Colors.transparent,
+                      Colors.black.withAlpha(80),
+                    ],
+                    stops: const [0.0, 0.18, 0.32, 1.0],
+                  ),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                padding: AppPadding.screenHorizontal,
+                physics: const BouncingScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight,
+                  ),
+                  child: IntrinsicHeight(
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          AppGaps.gapMd,
+                          Center(
+                            child: Stack(
+                              children: [
+                                CircleAvatar(
+                                  radius: 48,
+                                  backgroundColor: const Color(0xFF1E2020),
+                                  child: const Icon(
+                                    Icons.person,
+                                    size: 52,
+                                    color: Color(0xFFEEC200),
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: 0,
+                                  right: 0,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFEEC200),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.camera_alt,
+                                      size: 18,
+                                      color: Color(0xFF121414),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          AppGaps.gapLg,
+                          // Liquid Glass Form Card
+                          AdaptiveGlassContainer(
+                            borderRadius: 20.0,
+                            padding: const EdgeInsets.all(AppSpacing.spaceLg),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Full Name',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: const Color(0xFFF9FAFA),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                ),
+                                AppGaps.gapXs,
+                                TextFormField(
+                                  controller: _nameController,
+                                  style: const TextStyle(color: Color(0xFFF9FAFA)),
+                                  validator: (v) =>
+                                      (v == null || v.trim().isEmpty) ? 'Please enter your name' : null,
+                                  decoration: InputDecoration(
+                                    hintText: 'e.g. Alex Morgan',
+                                    hintStyle: const TextStyle(color: Color(0xFF4D5252)),
+                                    filled: true,
+                                    fillColor: Colors.black.withAlpha(120),
+                                    border: OutlineInputBorder(
+                                      borderRadius: AppBorderRadius.md,
+                                      borderSide: const BorderSide(color: Color(0xFF333737)),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: AppBorderRadius.md,
+                                      borderSide: const BorderSide(color: Color(0xFF333737)),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: AppBorderRadius.md,
+                                      borderSide: const BorderSide(color: Color(0xFFEEC200)),
+                                    ),
+                                  ),
+                                ),
+                                AppGaps.gapLg,
+                                Text(
+                                  'Username',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: const Color(0xFFF9FAFA),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                ),
+                                AppGaps.gapXs,
+                                TextFormField(
+                                  controller: _usernameController,
+                                  style: const TextStyle(color: Color(0xFFF9FAFA)),
+                                  validator: (v) => (v == null || v.trim().isEmpty)
+                                      ? 'Please choose a username'
+                                      : null,
+                                  decoration: InputDecoration(
+                                    prefixText: '@ ',
+                                    prefixStyle: const TextStyle(
+                                      color: Color(0xFFEEC200),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    hintText: 'alex_ink',
+                                    hintStyle: const TextStyle(color: Color(0xFF4D5252)),
+                                    filled: true,
+                                    fillColor: Colors.black.withAlpha(120),
+                                    border: OutlineInputBorder(
+                                      borderRadius: AppBorderRadius.md,
+                                      borderSide: const BorderSide(color: Color(0xFF333737)),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: AppBorderRadius.md,
+                                      borderSide: const BorderSide(color: Color(0xFF333737)),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: AppBorderRadius.md,
+                                      borderSide: const BorderSide(color: Color(0xFFEEC200)),
+                                    ),
+                                  ),
+                                ),
+                                AppGaps.gapLg,
+                                Text(
+                                  'Bio / City (Optional)',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: const Color(0xFFF9FAFA),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                ),
+                                AppGaps.gapXs,
+                                TextFormField(
+                                  controller: _bioController,
+                                  maxLines: 3,
+                                  style: const TextStyle(color: Color(0xFFF9FAFA)),
+                                  decoration: InputDecoration(
+                                    hintText: 'Tattoo enthusiast based in Austin, TX...',
+                                    hintStyle: const TextStyle(color: Color(0xFF4D5252)),
+                                    filled: true,
+                                    fillColor: Colors.black.withAlpha(120),
+                                    border: OutlineInputBorder(
+                                      borderRadius: AppBorderRadius.md,
+                                      borderSide: const BorderSide(color: Color(0xFF333737)),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: AppBorderRadius.md,
+                                      borderSide: const BorderSide(color: Color(0xFF333737)),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: AppBorderRadius.md,
+                                      borderSide: const BorderSide(color: Color(0xFFEEC200)),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Spacer(),
+                          AppGaps.gapXl,
+                          AppButtons.primaryCTA(
+                            isLoading: _isLoading,
+                            onPressed: _saveProfile,
+                            text: 'CONTINUE',
+                          ),
+                              AppGaps.gapLg,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );

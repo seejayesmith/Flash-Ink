@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// Centralized button geometry tokens and standard wrappers.
 class AppButtons {
@@ -45,7 +46,7 @@ class AppButtons {
 
     final textWidget = Text(
       text,
-      style: const TextStyle(
+      style: GoogleFonts.plusJakartaSans(
         fontWeight: FontWeight.bold,
         letterSpacing: 1.2,
         fontSize: 15,

@@ -3,8 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_spacing.dart';
-import '../theme/app_radius.dart';
 import '../theme/app_buttons.dart';
+import '../widgets/adaptive_glass_container.dart';
 import 'main_feed_screen.dart';
 
 class AestheticsSelectionScreen extends StatefulWidget {
@@ -118,142 +118,181 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
       canPop: false, // Prevent bypassing flow
       child: Scaffold(
         backgroundColor: const Color(0xFF121414),
-        body: SafeArea(
-          child: Padding(
-            padding: AppPadding.screenHorizontal,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AppGaps.gapMd,
-                Text(
-                  'Choose your aesthetics',
-                  style: GoogleFonts.epilogue(
-                    color: const Color(0xFFF9FAFA),
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
+        body: Stack(
+          children: [
+            // Background subtle tattoo texture extending edge to edge
+            Positioned.fill(
+              child: Image.asset(
+                'assets/images/tattoo_setup.png',
+                fit: BoxFit.cover,
+              ),
+            ),
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withAlpha(235),
+                      Colors.black.withAlpha(160),
+                      Colors.black.withAlpha(160),
+                      Colors.black.withAlpha(220),
+                    ],
+                    stops: const [0.0, 0.25, 0.60, 1.0],
                   ),
                 ),
-                AppGaps.gapXs,
-                Text(
-                  'Select styles to curate your personalized feed. You can change this later.',
-                  style: GoogleFonts.epilogue(
-                    color: const Color(0xFF919696),
-                    fontSize: 14,
-                    height: 1.4,
-                  ),
-                ),
-                AppGaps.gapLg,
-                Expanded(
-                  child: GridView.builder(
-                    physics: const BouncingScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: AppSpacing.spaceMd,
-                      mainAxisSpacing: AppSpacing.spaceMd,
-                      childAspectRatio: 0.82,
-                    ),
-                    itemCount: _aestheticsOptions.length,
-                    itemBuilder: (context, index) {
-                      final option = _aestheticsOptions[index];
-                      final isSelected = _selectedAesthetics.contains(option['id']);
-                      final gradientColors = option['gradient'] as List<Color>;
-
-                      return GestureDetector(
-                        onTap: () => _toggleAesthetic(option['id'] as String),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          decoration: BoxDecoration(
-                            borderRadius: AppBorderRadius.lg,
-                            border: Border.all(
-                              color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF262929),
-                              width: isSelected ? 2.5 : 1.5,
+              ),
+            ),
+            SafeArea(
+              child: CustomScrollView(
+                physics: const BouncingScrollPhysics(),
+                slivers: [
+                  SliverPadding(
+                    padding: AppPadding.screenHorizontal.add(const EdgeInsets.only(top: AppSpacing.spaceMd)),
+                    sliver: SliverToBoxAdapter(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Choose your aesthetics',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFFF9FAFA),
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
                             ),
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: gradientColors,
-                            ),
-                            boxShadow: isSelected
-                                ? [
-                                    BoxShadow(
-                                      color: const Color(0xFFEEC200).withAlpha(40),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ]
-                                : null,
                           ),
-                          child: ClipRRect(
-                            borderRadius: AppBorderRadius.md,
-                            child: Stack(
-                              children: [
-                                // Background image with graceful fallback
-                                Positioned.fill(
-                                  child: Image.network(
-                                    option['image'] as String,
-                                    fit: BoxFit.cover,
-                                    color: Colors.black.withAlpha(isSelected ? 100 : 160),
-                                    colorBlendMode: BlendMode.darken,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Center(
-                                        child: Icon(
-                                          option['icon'] as IconData,
-                                          color: (isSelected ? const Color(0xFFEEC200) : const Color(0xFF4D5252)).withAlpha(80),
-                                          size: 48,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                                // Label & selection checkmark
-                                Positioned(
-                                  bottom: AppSpacing.spaceMd,
-                                  left: AppSpacing.spaceSm,
-                                  right: AppSpacing.spaceSm,
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          option['label'] as String,
-                                          textAlign: TextAlign.center,
-                                          style: GoogleFonts.epilogue(
-                                            color: const Color(0xFFF9FAFA),
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                            letterSpacing: 1.2,
+                          AppGaps.gapXs,
+                          Text(
+                            'Select styles to curate your personalized feed. You can change this later.',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF919696),
+                              fontSize: 14,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: AppPadding.screenHorizontal.add(const EdgeInsets.symmetric(vertical: AppSpacing.spaceLg)),
+                    sliver: SliverGrid(
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: AppSpacing.spaceMd,
+                        mainAxisSpacing: AppSpacing.spaceMd,
+                        childAspectRatio: 0.82,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final option = _aestheticsOptions[index];
+                          final isSelected = _selectedAesthetics.contains(option['id']);
+
+                          return AdaptiveGlassContainer(
+                            borderRadius: 16.0,
+                            isSelected: isSelected,
+                            onTap: () => _toggleAesthetic(option['id'] as String),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(15.0),
+                              child: Stack(
+                                children: [
+                                  // Background image with graceful fallback
+                                  Positioned.fill(
+                                    child: Image.network(
+                                      option['image'] as String,
+                                      fit: BoxFit.cover,
+                                      color: Colors.black.withAlpha(isSelected ? 90 : 150),
+                                      colorBlendMode: BlendMode.darken,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return Center(
+                                          child: Icon(
+                                            option['icon'] as IconData,
+                                            color: (isSelected ? const Color(0xFFEEC200) : const Color(0xFF4D5252)).withAlpha(80),
+                                            size: 48,
                                           ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  // Subtle bottom gradient for label contrast
+                                  Positioned.fill(
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [
+                                            Colors.transparent,
+                                            Colors.black.withAlpha(180),
+                                          ],
+                                          stops: const [0.45, 1.0],
                                         ),
                                       ),
-                                      if (isSelected) ...[
-                                        AppGaps.gapXs,
-                                        const Icon(
-                                          Icons.check_circle,
-                                          color: Color(0xFFEEC200),
-                                          size: 16,
-                                        ),
-                                      ],
-                                    ],
+                                    ),
                                   ),
-                                ),
-                              ],
+                                  // Label & selection checkmark
+                                  Positioned(
+                                    bottom: AppSpacing.spaceMd,
+                                    left: AppSpacing.spaceSm,
+                                    right: AppSpacing.spaceSm,
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            option['label'] as String,
+                                            textAlign: TextAlign.center,
+                                            style: GoogleFonts.plusJakartaSans(
+                                              color: const Color(0xFFF9FAFA),
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                              letterSpacing: 1.2,
+                                            ),
+                                          ),
+                                        ),
+                                        if (isSelected) ...[
+                                          AppGaps.gapXs,
+                                          const Icon(
+                                            Icons.check_circle,
+                                            color: Color(0xFFEEC200),
+                                            size: 16,
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ),
-                      );
-                    },
+                          );
+                        },
+                        childCount: _aestheticsOptions.length,
+                      ),
+                    ),
                   ),
-                ),
-                AppGaps.gapMd,
-                AppButtons.primaryCTA(
-                  isLoading: _isLoading,
-                  onPressed: _saveAesthetics,
-                  text: 'CONTINUE',
-                ),
-                AppGaps.gapMd,
-              ],
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Padding(
+                      padding: AppPadding.screenHorizontal.add(const EdgeInsets.only(bottom: AppSpacing.spaceLg)),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          AppButtons.primaryCTA(
+                            isLoading: _isLoading,
+                            onPressed: _saveAesthetics,
+                            text: widget.isGuest ? 'DONE' : 'FINISH',
+                            backgroundColor: const Color(0xFFEEC200),
+                            foregroundColor: const Color(0xFF121414),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
