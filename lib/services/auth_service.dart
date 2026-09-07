@@ -5,8 +5,17 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../models/user.dart';
 
 class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth? _authInstance;
+  final FirebaseFirestore? _firestoreInstance;
+
+  AuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
+      : _authInstance = auth,
+        _firestoreInstance = firestore;
+
+  FirebaseAuth get _auth => _authInstance ?? FirebaseAuth.instance;
+  FirebaseFirestore get _firestore => _firestoreInstance ?? FirebaseFirestore.instance;
+
+  User? get currentUser => _auth.currentUser;
 
   // Sign up with Email and Password
   Future<UserCredential> signUpWithEmailAndPassword(String email, String password) async {
@@ -187,51 +196,102 @@ class AuthService {
     }
   }
 
-  // Start MFA Enrollment (Sends SMS Code)
-  Future<String> enrollMfaStart(String phoneNumber) async {
+  // Verify Phone Number (Sends SMS Code)
+  Future<void> verifyPhoneNumber({
+    required String phoneNumber,
+    required void Function(String verificationId, int? resendToken) onCodeSent,
+    required void Function(Exception error) onVerificationFailed,
+    void Function(PhoneAuthCredential credential)? onVerificationCompleted,
+    void Function(String verificationId)? onCodeAutoRetrievalTimeout,
+    int? forceResendingToken,
+  }) async {
     try {
-      final user = _auth.currentUser;
-      if (user == null) throw Exception("User must be logged in to enroll in MFA");
-
-      final multiFactorSession = await user.multiFactor.getSession();
-      String verificationIdResult = '';
-
       await _auth.verifyPhoneNumber(
-        multiFactorSession: multiFactorSession,
         phoneNumber: phoneNumber,
-        verificationCompleted: (PhoneAuthCredential credential) {},
+        forceResendingToken: forceResendingToken,
+        verificationCompleted: (PhoneAuthCredential credential) {
+          if (onVerificationCompleted != null) {
+            onVerificationCompleted(credential);
+          }
+        },
         verificationFailed: (FirebaseAuthException e) {
-          throw _handleFirebaseAuthException(e);
+          onVerificationFailed(_handleFirebaseAuthException(e));
         },
         codeSent: (String verificationId, int? resendToken) {
-          verificationIdResult = verificationId;
+          onCodeSent(verificationId, resendToken);
         },
-        codeAutoRetrievalTimeout: (String verificationId) {},
+        codeAutoRetrievalTimeout: (String verificationId) {
+          if (onCodeAutoRetrievalTimeout != null) {
+            onCodeAutoRetrievalTimeout(verificationId);
+          }
+        },
       );
-
-      return verificationIdResult;
+    } on FirebaseAuthException catch (e) {
+      onVerificationFailed(_handleFirebaseAuthException(e));
     } catch (e) {
-      throw Exception('Failed to send verification SMS: ${e.toString()}');
+      onVerificationFailed(Exception('Failed to send verification SMS: ${e.toString()}'));
     }
   }
 
-  // Verify MFA Code (Completes Enrollment)
-  Future<void> enrollMfaComplete(String verificationId, String smsCode, String displayName) async {
+  // Sign in with Phone Credential
+  Future<UserCredential> signInWithPhoneCredential({
+    required String verificationId,
+    required String smsCode,
+  }) async {
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: smsCode,
+      );
+      final userCredential = await _auth.signInWithCredential(credential);
+      if (userCredential.user != null) {
+        await syncUserToFirestore(userCredential.user!);
+      }
+      return userCredential;
+    } on FirebaseAuthException catch (e) {
+      throw _handleFirebaseAuthException(e);
+    } catch (e) {
+      throw Exception('Failed to sign in: ${e.toString()}');
+    }
+  }
+
+  // Link with Phone Credential (if user is already authenticated)
+  Future<UserCredential?> linkWithPhoneCredential({
+    required String verificationId,
+    required String smsCode,
+  }) async {
     try {
       final user = _auth.currentUser;
-      if (user == null) throw Exception("User must be logged in to complete MFA enrollment");
+      if (user == null) throw Exception("No authenticated user to link account to.");
 
       final credential = PhoneAuthProvider.credential(
         verificationId: verificationId,
         smsCode: smsCode,
       );
-
-      final assertion = PhoneMultiFactorGenerator.getAssertion(credential);
-      await user.multiFactor.enroll(assertion, displayName: displayName);
+      final userCredential = await user.linkWithCredential(credential);
+      if (userCredential.user != null) {
+        await syncUserToFirestore(userCredential.user!);
+      }
+      return userCredential;
     } on FirebaseAuthException catch (e) {
       throw _handleFirebaseAuthException(e);
     } catch (e) {
-      throw Exception('Failed to complete verification: ${e.toString()}');
+      throw Exception('Failed to link phone credential: ${e.toString()}');
+    }
+  }
+
+  // Update phone verification status in Firestore
+  Future<void> updatePhoneVerificationStatus({
+    required String uid,
+    required String phoneNumber,
+  }) async {
+    try {
+      await _firestore.collection('users').doc(uid).set({
+        'phoneVerified': true,
+        'phoneNumber': phoneNumber,
+      }, SetOptions(merge: true));
+    } catch (e) {
+      throw Exception('Failed to update phone verification status: ${e.toString()}');
     }
   }
 
@@ -268,6 +328,16 @@ class AuthService {
   // Helper to format clean, user-friendly Firebase Auth error messages
   Exception _handleFirebaseAuthException(FirebaseAuthException e) {
     switch (e.code) {
+      case 'invalid-phone-number':
+        return Exception('Please enter a valid phone number.');
+      case 'invalid-verification-code':
+        return Exception('The verification code entered is invalid.');
+      case 'session-expired':
+        return Exception('Verification code has expired. Please request a new code.');
+      case 'quota-exceeded':
+        return Exception('SMS quota exceeded. Please try again later.');
+      case 'too-many-requests':
+        return Exception('Too many attempts. Please try again later.');
       case 'invalid-email':
         return Exception('The email address is invalid.');
       case 'user-disabled':
@@ -292,6 +362,9 @@ class AuthService {
         return Exception(e.message ?? 'Authentication error (${e.code}).');
     }
   }
+
+  // Public exception mapper for testing and consistency
+  Exception handleFirebaseAuthException(FirebaseAuthException e) => _handleFirebaseAuthException(e);
 
   // Get stream of auth state changes
   Stream<User?> get authStateChanges => _auth.authStateChanges();

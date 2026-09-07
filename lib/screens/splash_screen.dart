@@ -5,6 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_spacing.dart';
 import 'role_selection_screen.dart';
 import 'main_feed_screen.dart';
+import 'profile_setup_screen.dart';
+import 'aesthetics_selection_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -32,12 +34,19 @@ class _SplashScreenState extends State<SplashScreen> {
         final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
         final data = doc.data();
 
-        // If user already has a complete profile, route to MainFeedScreen
-        if (data != null &&
-            data['role'] != null &&
-            data['aesthetics'] != null &&
-            (data['aesthetics'] as List).isNotEmpty) {
-          nextScreen = const MainFeedScreen();
+        // Route based on onboarding progress
+        if (data != null && data['role'] != null) {
+          final profileCompleted = data['profileCompleted'] == true;
+          final aesthetics = data['aesthetics'];
+          final hasAesthetics = aesthetics is List && aesthetics.isNotEmpty;
+
+          if (!profileCompleted) {
+            nextScreen = const ProfileSetupScreen();
+          } else if (!hasAesthetics) {
+            nextScreen = const AestheticsSelectionScreen();
+          } else {
+            nextScreen = const MainFeedScreen();
+          }
         }
       }
     } catch (_) {

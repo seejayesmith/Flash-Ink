@@ -37,13 +37,17 @@ dependencies:
   firebase_core: ^4.13.0
   firebase_auth: ^6.5.7
   google_sign_in: ^6.2.1
-  sign_in_with_apple: ^6.1.1
+  sign_in_with_apple: ^8.2.0
   cloud_firestore: ^6.8.0
   flutter_dotenv: ^6.0.1
   google_fonts: ^8.2.1
+  image_picker: ^1.2.3
+  firebase_storage: ^13.5.0
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to

@@ -4,6 +4,7 @@ import '../models/artist.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/adaptive_glass_container.dart';
 import '../widgets/artist_card.dart';
+import 'artist_profile_screen.dart';
 
 class BrowseArtistsScreen extends StatefulWidget {
   const BrowseArtistsScreen({super.key});
@@ -48,11 +49,10 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
   }
 
   void _handleViewProfile(Artist artist) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Viewing ${artist.name}\'s profile & flash collection'),
-        backgroundColor: const Color(0xFFEEC200),
-        behavior: SnackBarBehavior.floating,
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ArtistProfileScreen(artist: artist),
       ),
     );
   }

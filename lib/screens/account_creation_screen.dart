@@ -9,19 +9,25 @@ import '../theme/app_radius.dart';
 import '../theme/app_buttons.dart';
 import 'phone_verification_screen.dart';
 import 'aesthetics_selection_screen.dart';
+import 'profile_setup_screen.dart';
 import '../widgets/adaptive_glass_container.dart';
 
 class AccountCreationScreen extends StatefulWidget {
   final String role;
+  final AuthService? authService;
 
-  const AccountCreationScreen({super.key, required this.role});
+  const AccountCreationScreen({
+    super.key,
+    required this.role,
+    this.authService,
+  });
 
   @override
   State<AccountCreationScreen> createState() => _AccountCreationScreenState();
 }
 
 class _AccountCreationScreenState extends State<AccountCreationScreen> {
-  final AuthService _authService = AuthService();
+  late final AuthService _authService = widget.authService ?? AuthService();
   bool _isLoading = false;
 
   void _showErrorSnackBar(String message) {
@@ -53,7 +59,10 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
         } catch (_) {}
 
         if (mounted) {
-          _showPhoneEntryModal();
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+          );
         }
       }
     } catch (e) {
@@ -322,7 +331,12 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                           }
 
                           modalNavigator.pop();
-                          _showPhoneEntryModal();
+                          if (context.mounted) {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+                            );
+                          }
                         } catch (e) {
                           setModalState(() => isModalLoading = false);
                           _showErrorSnackBar(e.toString());
@@ -360,6 +374,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
   void _showPhoneEntryModal({String? initialPhone}) {
     final phoneController = TextEditingController(text: initialPhone ?? '');
     bool isModalLoading = false;
+    String? modalError;
     final formKey = GlobalKey<FormState>();
 
     showModalBottomSheet(
@@ -476,12 +491,46 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                           ),
                         ),
                       ),
+                      if (modalError != null) ...[
+                        AppGaps.gapMd,
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.spaceMd,
+                            vertical: AppSpacing.spaceSm,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444).withAlpha(30),
+                            borderRadius: AppBorderRadius.md,
+                            border: Border.all(color: const Color(0xFFEF4444)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline, color: Color(0xFFEF4444), size: 18),
+                              AppGaps.gapSm,
+                              Expanded(
+                                child: Text(
+                                  modalError!,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: const Color(0xFFEF4444),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       AppGaps.gapLg,
                       AppButtons.primaryCTA(
                         isLoading: isModalLoading,
                         onPressed: () async {
                           if (!formKey.currentState!.validate()) return;
-                          setModalState(() => isModalLoading = true);
+                          setModalState(() {
+                            isModalLoading = true;
+                            modalError = null;
+                          });
                           final rootNavigator = Navigator.of(context);
                           final modalNavigator = Navigator.of(modalContext);
                           final rawNumber = phoneController.text.trim();
@@ -491,33 +540,41 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                             formattedNumber = '+1 $formattedNumber';
                           }
 
-                          if (FirebaseAuth.instance.currentUser == null) {
-                            try {
-                              await _authService.signInAnonymously();
-                            } catch (_) {}
-                          }
-
-                          String verificationId = 'vid_${DateTime.now().millisecondsSinceEpoch}';
                           try {
-                            if (FirebaseAuth.instance.currentUser != null) {
-                              try {
-                                final vid = await _authService.enrollMfaStart(formattedNumber);
-                                if (vid.isNotEmpty) verificationId = vid;
-                              } catch (_) {
-                                // Graceful fallback in simulator or test environments
-                              }
-                            }
-                          } catch (_) {}
-
-                          modalNavigator.pop();
-                          rootNavigator.push(
-                            MaterialPageRoute(
-                              builder: (_) => PhoneVerificationScreen(
-                                phoneNumber: formattedNumber,
-                                verificationId: verificationId,
-                              ),
-                            ),
-                          );
+                            await _authService.verifyPhoneNumber(
+                              phoneNumber: formattedNumber,
+                              onCodeSent: (String verificationId, int? resendToken) {
+                                if (modalNavigator.canPop()) {
+                                  modalNavigator.pop();
+                                }
+                                rootNavigator.push(
+                                  MaterialPageRoute(
+                                    builder: (_) => PhoneVerificationScreen(
+                                      phoneNumber: formattedNumber,
+                                      verificationId: verificationId,
+                                      resendToken: resendToken,
+                                      authService: _authService,
+                                    ),
+                                  ),
+                                );
+                              },
+                              onVerificationFailed: (Exception error) {
+                                final errorMsg = error.toString().replaceAll('Exception: ', '');
+                                setModalState(() {
+                                  isModalLoading = false;
+                                  modalError = errorMsg;
+                                });
+                                _showErrorSnackBar(errorMsg);
+                              },
+                            );
+                          } catch (e) {
+                            final errorMsg = e.toString().replaceAll('Exception: ', '');
+                            setModalState(() {
+                              isModalLoading = false;
+                              modalError = errorMsg;
+                            });
+                            _showErrorSnackBar(errorMsg);
+                          }
                         },
                         text: 'SEND VERIFICATION CODE',
                       ),

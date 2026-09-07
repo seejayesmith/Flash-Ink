@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_radius.dart';
@@ -13,11 +11,15 @@ import 'role_selection_screen.dart';
 class PhoneVerificationScreen extends StatefulWidget {
   final String phoneNumber;
   final String verificationId;
+  final int? resendToken;
+  final AuthService? authService;
 
   const PhoneVerificationScreen({
     super.key,
     this.phoneNumber = '+1 (555) 019-2834',
     this.verificationId = 'test_verification_id',
+    this.resendToken,
+    this.authService,
   });
 
   @override
@@ -25,9 +27,11 @@ class PhoneVerificationScreen extends StatefulWidget {
 }
 
 class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
-  final AuthService _authService = AuthService();
+  late final AuthService _authService = widget.authService ?? AuthService();
   final TextEditingController _codeController = TextEditingController();
   bool _isLoading = false;
+  late String _verificationId = widget.verificationId;
+  late int? _resendToken = widget.resendToken;
 
   @override
   void dispose() {
@@ -49,19 +53,17 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        // Attempt MFA complete or update Firestore with verified status
-        try {
-          await _authService.enrollMfaComplete(widget.verificationId, code, 'Primary Phone');
-        } catch (_) {
-          // If in development/testing mode, simulate successful phone verification
-        }
+      final userCredential = await _authService.signInWithPhoneCredential(
+        verificationId: _verificationId,
+        smsCode: code,
+      );
 
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .set({'phoneVerified': true, 'phoneNumber': widget.phoneNumber}, SetOptions(merge: true));
+      final uid = userCredential.user?.uid ?? _authService.currentUser?.uid;
+      if (uid != null) {
+        await _authService.updatePhoneVerificationStatus(
+          uid: uid,
+          phoneNumber: widget.phoneNumber,
+        );
       }
 
       if (mounted) {
@@ -73,16 +75,81 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
       }
     } catch (e) {
       if (mounted) {
+        _codeController.clear();
+        final errorMsg = e.toString().replaceAll('Exception: ', '');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Verification failed: $e'),
+            content: Text(
+              'Verification failed: $errorMsg',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
             backgroundColor: const Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: AppBorderRadius.md),
           ),
         );
       }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _resendCode() async {
+    setState(() => _isLoading = true);
+    try {
+      await _authService.verifyPhoneNumber(
+        phoneNumber: widget.phoneNumber,
+        forceResendingToken: _resendToken,
+        onCodeSent: (String verificationId, int? resendToken) {
+          if (mounted) {
+            setState(() {
+              _verificationId = verificationId;
+              _resendToken = resendToken;
+              _isLoading = false;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('A new 6-digit code has been sent.'),
+                backgroundColor: Color(0xFF22C55E),
+              ),
+            );
+          }
+        },
+        onVerificationFailed: (Exception error) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+            final errorMsg = error.toString().replaceAll('Exception: ', '');
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  errorMsg,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                backgroundColor: const Color(0xFFEF4444),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: AppBorderRadius.md),
+              ),
+            );
+          }
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        final errorMsg = e.toString().replaceAll('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              errorMsg,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: const Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: AppBorderRadius.md),
+          ),
+        );
       }
     }
   }
@@ -262,14 +329,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                               style: TextStyle(color: Color(0xFF919696), fontSize: 14),
                             ),
                             TextButton(
-                              onPressed: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('A new 6-digit code has been sent.'),
-                                    backgroundColor: Color(0xFF22C55E),
-                                  ),
-                                );
-                              },
+                              onPressed: _isLoading ? null : _resendCode,
                               child: const Text(
                                 'Resend',
                                 style: TextStyle(

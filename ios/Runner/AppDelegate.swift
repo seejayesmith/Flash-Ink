@@ -73,15 +73,14 @@ class NativeVisualEffectView: NSObject, FlutterPlatformView {
   ) -> Bool {
     let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
     
-    if let registrar = self.registrar(forPlugin: "NativeVisualEffectViewPlugin") {
-      let factory = NativeVisualEffectViewFactory(messenger: registrar.messenger())
-      registrar.register(factory, withId: "flash_ink/native_glass_view")
-    }
-    
     return result
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "NativeVisualEffectViewPlugin") {
+      let factory = NativeVisualEffectViewFactory(messenger: registrar.messenger())
+      registrar.register(factory, withId: "flash_ink/native_glass_view")
+    }
   }
 }

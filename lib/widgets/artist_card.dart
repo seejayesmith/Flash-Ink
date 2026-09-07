@@ -4,17 +4,40 @@ import '../models/artist.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_buttons.dart';
 
+/// Full artist showcase card for the "Browse Artists" feed.
+///
+/// Features:
+/// 1. Top Section: 2x2 Artwork Grid showcasing 4 preview images of flash artwork/tattoos.
+/// 2. Middle Section: Overlapping circular artist avatar, display name, "Books open" tag,
+///    and location/studio sub-details.
+/// 3. Stats Row: Contained 3-column pill for Rating, Available Flash Count, and Min Deposit.
+/// 4. Action Row: Full-width "VIEW PROFILE" primary accent CTA and circular favorite heart button.
 class ArtistCard extends StatelessWidget {
   final Artist artist;
   final VoidCallback? onViewProfile;
   final VoidCallback? onToggleFavorite;
+  final void Function(FlashArtwork flash)? onClaimFlash;
 
   const ArtistCard({
     super.key,
     required this.artist,
     this.onViewProfile,
     this.onToggleFavorite,
+    this.onClaimFlash,
   });
+
+  String _imageUrlAt(int index) {
+    final list = artist.previewImages.isNotEmpty ? artist.previewImages : artist.images;
+    if (list.isNotEmpty) {
+      final img = list[index % list.length];
+      if (img.isNotEmpty) return img;
+    }
+    if (artist.flashArtworks.isNotEmpty) {
+      final img = artist.flashArtworks[index % artist.flashArtworks.length].imageUrl;
+      if (img.isNotEmpty) return img;
+    }
+    return 'https://images.unsplash.com/photo-1598371839696-5c5bb00bdc28?auto=format&fit=crop&w=600&q=80';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,12 +63,12 @@ class ArtistCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Image Grid with Overlapping Avatar
+          // 1. Top Section: 2x2 Artwork Grid with Overlapping Circular Avatar
           Expanded(
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                // 2x2 Image Grid
+                // 2x2 Image Grid with top rounded corners
                 Positioned.fill(
                   child: ClipRRect(
                     borderRadius: const BorderRadius.only(
@@ -99,144 +122,144 @@ class ArtistCard extends StatelessWidget {
             ),
           ),
 
-          // 2. Profile Details, Stats, and Action Row
+          // 2. Middle Section, Stats Row, and Action Row
           Padding(
             padding: const EdgeInsets.only(
               left: AppSpacing.spaceLg,
               right: AppSpacing.spaceLg,
               top: AppSpacing.spaceSm,
-              bottom: 18.0, // Matches the 18px element spacing
+              bottom: 18.0,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Profile Section (aligned next to avatar indentation)
+                // Profile Details (aligned next to the overlapping avatar)
                 Padding(
                   padding: const EdgeInsets.only(left: 90.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Name + Books Open Tag
+                      // Artist Name + Books Open Tag
                       Row(
-                          children: [
-                            Flexible(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              artist.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: const Color(0xFFEEC200),
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                          ),
+                          if (artist.isBooksOpen) ...[
+                            AppGaps.gapSm,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1A1D16),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: const Color(0xFF8C7E55),
+                                  width: 1,
+                                ),
+                              ),
                               child: Text(
-                                artist.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                                'Books open',
                                 style: GoogleFonts.plusJakartaSans(
                                   color: const Color(0xFFEEC200),
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: -0.2,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
-                            if (artist.isBooksOpen) ...[
-                              AppGaps.gapSm,
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF1A1D16),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: const Color(0xFF8C7E55),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: Text(
-                                  'Books open',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    color: const Color(0xFFEEC200),
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
                           ],
-                        ),
-                        const SizedBox(height: 3),
-                        // Location and Studio Type Row
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.location_on_outlined,
-                              size: 14,
-                              color: Color(0xFF919696),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      // Location and Studio Type Row
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on_outlined,
+                            size: 14,
+                            color: Color(0xFF919696),
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            artist.location,
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF919696),
+                              fontSize: 13,
                             ),
-                            const SizedBox(width: 3),
-                            Text(
-                              artist.location,
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: Text(
+                              '•',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: const Color(0xFF6B7280),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          const Icon(
+                            Icons.storefront_outlined,
+                            size: 14,
+                            color: Color(0xFF919696),
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              artist.studioType,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.plusJakartaSans(
                                 color: const Color(0xFF919696),
                                 fontSize: 13,
                               ),
                             ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 6),
-                              child: Text(
-                                '•',
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: const Color(0xFF6B7280),
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                            const Icon(
-                              Icons.storefront_outlined,
-                              size: 14,
-                              color: Color(0xFF919696),
-                            ),
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                artist.studioType,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: const Color(0xFF919696),
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
+                ),
 
-                  const SizedBox(height: 18),
+                const SizedBox(height: 18),
 
-                  // Stats Row
-                  _buildStatsRow(),
+                // 3. Stats Row (Contained Card/Pill)
+                _buildStatsRow(),
 
-                  const SizedBox(height: 18),
+                const SizedBox(height: 18),
 
-                  // Action Row: VIEW PROFILE + Favorite Button
-                  _buildActionRow(),
-                ],
-              ),
+                // 4. Action Row: "VIEW PROFILE" full-width CTA + Favorite Button
+                _buildActionRow(),
+              ],
             ),
+          ),
         ],
       ),
     );
   }
 
-  /// 2x2 Image Grid with 2px dividers
+  /// 2x2 Image Grid with 2px dividers showcasing 4 flash preview images
   Widget _buildImageGrid() {
     return Column(
       children: [
         Expanded(
           child: Row(
             children: [
-              Expanded(child: _buildGridImage(artist.images[0])),
+              Expanded(child: _buildGridImage(_imageUrlAt(0))),
               const SizedBox(width: 2),
-              Expanded(child: _buildGridImage(artist.images[1])),
+              Expanded(child: _buildGridImage(_imageUrlAt(1))),
             ],
           ),
         ),
@@ -244,9 +267,9 @@ class ArtistCard extends StatelessWidget {
         Expanded(
           child: Row(
             children: [
-              Expanded(child: _buildGridImage(artist.images[2])),
+              Expanded(child: _buildGridImage(_imageUrlAt(2))),
               const SizedBox(width: 2),
-              Expanded(child: _buildGridImage(artist.images[3])),
+              Expanded(child: _buildGridImage(_imageUrlAt(3))),
             ],
           ),
         ),
@@ -274,11 +297,23 @@ class ArtistCard extends StatelessWidget {
           );
         },
         errorBuilder: (context, error, stackTrace) {
-          return const Center(
-            child: Icon(
-              Icons.broken_image_outlined,
-              color: Color(0xFF4D5252),
-              size: 28,
+          return Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF2A2D2D),
+                  Color(0xFF1E2020),
+                ],
+              ),
+            ),
+            child: const Center(
+              child: Icon(
+                Icons.draw_outlined,
+                color: Color(0xFF4D5252),
+                size: 26,
+              ),
             ),
           );
         },
@@ -286,7 +321,7 @@ class ArtistCard extends StatelessWidget {
     );
   }
 
-  /// Stats Row container with 3 columns
+  /// Stats Row container with 3 columns (Rating, Avail Pieces, Min Deposit)
   Widget _buildStatsRow() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
@@ -410,7 +445,7 @@ class ArtistCard extends StatelessWidget {
     );
   }
 
-  /// Action Row: full-width primary CTA + circular outline heart button
+  /// Action Row: full-width "VIEW PROFILE" primary CTA + circular outline heart button
   Widget _buildActionRow() {
     return Row(
       children: [
