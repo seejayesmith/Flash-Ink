@@ -23,7 +23,7 @@ void main() {
         expect(artist.images.length, 4);
         for (final img in artist.previewImages) {
           expect(img.isNotEmpty, isTrue);
-          expect(img.startsWith('https://'), isTrue);
+          expect(img.startsWith('https://') || img.startsWith('assets/'), isTrue);
           // Verify broken 404 URL is not present
           expect(img.contains('1590246814883-578337424072'), isFalse);
         }
@@ -34,7 +34,7 @@ void main() {
           expect(flash.id.isNotEmpty, isTrue);
           expect(flash.artistId.isNotEmpty, isTrue);
           expect(flash.title.isNotEmpty, isTrue);
-          expect(flash.imageUrl.startsWith('https://'), isTrue);
+          expect(flash.imageUrl.startsWith('https://') || flash.imageUrl.startsWith('assets/'), isTrue);
           expect(flash.imageUrl.contains('1590246814883-578337424072'), isFalse);
           expect(flash.price, greaterThan(0));
           expect(flash.deposit, greaterThan(0));

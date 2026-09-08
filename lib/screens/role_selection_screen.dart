@@ -3,7 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_buttons.dart';
 import '../widgets/adaptive_glass_container.dart';
+import '../config/dev_config.dart';
 import 'account_creation_screen.dart';
+import 'artist_onboarding/artist_sign_up_screen.dart';
+import 'artist_onboarding/artist_profile_photo_screen.dart';
+import 'profile_setup_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
   const RoleSelectionScreen({super.key});
@@ -18,12 +22,21 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   void _handleContinue() {
     if (_selectedRole == null) return;
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => AccountCreationScreen(role: _selectedRole!),
-      ),
-    );
+    if (_selectedRole == 'artist') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const ArtistSignUpScreen(),
+        ),
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AccountCreationScreen(role: _selectedRole!),
+        ),
+      );
+    }
   }
 
   Widget _buildRoleCard({
@@ -113,6 +126,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
               child: Image.asset(
                 'assets/images/tattoo_setup.png',
                 fit: BoxFit.cover,
+                cacheWidth: 1080,
               ),
             ),
             // Gentle gradient overlay: dark at top for text readability, subtle dark scrim over bright tray sections
@@ -153,6 +167,48 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              if (kEnableDevBypass) ...[
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Spacer(),
+                                    ElevatedButton.icon(
+                                      onPressed: () {
+                                        if (_selectedRole == 'artist') {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => const ArtistProfilePhotoScreen(artistName: 'OddMaree'),
+                                            ),
+                                          );
+                                        } else {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+                                          );
+                                        }
+                                      },
+                                      icon: const Icon(Icons.fast_forward, size: 16, color: Color(0xFF121414)),
+                                      label: Text(
+                                        'Skip (Dev)',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: const Color(0xFF121414),
+                                        ),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFFEEC200),
+                                        foregroundColor: const Color(0xFF121414),
+                                        elevation: 2,
+                                        shape: const StadiumBorder(),
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                              ],
                               FittedBox(
                                 fit: BoxFit.scaleDown,
                                 alignment: Alignment.centerLeft,

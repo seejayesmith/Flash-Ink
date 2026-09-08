@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_buttons.dart';
 import '../widgets/adaptive_glass_container.dart';
+import '../widgets/flash_image.dart';
 import 'main_feed_screen.dart';
 
 class AestheticsSelectionScreen extends StatefulWidget {
@@ -26,42 +27,42 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
       'label': 'TRADITIONAL',
       'icon': Icons.anchor,
       'gradient': [Color(0xFF2E1A1A), Color(0xFF1E2020)],
-      'image': 'https://images.unsplash.com/photo-1598371839696-5c5bb00bdc28?auto=format&fit=crop&w=600&q=80',
+      'image': 'assets/images/flash_traditional_dagger.jpg',
     },
     {
       'id': 'fineline',
       'label': 'FINE LINE',
       'icon': Icons.gesture,
       'gradient': [Color(0xFF1E262A), Color(0xFF121414)],
-      'image': 'https://images.unsplash.com/photo-1562962230-16e4623d36e6?auto=format&fit=crop&w=600&q=80',
+      'image': 'assets/images/flash_fineline_flora.jpg',
     },
     {
       'id': 'japanese',
       'label': 'JAPANESE',
       'icon': Icons.water,
       'gradient': [Color(0xFF2A1E26), Color(0xFF1A1A24)],
-      'image': 'https://images.unsplash.com/photo-1611501275019-9b5cda994e8d?auto=format&fit=crop&w=600&q=80',
+      'image': 'assets/images/flash_japanese_koi.jpg',
     },
     {
       'id': 'realism',
       'label': 'REALISM',
       'icon': Icons.remove_red_eye_outlined,
       'gradient': [Color(0xFF26241E), Color(0xFF1A1916)],
-      'image': 'https://images.unsplash.com/photo-1598371839696-5c5bb00bdc28?auto=format&fit=crop&w=600&q=80',
+      'image': 'assets/images/flash_american_eagle.jpg',
     },
     {
       'id': 'blackwork',
       'label': 'BLACKWORK',
       'icon': Icons.contrast,
       'gradient': [Color(0xFF181A1A), Color(0xFF0F1010)],
-      'image': 'https://images.unsplash.com/photo-1562962230-16e4623d36e6?auto=format&fit=crop&w=600&q=80',
+      'image': 'assets/images/flash_blackwork_skull.jpg',
     },
     {
       'id': 'watercolor',
       'label': 'WATERCOLOR',
       'icon': Icons.palette_outlined,
       'gradient': [Color(0xFF1E2626), Color(0xFF141C1E)],
-      'image': 'https://images.unsplash.com/photo-1611501275019-9b5cda994e8d?auto=format&fit=crop&w=600&q=80',
+      'image': 'assets/images/flash_traditional_moth.jpg',
     },
   ];
 
@@ -199,20 +200,18 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
                                 children: [
                                   // Background image with graceful fallback
                                   Positioned.fill(
-                                    child: Image.network(
-                                      option['image'] as String,
+                                    child: FlashImage(
+                                      urlOrPath: option['image'] as String,
                                       fit: BoxFit.cover,
                                       color: Colors.black.withAlpha(isSelected ? 90 : 150),
                                       colorBlendMode: BlendMode.darken,
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return Center(
-                                          child: Icon(
-                                            option['icon'] as IconData,
-                                            color: (isSelected ? const Color(0xFFEEC200) : const Color(0xFF4D5252)).withAlpha(80),
-                                            size: 48,
-                                          ),
-                                        );
-                                      },
+                                      errorWidget: Center(
+                                        child: Icon(
+                                          option['icon'] as IconData,
+                                          color: (isSelected ? const Color(0xFFEEC200) : const Color(0xFF4D5252)).withAlpha(80),
+                                          size: 48,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                   // Subtle bottom gradient for label contrast

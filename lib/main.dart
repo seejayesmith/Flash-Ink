@@ -22,6 +22,10 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // Cap image cache to prevent Jetsam memory terminations on iOS devices
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 80 << 20; // 80 MB limit
+  PaintingBinding.instance.imageCache.maximumSize = 60; // 60 image limit
+
   runApp(const MyApp());
 }
 

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/artist.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_buttons.dart';
+import 'flash_image.dart';
 
 /// Full artist showcase card for the "Browse Artists" feed.
 ///
@@ -36,7 +37,7 @@ class ArtistCard extends StatelessWidget {
       final img = artist.flashArtworks[index % artist.flashArtworks.length].imageUrl;
       if (img.isNotEmpty) return img;
     }
-    return 'https://images.unsplash.com/photo-1598371839696-5c5bb00bdc28?auto=format&fit=crop&w=600&q=80';
+    return 'assets/images/flash_traditional_dagger.jpg';
   }
 
   @override
@@ -280,43 +281,9 @@ class ArtistCard extends StatelessWidget {
   Widget _buildGridImage(String url) {
     return Container(
       color: const Color(0xFF262929),
-      child: Image.network(
-        url,
+      child: FlashImage(
+        urlOrPath: url,
         fit: BoxFit.cover,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return const Center(
-            child: SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4D5252)),
-              ),
-            ),
-          );
-        },
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF2A2D2D),
-                  Color(0xFF1E2020),
-                ],
-              ),
-            ),
-            child: const Center(
-              child: Icon(
-                Icons.draw_outlined,
-                color: Color(0xFF4D5252),
-                size: 26,
-              ),
-            ),
-          );
-        },
       ),
     );
   }

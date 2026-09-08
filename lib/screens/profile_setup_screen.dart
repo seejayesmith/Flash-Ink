@@ -1,5 +1,7 @@
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -31,9 +33,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _pickImage([ImageSource? source]) async {
+    if (source == null) {
+      _showImageSourceModal();
+      return;
+    }
+
     try {
-      final pickedFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+      final pickedFile = await _picker.pickImage(source: source, imageQuality: 80);
       if (pickedFile != null) {
         final bytes = await pickedFile.readAsBytes();
         setState(() {
@@ -47,6 +54,114 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         );
       }
     }
+  }
+
+  Future<void> _useSamplePhoto() async {
+    try {
+      final byteData = await rootBundle.load('assets/images/flash_traditional_moth.jpg');
+      final bytes = byteData.buffer.asUint8List();
+      setState(() {
+        _imageBytes = bytes;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Loaded sample photo for testing.'),
+            backgroundColor: Color(0xFF22C55E),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load sample photo: $e')),
+        );
+      }
+    }
+  }
+
+  void _showImageSourceModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E2020),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (bottomSheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4D5252),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Select Profile Photo',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFFF9FAFA),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                ListTile(
+                  leading: const Icon(Icons.photo_library, color: Color(0xFFEEC200)),
+                  title: Text(
+                    'Choose from Gallery',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFF9FAFA),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(bottomSheetContext);
+                    _pickImage(ImageSource.gallery);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.camera_alt, color: Color(0xFFEEC200)),
+                  title: Text(
+                    'Take a Photo',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFF9FAFA),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(bottomSheetContext);
+                    _pickImage(ImageSource.camera);
+                  },
+                ),
+                if (kDebugMode)
+                  ListTile(
+                    leading: const Icon(Icons.developer_mode, color: Color(0xFFEEC200)),
+                    title: Text(
+                      'Use Sample Photo (Dev)',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFFEEC200),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(bottomSheetContext);
+                      _useSamplePhoto();
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _saveProfile() async {

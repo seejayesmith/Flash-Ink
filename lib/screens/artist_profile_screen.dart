@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/artist.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/adaptive_glass_container.dart';
+import '../widgets/flash_image.dart';
 
 class ArtistProfileScreen extends StatefulWidget {
   final Artist artist;
@@ -77,7 +78,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
   Widget _buildCoverAndHeader() {
     final coverImage = widget.artist.images.isNotEmpty
         ? widget.artist.images[0]
-        : 'https://images.unsplash.com/photo-1598371839696-5c5bb00bdc28?auto=format&fit=crop&w=600&q=80';
+        : 'assets/images/flash_traditional_dagger.jpg';
 
     return Stack(
       clipBehavior: Clip.none,
@@ -89,14 +90,9 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
           child: Stack(
             children: [
               Positioned.fill(
-                child: Image.network(
-                  coverImage,
+                child: FlashImage(
+                  urlOrPath: coverImage,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: const Color(0xFF1E2020),
-                    );
-                  },
                 ),
               ),
               Positioned.fill(
@@ -480,39 +476,9 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
                               borderRadius: const BorderRadius.vertical(
                                 top: Radius.circular(12),
                               ),
-                              child: Image.network(
-                                item.imageUrl,
+                              child: FlashImage(
+                                urlOrPath: item.imageUrl,
                                 fit: BoxFit.cover,
-                                loadingBuilder: (context, child, loadingProgress) {
-                                  if (loadingProgress == null) return child;
-                                  return Container(
-                                    color: const Color(0xFF262929),
-                                    child: const Center(
-                                      child: SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(
-                                            Color(0xFF4D5252),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    color: const Color(0xFF262929),
-                                    child: const Center(
-                                      child: Icon(
-                                        Icons.draw_outlined,
-                                        color: Color(0xFF4D5252),
-                                        size: 28,
-                                      ),
-                                    ),
-                                  );
-                                },
                               ),
                             ),
                             // Top Status Badge
@@ -685,21 +651,9 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
                 borderRadius: BorderRadius.circular(16),
                 child: AspectRatio(
                   aspectRatio: 1.2,
-                  child: Image.network(
-                    item.imageUrl,
+                  child: FlashImage(
+                    urlOrPath: item.imageUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: const Color(0xFF262929),
-                        child: const Center(
-                          child: Icon(
-                            Icons.draw_outlined,
-                            color: Color(0xFF4D5252),
-                            size: 48,
-                          ),
-                        ),
-                      );
-                    },
                   ),
                 ),
               ),
@@ -719,15 +673,14 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
                       ),
                     ),
                   ),
-                  if (item.fullPrice != null)
-                    Text(
-                      '\$${item.fullPrice}',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFFEEC200),
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
+                  Text(
+                    '\$${item.fullPrice}',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFEEC200),
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
                     ),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),

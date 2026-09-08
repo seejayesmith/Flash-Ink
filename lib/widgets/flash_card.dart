@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/artist.dart';
 import '../theme/app_buttons.dart';
 import '../theme/app_spacing.dart';
+import 'flash_image.dart';
 
 /// A card component dedicated to displaying a purchasable tattoo flash design.
 ///
@@ -207,58 +208,40 @@ class FlashCard extends StatelessWidget {
             // Artwork Image with dark ink framing container
             Container(
               color: const Color(0xFF1F2222),
-              child: Image.network(
-                flash.imageUrl,
+              child: FlashImage(
+                urlOrPath: flash.imageUrl,
                 fit: BoxFit.cover,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Container(
-                    color: const Color(0xFF222626),
-                    child: const Center(
-                      child: SizedBox(
-                        width: 28,
-                        height: 28,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFEEC200)),
+                errorWidget: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF2B2E2E), Color(0xFF1A1C1C)],
+                    ),
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.draw_outlined,
+                          color: Color(0xFFEEC200),
+                          size: 38,
                         ),
-                      ),
-                    ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [Color(0xFF2B2E2E), Color(0xFF1A1C1C)],
-                      ),
-                    ),
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.draw_outlined,
-                            color: Color(0xFFEEC200),
-                            size: 38,
+                        const SizedBox(height: 8),
+                        Text(
+                          flash.title,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF919696),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            flash.title,
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.plusJakartaSans(
-                              color: const Color(0xFF919696),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  );
-                },
+                  ),
+                ),
               ),
             ),
 

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../config/dev_config.dart';
 import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_radius.dart';
@@ -228,15 +229,38 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                       ),
                     ),
                     AppGaps.gapLg,
-                    Center(
-                      child: Text(
-                        isSignUp ? 'Create with Email' : 'Sign in with Email',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFFF9FAFA),
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          isSignUp ? 'Create with Email' : 'Sign in with Email',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFFF9FAFA),
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
+                        if (kEnableDevBypass)
+                          TextButton.icon(
+                            onPressed: () {
+                              Navigator.of(modalContext).pop();
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+                              );
+                            },
+                            icon: const Icon(Icons.fast_forward, size: 14, color: Color(0xFFEEC200)),
+                            label: const Text(
+                              'Skip (Dev)',
+                              style: TextStyle(
+                                color: Color(0xFFEEC200),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                     AppGaps.gapLg,
                     Text(
@@ -344,6 +368,35 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                       },
                       text: isSignUp ? 'CREATE ACCOUNT' : 'SIGN IN',
                     ),
+                    if (kEnableDevBypass) ...[
+                      AppGaps.gapSm,
+                      SizedBox(
+                        width: double.infinity,
+                        height: 44,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            Navigator.of(modalContext).pop();
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFFEEC200), width: 1.2),
+                            foregroundColor: const Color(0xFFEEC200),
+                            shape: const StadiumBorder(),
+                          ),
+                          child: Text(
+                            'Skip Email / Password (Dev)',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                     AppGaps.gapSm,
                     Center(
                       child: TextButton(
@@ -603,6 +656,36 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
           icon: const Icon(Icons.arrow_back, color: Color(0xFFF9FAFA)),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          if (kEnableDevBypass)
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+                  );
+                },
+                icon: const Icon(Icons.fast_forward, size: 16, color: Color(0xFF121414)),
+                label: Text(
+                  'Skip',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF121414),
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFEEC200),
+                  foregroundColor: const Color(0xFF121414),
+                  elevation: 2,
+                  shape: const StadiumBorder(),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                ),
+              ),
+            ),
+        ],
       ),
       body: Stack(
         children: [
@@ -611,6 +694,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
             child: Image.asset(
               'assets/images/tattoo_setup.png',
               fit: BoxFit.cover,
+              cacheWidth: 1080,
             ),
           ),
           Positioned.fill(
@@ -680,8 +764,71 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                                 height: 1.4,
                               ),
                             ),
-                            AppGaps.gapXl,
-                            // Primary Account Creation Options within Liquid Glass Container
+                             AppGaps.gapLg,
+                              if (kEnableDevBypass) ...[
+                               Container(
+                                 width: double.infinity,
+                                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                 decoration: BoxDecoration(
+                                   color: const Color(0xFFEEC200).withAlpha(25),
+                                   borderRadius: BorderRadius.circular(12),
+                                   border: Border.all(color: const Color(0xFFEEC200).withAlpha(140)),
+                                 ),
+                                 child: Row(
+                                   children: [
+                                     const Icon(Icons.flash_on, color: Color(0xFFEEC200), size: 20),
+                                     const SizedBox(width: 8),
+                                     Expanded(
+                                       child: Column(
+                                         crossAxisAlignment: CrossAxisAlignment.start,
+                                         children: [
+                                           Text(
+                                             'LOCAL DEV TESTING',
+                                             style: GoogleFonts.plusJakartaSans(
+                                               fontSize: 11,
+                                               fontWeight: FontWeight.w800,
+                                               letterSpacing: 1.0,
+                                               color: const Color(0xFFEEC200),
+                                             ),
+                                           ),
+                                           Text(
+                                             'Skip account creation & proceed',
+                                             style: GoogleFonts.plusJakartaSans(
+                                               fontSize: 12,
+                                               color: const Color(0xFFD8DDDD),
+                                             ),
+                                           ),
+                                         ],
+                                       ),
+                                     ),
+                                     ElevatedButton.icon(
+                                       onPressed: () {
+                                         Navigator.pushReplacement(
+                                           context,
+                                           MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+                                         );
+                                       },
+                                       icon: const Icon(Icons.arrow_forward, size: 14),
+                                       label: const Text('Skip'),
+                                       style: ElevatedButton.styleFrom(
+                                         backgroundColor: const Color(0xFFEEC200),
+                                         foregroundColor: const Color(0xFF121414),
+                                         textStyle: GoogleFonts.plusJakartaSans(
+                                           fontSize: 12,
+                                           fontWeight: FontWeight.bold,
+                                         ),
+                                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                         minimumSize: Size.zero,
+                                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                         shape: const StadiumBorder(),
+                                       ),
+                                     ),
+                                   ],
+                                 ),
+                               ),
+                               AppGaps.gapMd,
+                             ],
+                             // Primary Account Creation Options within Liquid Glass Container
                             AdaptiveGlassContainer(
                               borderRadius: 20.0,
                               padding: const EdgeInsets.all(AppSpacing.spaceMd),
