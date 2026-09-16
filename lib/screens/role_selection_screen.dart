@@ -1,23 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_spacing.dart';
+import '../config/dev_config.dart';
 import '../theme/app_buttons.dart';
 import '../widgets/adaptive_glass_container.dart';
-import '../config/dev_config.dart';
+import '../services/auth_service.dart';
 import 'account_creation_screen.dart';
+import 'artist_dashboard/artist_dashboard_screen.dart';
 import 'artist_onboarding/artist_sign_up_screen.dart';
-import 'artist_onboarding/artist_profile_photo_screen.dart';
-import 'profile_setup_screen.dart';
+import 'main_feed_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
-  const RoleSelectionScreen({super.key});
+  final AuthService? authService;
+
+  const RoleSelectionScreen({super.key, this.authService});
 
   @override
   State<RoleSelectionScreen> createState() => _RoleSelectionScreenState();
 }
 
 class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
-  String? _selectedRole = 'client'; // Default selection per design
+  String? _selectedRole; // Must be explicitly selected by the user
 
   void _handleContinue() {
     if (_selectedRole == null) return;
@@ -26,14 +29,17 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => const ArtistSignUpScreen(),
+          builder: (_) => ArtistSignUpScreen(authService: widget.authService),
         ),
       );
     } else {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => AccountCreationScreen(role: _selectedRole!),
+          builder: (_) => AccountCreationScreen(
+            role: _selectedRole!,
+            authService: widget.authService,
+          ),
         ),
       );
     }
@@ -167,24 +173,35 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (kEnableDevBypass) ...[
+                              if (kEnableDevBypass && _selectedRole != null) ...[
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     const Spacer(),
                                     ElevatedButton.icon(
+                                      key: const Key('dev_skip_role_button'),
                                       onPressed: () {
-                                        if (_selectedRole == 'artist') {
+                                        final isArtist = _selectedRole == 'artist';
+                                        final mockAuthService = AuthService(
+                                          mockUser: DevMockUser(
+                                            uid: isArtist ? 'dev_tester_artist' : 'dev_tester_client',
+                                            displayName: 'Dev Tester',
+                                            email: isArtist ? 'dev_artist@flash.ink' : 'dev_client@flash.ink',
+                                          ),
+                                        );
+                                        if (isArtist) {
                                           Navigator.push(
                                             context,
                                             MaterialPageRoute(
-                                              builder: (_) => const ArtistProfilePhotoScreen(artistName: 'OddMaree'),
+                                              builder: (_) => ArtistDashboardScreen(authService: mockAuthService),
                                             ),
                                           );
                                         } else {
                                           Navigator.push(
                                             context,
-                                            MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+                                            MaterialPageRoute(
+                                              builder: (_) => MainFeedScreen(authService: mockAuthService),
+                                            ),
                                           );
                                         }
                                       },

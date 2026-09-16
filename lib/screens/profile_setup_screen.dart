@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -190,7 +189,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           await user.updatePhotoURL(photoUrl);
         }
 
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).set(updateData, SetOptions(merge: true));
+        try {
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).set(updateData, SetOptions(merge: true));
+        } catch (_) {}
       }
 
       if (mounted) {
@@ -475,6 +476,32 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   ),
                 ),
               ],
+              AppGaps.gapXl,
+              // Testing utility: Delete Account
+              TextButton(
+                onPressed: () async {
+                  try {
+                    await FirebaseAuth.instance.currentUser?.delete();
+                    if (mounted) {
+                      Navigator.of(context).popUntil((route) => route.isFirst);
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to delete account: $e')),
+                      );
+                    }
+                  }
+                },
+                child: Text(
+                  'Delete Account (Test)',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFFEF4444),
+                    fontSize: 14,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
             ],
           ),
         ),

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 
 /// Flag controlling whether developer bypass shortcuts (such as Skip buttons)
 /// are rendered during development, QA, and local testing builds.
@@ -8,4 +7,4 @@ import 'package:flutter/foundation.dart';
 /// It is only disabled in production App Store releases built with:
 /// `--dart-define=IS_PRODUCTION=true`.
 const bool kIsProduction = bool.fromEnvironment('IS_PRODUCTION', defaultValue: false);
-const bool kEnableDevBypass = !kIsProduction || !kReleaseMode;
+const bool kEnableDevBypass = !kIsProduction;

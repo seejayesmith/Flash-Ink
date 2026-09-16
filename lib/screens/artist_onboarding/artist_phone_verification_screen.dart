@@ -6,7 +6,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/dev_config.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_radius.dart';
+import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/artist_stepper_header.dart';
+import '../../widgets/tattoo_background_wrapper.dart';
 import 'artist_profile_photo_screen.dart';
 
 class ArtistPhoneVerificationScreen extends StatefulWidget {
@@ -151,21 +153,22 @@ class _ArtistPhoneVerificationScreenState extends State<ArtistPhoneVerificationS
   }
 
   Future<void> _skipVerification() async {
+    _countdownTimer?.cancel();
     setState(() => _isLoading = true);
     try {
       final uid = _authService.currentUser?.uid;
       if (uid != null) {
-        await _authService.updatePhoneVerificationStatus(
+        _authService.updatePhoneVerificationStatus(
           uid: uid,
           phoneNumber: widget.phoneNumber,
-        );
+        ).ignore();
 
-        await FirebaseFirestore.instance.collection('artists').doc(uid).set({
+        FirebaseFirestore.instance.collection('artists').doc(uid).set({
           'phoneVerified': true,
           'phoneNumber': widget.phoneNumber,
           'name': widget.artistName,
           'email': widget.artistEmail,
-        }, SetOptions(merge: true));
+        }, SetOptions(merge: true)).ignore();
       }
     } catch (_) {
       // Dev bypass allows local testing without remote backend connectivity
@@ -279,26 +282,22 @@ class _ArtistPhoneVerificationScreenState extends State<ArtistPhoneVerificationS
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF121414),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Column(
-            children: [
-              // Top Stepper (Still Step 1 active)
-              const ArtistStepperHeader(currentStep: 1),
-              const SizedBox(height: 24),
+      body: TattooBackgroundWrapper(
+        child: SafeArea(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: Column(
+              children: [
+                // Top Stepper (Still Step 1 active)
+                const ArtistStepperHeader(currentStep: 1),
+                const SizedBox(height: 24),
 
-              // Main Card
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1C1C),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF2B2E2E)),
-                ),
-                child: Column(
+                // Main Card
+                AdaptiveGlassContainer(
+                  borderRadius: 16,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                  child: Column(
                   children: [
                     // Back button in top-left & Dev-only Skip button
                     Row(
@@ -475,6 +474,7 @@ class _ArtistPhoneVerificationScreenState extends State<ArtistPhoneVerificationS
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

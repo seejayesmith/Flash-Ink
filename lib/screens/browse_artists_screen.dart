@@ -1,19 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../core/widgets/flash_bottom_nav_bar.dart';
 import '../models/artist.dart';
+import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
-import '../widgets/adaptive_glass_container.dart';
+import '../theme/app_theme.dart';
 import '../widgets/artist_card.dart';
 import 'artist_profile_screen.dart';
+import 'splash_screen.dart';
 
 class BrowseArtistsScreen extends StatefulWidget {
-  const BrowseArtistsScreen({super.key});
+  final AuthService? authService;
+
+  const BrowseArtistsScreen({
+    super.key,
+    this.authService,
+  });
 
   @override
   State<BrowseArtistsScreen> createState() => _BrowseArtistsScreenState();
 }
 
 class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
+  late final AuthService _authService = widget.authService ?? AuthService();
+  bool _isDeleting = false;
   late List<Artist> _artists;
   int _activeNavIndex = 0;
 
@@ -87,8 +98,8 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
 
                       // Calculate available space for the card so it fits between
                       // the top filters and the floating bottom navigation bar
-                      final bottomNavHeight = 64.0;
-                      final bottomNavFloatingOffset = mediaQuery.padding.bottom + 12.0;
+                      final bottomNavHeight = AppTheme.navBarHeight;
+                      final bottomNavFloatingOffset = mediaQuery.padding.bottom + AppTheme.navBarBottomMargin;
                       final bottomNavTotalOcclusion = bottomNavFloatingOffset + bottomNavHeight;
                       final bottomBreathingGap = 14.0;
                       final bottomReserved = bottomNavTotalOcclusion + bottomBreathingGap;
@@ -109,8 +120,11 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                           top: topOffset,
                           bottom: bottomPadding,
                         ),
-                        itemCount: _artists.length,
+                        itemCount: _artists.length + 1,
                         itemBuilder: (context, index) {
+                          if (index == _artists.length) {
+                            return _buildDeleteAccountFooter(bottomReserved);
+                          }
                           final artist = _artists[index];
                           return SizedBox(
                             height: itemExtent,
@@ -134,10 +148,14 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
 
           // 2. Floating Translucent/Glassmorphic Bottom Navigation Bar
           Positioned(
-            left: 20,
-            right: 20,
-            bottom: MediaQuery.of(context).padding.bottom + 12,
-            child: _buildFloatingBottomNav(),
+            left: AppTheme.navBarHorizontalMargin,
+            right: AppTheme.navBarHorizontalMargin,
+            bottom: mediaQuery.padding.bottom + AppTheme.navBarBottomMargin,
+            child: FlashBottomNavBar(
+              currentIndex: _activeNavIndex,
+              onTap: (index) => setState(() => _activeNavIndex = index),
+              role: 'client',
+            ),
           ),
         ],
       ),
@@ -350,83 +368,179 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
     );
   }
 
-  /// Floating Glassmorphic Bottom Navigation Bar
-  Widget _buildFloatingBottomNav() {
-    return AdaptiveGlassContainer(
-      borderRadius: 36.0,
-      blurSigma: 20.0,
-      baseTintAlpha: 175,
-      selectedBorderColor: const Color(0xFF4D4530),
-      unselectedBorderColor: const Color(0xFF4D4530),
-      unselectedBorderWidth: 1.5,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildNavItem(
-            index: 0,
-            icon: Icons.home_filled,
-            label: 'HOME',
+  /// Delete Account Footer at the bottom of the artist feed
+  Widget _buildDeleteAccountFooter(double bottomReserved) {
+    return Padding(
+      padding: EdgeInsets.only(
+        top: AppSpacing.spaceLg,
+        bottom: bottomReserved + 24.0,
+        left: AppSpacing.spaceMd,
+        right: AppSpacing.spaceMd,
+      ),
+      child: Center(
+        child: OutlinedButton.icon(
+          key: const Key('delete_account_button'),
+          onPressed: _isDeleting ? null : _confirmDeleteAccount,
+          icon: const Icon(
+            Icons.delete_outline,
+            color: Color(0xFFEF4444),
+            size: 18,
           ),
-          _buildNavItem(
-            index: 1,
-            icon: Icons.search,
-            label: 'EXPLORE',
+          label: _isDeleting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFEF4444)),
+                  ),
+                )
+              : Text(
+                  'Delete Account',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFFEF4444),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+          style: OutlinedButton.styleFrom(
+            backgroundColor: const Color(0xFF1E2020),
+            side: BorderSide(
+              color: const Color(0xFFEF4444).withAlpha(128),
+              width: 1.5,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
-          _buildNavItem(
-            index: 2,
-            icon: Icons.calendar_today_outlined,
-            label: 'APPOINTMENTS',
-          ),
-          _buildNavItem(
-            index: 3,
-            icon: Icons.notifications_none_outlined,
-            label: 'ALERTS',
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildNavItem({
-    required int index,
-    required IconData icon,
-    required String label,
-  }) {
-    final isActive = _activeNavIndex == index;
-
-    return GestureDetector(
-      onTap: () => setState(() => _activeNavIndex = index),
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? const Color(0xFFEEC200).withAlpha(35) : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 22,
-              color: isActive ? const Color(0xFFEEC200) : const Color(0xFF919696),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
+  /// Displays a centered confirmation dialog for account deletion
+  Future<void> _confirmDeleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E2020),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Center(
+            child: Text(
+              'Delete Account',
+              key: const Key('delete_account_modal_title'),
               style: GoogleFonts.plusJakartaSans(
-                fontSize: 10,
+                color: const Color(0xFFF9FAFA),
                 fontWeight: FontWeight.bold,
-                letterSpacing: 0.6,
-                color: isActive ? const Color(0xFFEEC200) : const Color(0xFF919696),
+                fontSize: 18,
+              ),
+            ),
+          ),
+          content: Text(
+            'Are you sure you want to delete your account? This action cannot be undone.',
+            key: const Key('delete_account_modal_message'),
+            textAlign: TextAlign.center,
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFF919696),
+              fontSize: 14,
+              height: 1.4,
+            ),
+          ),
+          actionsAlignment: MainAxisAlignment.spaceEvenly,
+          actions: [
+            TextButton(
+              key: const Key('delete_account_cancel_button'),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFF919696),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              key: const Key('delete_account_confirm_button'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFEF4444),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(
+                'Delete Account',
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
               ),
             ),
           ],
-        ),
-      ),
+        );
+      },
     );
+
+    if (confirmed == true && mounted) {
+      await _performDeleteAccount();
+    }
+  }
+
+  /// Executes account deletion, displays simulated email SnackBar, and routes to SplashScreen
+  Future<void> _performDeleteAccount() async {
+    setState(() => _isDeleting = true);
+    try {
+      await _authService.deleteAccount();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Account deleted. A confirmation email has been sent.',
+              style: GoogleFonts.plusJakartaSans(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            backgroundColor: const Color(0xFF22C55E),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const SplashScreen()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final errorMessage = e is FirebaseAuthException
+            ? _authService.handleFirebaseAuthException(e).toString().replaceFirst('Exception: ', '')
+            : e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              errorMessage,
+              style: GoogleFonts.plusJakartaSans(color: Colors.white),
+            ),
+            backgroundColor: const Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isDeleting = false);
+      }
+    }
   }
 }
 

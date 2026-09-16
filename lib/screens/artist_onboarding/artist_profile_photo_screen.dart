@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -7,10 +6,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../config/dev_config.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_radius.dart';
+import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/artist_stepper_header.dart';
-import 'artist_share_link_screen.dart';
+import '../../widgets/tattoo_background_wrapper.dart';
+import 'artist_instagram_screen.dart';
 
 class ArtistProfilePhotoScreen extends StatefulWidget {
   final String artistName;
@@ -156,7 +158,7 @@ class _ArtistProfilePhotoScreenState extends State<ArtistProfilePhotoScreen> {
                     _pickImage(ImageSource.camera);
                   },
                 ),
-                if (kDebugMode)
+                if (kEnableDevBypass)
                   ListTile(
                     leading: const Icon(Icons.developer_mode, color: Color(0xFFEEC200)),
                     title: Text(
@@ -220,7 +222,7 @@ class _ArtistProfilePhotoScreenState extends State<ArtistProfilePhotoScreen> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => ArtistShareLinkScreen(
+            builder: (_) => ArtistInstagramScreen(
               artistName: widget.artistName,
               photoBytes: _imageBytes,
               photoUrl: photoUrl,
@@ -317,7 +319,8 @@ class _ArtistProfilePhotoScreenState extends State<ArtistProfilePhotoScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF121414),
-      body: SafeArea(
+      body: TattooBackgroundWrapper(
+        child: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -415,14 +418,9 @@ class _ArtistProfilePhotoScreenState extends State<ArtistProfilePhotoScreen> {
                 const SizedBox(height: 24),
 
                 // Mode B: Screen 4 - Looks Good Card
-                Container(
-                  width: double.infinity,
+                AdaptiveGlassContainer(
+                  borderRadius: 16,
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 36),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A1C1C),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFF2B2E2E)),
-                  ),
                   child: Column(
                     children: [
                       // Preview of selected image
@@ -495,8 +493,9 @@ class _ArtistProfilePhotoScreenState extends State<ArtistProfilePhotoScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 /// Custom painter for silhouette avatar matching the design

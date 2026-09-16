@@ -4,18 +4,46 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../models/user.dart';
 
+/// Minimal mock user for development and testing bypasses.
+/// Implements [User] safely via [noSuchMethod] to prevent null-assertion errors in downstream widgets.
+class DevMockUser implements User {
+  @override
+  final String uid;
+  @override
+  final String? displayName;
+  @override
+  final String? email;
+  @override
+  final bool isAnonymous;
+
+  DevMockUser({
+    this.uid = 'dev_tester_uid',
+    this.displayName = 'Dev Tester',
+    this.email = 'dev@flash.ink',
+    this.isAnonymous = false,
+  });
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
 class AuthService {
   final FirebaseAuth? _authInstance;
   final FirebaseFirestore? _firestoreInstance;
+  final User? _mockUser;
 
-  AuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
-      : _authInstance = auth,
-        _firestoreInstance = firestore;
+  AuthService({
+    FirebaseAuth? auth,
+    FirebaseFirestore? firestore,
+    User? mockUser,
+  })  : _authInstance = auth,
+        _firestoreInstance = firestore,
+        _mockUser = mockUser;
 
   FirebaseAuth get _auth => _authInstance ?? FirebaseAuth.instance;
   FirebaseFirestore get _firestore => _firestoreInstance ?? FirebaseFirestore.instance;
 
-  User? get currentUser => _auth.currentUser;
+  User? get currentUser => _mockUser ?? _auth.currentUser;
 
   // Sign up with Email and Password
   Future<UserCredential> signUpWithEmailAndPassword(String email, String password) async {
@@ -26,6 +54,9 @@ class AuthService {
       );
       if (userCredential.user != null) {
         await syncUserToFirestore(userCredential.user!);
+        if (!userCredential.user!.emailVerified) {
+          await userCredential.user!.sendEmailVerification();
+        }
       }
       return userCredential;
     } on FirebaseAuthException catch (e) {
@@ -50,6 +81,20 @@ class AuthService {
       throw _handleFirebaseAuthException(e);
     } catch (e) {
       throw Exception('Failed to sign in: ${e.toString()}');
+    }
+  }
+
+  // Resend Email Verification Link
+  Future<void> sendEmailVerification() async {
+    try {
+      final user = currentUser;
+      if (user != null && !user.emailVerified) {
+        await user.sendEmailVerification();
+      }
+    } on FirebaseAuthException catch (e) {
+      throw _handleFirebaseAuthException(e);
+    } catch (e) {
+      throw Exception('Failed to send verification email: ${e.toString()}');
     }
   }
 
@@ -303,6 +348,22 @@ class AuthService {
     } catch (_) {}
   }
 
+  // Delete the currently authenticated user
+  Future<void> deleteAccount() async {
+    if (_mockUser != null) {
+      return;
+    }
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return;
+      await user.delete();
+    } on FirebaseAuthException catch (e) {
+      throw _handleFirebaseAuthException(e);
+    } catch (e) {
+      throw Exception('Failed to delete account: ${e.toString()}');
+    }
+  }
+
   // Synchronize Firebase Auth user with Firestore users collection
   Future<void> syncUserToFirestore(User authUser) async {
     try {
@@ -358,6 +419,8 @@ class AuthService {
         return Exception('This account is already linked to another user.');
       case 'network-request-failed':
         return Exception('Network error. Please check your internet connection.');
+      case 'requires-recent-login':
+        return Exception('This action requires recent authentication. Please log in again before deleting your account.');
       default:
         return Exception(e.message ?? 'Authentication error (${e.code}).');
     }

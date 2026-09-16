@@ -95,6 +95,24 @@ class FlashArtwork {
   }
 }
 
+class ArtistFunFact {
+  final String label;
+  final String value;
+  const ArtistFunFact({required this.label, required this.value});
+}
+
+class StudioPolicy {
+  final String title;
+  final String description;
+  final String iconKey;
+
+  const StudioPolicy({
+    required this.title,
+    required this.description,
+    this.iconKey = 'deposit',
+  });
+}
+
 class Artist {
   final String id;
   final String name;
@@ -109,6 +127,11 @@ class Artist {
   final bool isFavorited;
   final List<String> tags;
   final List<FlashArtwork> flashArtworks;
+  final String bio;
+  final List<ArtistFunFact> funFacts;
+  final List<StudioPolicy> policies;
+  final bool isVerifiedStudio;
+  final bool customRequestAvailable;
 
   /// Array of 4 preview image URLs for the 2x2 artist showcase card.
   List<String> get previewImages => images;
@@ -128,6 +151,41 @@ class Artist {
     this.isFavorited = false,
     this.tags = const [],
     this.flashArtworks = const [],
+    this.bio =
+        'A safe, inclusive space for all bodies. Silent appointments are always available upon request.',
+    this.funFacts = const [
+      ArtistFunFact(label: 'Experience', value: '7+ Years'),
+      ArtistFunFact(label: 'Current Obsession', value: 'Elden Ring'),
+      ArtistFunFact(label: 'Current Goal', value: 'Japan Guest Spot'),
+    ],
+    this.policies = const [
+      StudioPolicy(
+        title: 'Deposits & Cancellations',
+        description:
+            'Non-refundable deposits applied toward final piece. Minimum 48-hour notice required to reschedule your appointment.',
+        iconKey: 'deposit',
+      ),
+      StudioPolicy(
+        title: 'Health & Day-of Prep',
+        description:
+            'Valid 18+ government photo ID required. Be well rested, nourished, and hydrated. No alcohol or blood thinners 24 hours prior.',
+        iconKey: 'health',
+      ),
+      StudioPolicy(
+        title: 'Studio Etiquette & Guests',
+        description:
+            '1 support guest is welcome. Silent appointments are gladly honored upon request at booking.',
+        iconKey: 'etiquette',
+      ),
+      StudioPolicy(
+        title: 'Touch-ups',
+        description:
+            'Free touch-up within 6 months of healing (excluding high-friction placements such as hands and feet).',
+        iconKey: 'touchup',
+      ),
+    ],
+    this.isVerifiedStudio = true,
+    this.customRequestAvailable = true,
   }) : images = previewImages ?? images ?? const [];
 
   FlashArtwork get featuredFlash =>
@@ -162,6 +220,11 @@ class Artist {
     bool? isFavorited,
     List<String>? tags,
     List<FlashArtwork>? flashArtworks,
+    String? bio,
+    List<ArtistFunFact>? funFacts,
+    List<StudioPolicy>? policies,
+    bool? isVerifiedStudio,
+    bool? customRequestAvailable,
   }) {
     return Artist(
       id: id ?? this.id,
@@ -177,6 +240,12 @@ class Artist {
       isFavorited: isFavorited ?? this.isFavorited,
       tags: tags ?? this.tags,
       flashArtworks: flashArtworks ?? this.flashArtworks,
+      bio: bio ?? this.bio,
+      funFacts: funFacts ?? this.funFacts,
+      policies: policies ?? this.policies,
+      isVerifiedStudio: isVerifiedStudio ?? this.isVerifiedStudio,
+      customRequestAvailable:
+          customRequestAvailable ?? this.customRequestAvailable,
     );
   }
 

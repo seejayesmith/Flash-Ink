@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../config/dev_config.dart';
@@ -7,6 +6,7 @@ import '../theme/app_spacing.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_buttons.dart';
 import '../widgets/adaptive_glass_container.dart';
+import 'main_feed_screen.dart';
 import 'profile_setup_screen.dart';
 import 'role_selection_screen.dart';
 
@@ -113,9 +113,18 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
+        final mockAuth = _authService.currentUser != null
+            ? _authService
+            : AuthService(
+                mockUser: DevMockUser(
+                  uid: 'dev_tester_client',
+                  displayName: 'Dev Tester',
+                  email: 'dev_client@flash.ink',
+                ),
+              );
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+          MaterialPageRoute(builder: (_) => MainFeedScreen(authService: mockAuth)),
         );
       }
     }
@@ -308,7 +317,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                                           size: 38,
                                         ),
                                       ),
-                                      if (kDebugMode)
+                                      if (kEnableDevBypass)
                                         TextButton(
                                           onPressed: _isLoading ? null : _skipVerification,
                                           style: TextButton.styleFrom(

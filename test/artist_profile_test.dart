@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flash_ink/models/artist.dart';
 import 'package:flash_ink/screens/artist_profile_screen.dart';
+import 'package:flash_ink/screens/custom_request_screen.dart';
+import 'package:flash_ink/screens/flash_details_screen.dart';
 import 'package:flash_ink/widgets/artist_card.dart';
 
 void main() {
@@ -24,7 +26,6 @@ void main() {
         for (final img in artist.previewImages) {
           expect(img.isNotEmpty, isTrue);
           expect(img.startsWith('https://') || img.startsWith('assets/'), isTrue);
-          // Verify broken 404 URL is not present
           expect(img.contains('1590246814883-578337424072'), isFalse);
         }
 
@@ -44,10 +45,14 @@ void main() {
           expect(flash.location.isNotEmpty, isTrue);
           expect(flash.status, isA<FlashStatus>());
         }
+
+        // Fun facts and policies verification
+        expect(artist.funFacts.length, 3);
+        expect(artist.policies.length, 4);
       }
     });
 
-    test('Artist copyWith supports flashArtworks', () {
+    test('Artist copyWith supports flashArtworks, funFacts, and policies', () {
       final artist = Artist.mockArtists.first;
       final customPiece = const FlashArtwork(
         id: 'test_1',
@@ -57,15 +62,21 @@ void main() {
         deposit: 100,
         size: '5" x 7"',
       );
-      final updated = artist.copyWith(flashArtworks: [customPiece]);
+      final updated = artist.copyWith(
+        flashArtworks: [customPiece],
+        funFacts: [
+          const ArtistFunFact(label: 'Specialty', value: 'Dragons'),
+        ],
+      );
       expect(updated.flashArtworks.length, 1);
       expect(updated.flashArtworks.first.title, 'Custom Tiger');
+      expect(updated.funFacts.first.value, 'Dragons');
     });
   });
 
   group('ArtistProfileScreen Widget Tests', () {
-    testWidgets('Renders artist details, stats, and expanded flash artwork list', (tester) async {
-      tester.view.physicalSize = const Size(800, 1600);
+    testWidgets('Renders artist details, stats, fun facts, custom request, and policies', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
@@ -81,16 +92,40 @@ void main() {
       expect(find.text(artist.name), findsOneWidget);
       expect(find.text(artist.location), findsOneWidget);
       expect(find.text(artist.studioType), findsOneWidget);
-      expect(find.text('Available Flash'), findsOneWidget);
-      expect(find.text('${artist.flashArtworks.length}'), findsOneWidget);
+      expect(find.text('Books open'), findsOneWidget);
 
-      // Verify flash artwork titles render
-      expect(find.text(artist.flashArtworks[0].title), findsOneWidget);
-      expect(find.text(artist.flashArtworks[1].title), findsOneWidget);
+      // Verify stats
+      expect(find.text('RATING'), findsOneWidget);
+      expect(find.text('AVAIL PIECES'), findsOneWidget);
+      expect(find.text('MIN DEPOSIT'), findsOneWidget);
+
+      // Verify fun facts
+      for (final fact in artist.funFacts) {
+        expect(find.text(fact.label), findsOneWidget);
+        expect(find.text(fact.value), findsOneWidget);
+      }
+
+      // Verify Custom Request banner
+      expect(find.text('Got an idea? Submit a Custom Request.'), findsOneWidget);
+
+      // Verify initial flash items (first 6)
+      for (int i = 0; i < 6; i++) {
+        expect(find.text(artist.flashArtworks[i].title), findsOneWidget);
+      }
+
+      // Verify Load More button exists when total flash count > 6
+      expect(find.text('Load More'), findsOneWidget);
+
+      // Verify Studio Policies section
+      expect(find.text('STUDIO POLICIES & HOUSE RULES'), findsOneWidget);
+      expect(find.text('VERIFIED STUDIO'), findsOneWidget);
+      for (final policy in artist.policies) {
+        expect(find.text(policy.title), findsOneWidget);
+      }
     });
 
-    testWidgets('Tapping a flash piece opens the detail bottom sheet', (tester) async {
-      tester.view.physicalSize = const Size(800, 1600);
+    testWidgets('Tapping Load More reveals additional flash pieces', (tester) async {
+      tester.view.physicalSize = const Size(800, 3000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
@@ -98,18 +133,43 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: ArtistProfileScreen(artist: artist),
-          ),
+          home: ArtistProfileScreen(artist: artist),
         ),
       );
 
-      // Tap first piece
+      // Initially piece #7 is not rendered
+      expect(find.text(artist.flashArtworks[6].title), findsNothing);
+
+      // Tap Load More
+      final loadMoreFinder = find.text('Load More');
+      await tester.ensureVisible(loadMoreFinder);
+      await tester.tap(loadMoreFinder);
+      await tester.pumpAndSettle();
+
+      // Now piece #7 is visible
+      expect(find.text(artist.flashArtworks[6].title), findsOneWidget);
+    });
+
+    testWidgets('Tapping a flash piece navigates to FlashDetailsScreen', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final artist = Artist.mockArtists.first;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistProfileScreen(artist: artist),
+        ),
+      );
+
+      // Tap first flash piece
       final firstPieceFinder = find.text(artist.flashArtworks[0].title);
       await tester.tap(firstPieceFinder);
       await tester.pumpAndSettle();
 
-      // Bottom sheet should open with claim button
+      // Verify FlashDetailsScreen opened
+      expect(find.byType(FlashDetailsScreen), findsOneWidget);
       expect(find.text('CLAIM & BOOK FLASH'), findsOneWidget);
       expect(find.text('PLACEMENT'), findsOneWidget);
       expect(find.text('SIZE'), findsOneWidget);
@@ -117,11 +177,34 @@ void main() {
 
       // Tap Claim button
       await tester.tap(find.text('CLAIM & BOOK FLASH'));
+      await tester.pump();
+
+      // Verify confirmation snackbar
+      expect(find.textContaining('Reserved "'), findsOneWidget);
+    });
+
+    testWidgets('Tapping Custom Request banner navigates to CustomRequestScreen', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final artist = Artist.mockArtists.first;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistProfileScreen(artist: artist),
+        ),
+      );
+
+      // Tap custom request banner
+      final bannerFinder = find.text('Got an idea? Submit a Custom Request.');
+      await tester.tap(bannerFinder);
       await tester.pumpAndSettle();
 
-      // Verify sheet dismissed and confirmation snackbar shown
-      expect(find.text('CLAIM & BOOK FLASH'), findsNothing);
-      expect(find.textContaining('Proceeding to booking deposit'), findsOneWidget);
+      // Verify CustomRequestScreen is displayed
+      expect(find.byType(CustomRequestScreen), findsOneWidget);
+      expect(find.text('Custom Tattoo Brief'), findsOneWidget);
+      expect(find.text('SUBMIT CUSTOM BRIEF'), findsOneWidget);
     });
 
     testWidgets('AppBar is transparent with surfaceTintColor and scrolledUnderElevation set to 0', (tester) async {

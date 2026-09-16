@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,10 +5,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/dev_config.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_radius.dart';
+import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/artist_stepper_header.dart';
+import '../../widgets/tattoo_background_wrapper.dart';
 import '../login_screen.dart';
 import 'artist_phone_verification_screen.dart';
 import 'artist_profile_photo_screen.dart';
+import '../../models/artist.dart';
+import '../artist_dashboard/artist_dashboard_screen.dart';
 
 class ArtistSignUpScreen extends StatefulWidget {
   final AuthService? authService;
@@ -148,7 +151,7 @@ class _ArtistSignUpScreenState extends State<ArtistSignUpScreen> {
           setState(() => _isLoading = false);
           final errorMsg = error.toString().replaceAll('Exception: ', '');
           _showErrorSnackBar(errorMsg);
-          if (kDebugMode) {
+          if (kEnableDevBypass) {
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -284,18 +287,35 @@ class _ArtistSignUpScreenState extends State<ArtistSignUpScreen> {
     );
   }
 
-  void _skipPastEmailAndPassword() {
-    final name = _nameController.text.trim().isNotEmpty
-        ? _nameController.text.trim()
-        : 'OddMaree';
-    Navigator.push(
+  void _skipToArtistDashboard() {
+    final mockAuth = AuthService(
+      mockUser: DevMockUser(
+        uid: 'dev-artist-123',
+        displayName: 'Oddmaree (Dev)',
+      ),
+    );
+
+    final mockArtist = const Artist(
+      id: 'dev-artist-123',
+      name: 'Oddmaree (Dev)',
+      avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80',
+      isBooksOpen: true,
+      location: 'Local Dev',
+      studioType: 'Dev Studio',
+      rating: 5.0,
+      availablePieces: 10,
+      minDeposit: 50,
+    );
+
+    Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (_) => ArtistProfilePhotoScreen(
-          artistName: name,
-          authService: _authService,
+        builder: (_) => ArtistDashboardScreen(
+          authService: mockAuth,
+          artist: mockArtist,
         ),
       ),
+      (route) => false,
     );
   }
 
@@ -310,34 +330,11 @@ class _ArtistSignUpScreenState extends State<ArtistSignUpScreen> {
           icon: const Icon(Icons.arrow_back, color: Color(0xFFF9FAFA)),
           onPressed: () => Navigator.pop(context),
         ),
-        actions: [
-          if (kEnableDevBypass)
-            Padding(
-              padding: const EdgeInsets.only(right: 16.0),
-              child: ElevatedButton.icon(
-                onPressed: _skipPastEmailAndPassword,
-                icon: const Icon(Icons.fast_forward, size: 16, color: Color(0xFF121414)),
-                label: Text(
-                  'Skip',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF121414),
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFEEC200),
-                  foregroundColor: const Color(0xFF121414),
-                  elevation: 2,
-                  shape: const StadiumBorder(),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                ),
-              ),
-            ),
-        ],
+        // actions removed per R1
       ),
-      body: SafeArea(
-        top: false,
+      body: TattooBackgroundWrapper(
+        child: SafeArea(
+          top: false,
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -408,7 +405,7 @@ class _ArtistSignUpScreenState extends State<ArtistSignUpScreen> {
                           ),
                         ),
                         ElevatedButton.icon(
-                          onPressed: _skipPastEmailAndPassword,
+                          onPressed: _skipToArtistDashboard,
                           icon: const Icon(Icons.arrow_forward, size: 14),
                           label: const Text('Skip'),
                           style: ElevatedButton.styleFrom(
@@ -431,13 +428,9 @@ class _ArtistSignUpScreenState extends State<ArtistSignUpScreen> {
                 const SizedBox(height: 20),
 
                 // Main Form Card Container
-                Container(
+                AdaptiveGlassContainer(
                   padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A1C1C),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFF2B2E2E)),
-                  ),
+                  borderRadius: 16,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -599,7 +592,7 @@ class _ArtistSignUpScreenState extends State<ArtistSignUpScreen> {
                           width: double.infinity,
                           height: 44,
                           child: OutlinedButton(
-                            onPressed: _isLoading ? null : _skipPastEmailAndPassword,
+                            onPressed: _isLoading ? null : _skipToArtistDashboard,
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(color: Color(0xFFEEC200), width: 1.2),
                               foregroundColor: const Color(0xFFEEC200),
@@ -733,6 +726,7 @@ class _ArtistSignUpScreenState extends State<ArtistSignUpScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

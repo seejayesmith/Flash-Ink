@@ -5,6 +5,8 @@ import '../models/artist.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/adaptive_glass_container.dart';
 import '../widgets/flash_image.dart';
+import 'custom_request_screen.dart';
+import 'flash_details_screen.dart';
 
 class ArtistProfileScreen extends StatefulWidget {
   final Artist artist;
@@ -17,6 +19,8 @@ class ArtistProfileScreen extends StatefulWidget {
 
 class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
   late bool _isFavorited;
+  int _visibleFlashCount = 6;
+  bool _isLoadingMore = false;
 
   @override
   void initState() {
@@ -30,6 +34,23 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
     });
   }
 
+  void _handleLoadMore(int totalCount) async {
+    if (_visibleFlashCount >= totalCount) return;
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    await Future.delayed(const Duration(milliseconds: 400));
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingMore = false;
+      _visibleFlashCount = (_visibleFlashCount + 6).clamp(0, totalCount);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -40,7 +61,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        systemOverlayStyle: SystemUiOverlayStyle(
+        systemOverlayStyle: const SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
           statusBarIconBrightness: Brightness.light,
           statusBarBrightness: Brightness.dark,
@@ -53,7 +74,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
               shape: BoxShape.circle,
             ),
             child: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Color(0xFFF9FAFA)),
+              icon: const Icon(Icons.arrow_back, color: Color(0xFFF9FAFA), size: 20),
               onPressed: () => Navigator.pop(context),
             ),
           ),
@@ -66,9 +87,12 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
           children: [
             _buildCoverAndHeader(),
             _buildAboutSection(),
+            _buildFunFactsSection(),
             _buildStatsSection(),
+            _buildCustomRequestBanner(),
             _buildFlashGrid(),
-            const SizedBox(height: 40), // Bottom padding
+            _buildStudioPoliciesSection(),
+            const SizedBox(height: 48),
           ],
         ),
       ),
@@ -85,7 +109,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
       children: [
         // Cover Image with Gradient
         SizedBox(
-          height: 320,
+          height: 280,
           width: double.infinity,
           child: Stack(
             children: [
@@ -103,10 +127,11 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
                       end: Alignment.bottomCenter,
                       colors: [
                         Colors.transparent,
-                        const Color(0xFF121414).withAlpha(150),
+                        const Color(0xFF121414).withAlpha(120),
+                        const Color(0xFF121414).withAlpha(220),
                         const Color(0xFF121414),
                       ],
-                      stops: const [0.4, 0.8, 1.0],
+                      stops: const [0.2, 0.6, 0.85, 1.0],
                     ),
                   ),
                 ),
@@ -115,134 +140,143 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
           ),
         ),
 
-        // Content over cover
+        // Content over cover: Avatar, Name, Badges, Action Icons
         Positioned(
           bottom: 0,
           left: 0,
           right: 0,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Profile Avatar
-                Container(
-                  width: 90,
-                  height: 90,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: const Color(0xFF4D4530), width: 1.5),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(100),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: ClipOval(
-                    child: Image.network(
-                      widget.artist.avatarUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          color: const Color(0xFF262929),
-                          child: const Icon(
-                            Icons.person,
-                            color: Color(0xFFEEC200),
-                            size: 40,
+                // Top Row: Avatar and Action Icons
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Profile Avatar
+                    Container(
+                      width: 86,
+                      height: 86,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0xFF5A4D2E), width: 2.0),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withAlpha(140),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
                           ),
-                        );
-                      },
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: Image.network(
+                          widget.artist.avatarUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: const Color(0xFF262929),
+                              child: const Icon(
+                                Icons.person,
+                                color: Color(0xFFEEC200),
+                                size: 42,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                     ),
-                  ),
+
+                    // Top-right circular action buttons (Share & Favorite)
+                    Row(
+                      children: [
+                        _buildCircleAction(
+                          icon: Icons.share_outlined,
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(
+                              text: 'https://flashink.app/artist/${widget.artist.id}',
+                            ));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Artist profile link copied to clipboard!'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 10),
+                        _buildCircleAction(
+                          icon: _isFavorited ? Icons.favorite : Icons.favorite_border,
+                          color: _isFavorited ? const Color(0xFFEF4444) : const Color(0xFFF9FAFA),
+                          onTap: _toggleFavorite,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                const SizedBox(width: AppSpacing.spaceMd),
-                // Info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              widget.artist.name,
-                              style: GoogleFonts.plusJakartaSans(
-                                color: const Color(0xFFEEC200),
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Row(
-                            children: [
-                              _buildCircleAction(
-                                icon: Icons.share_outlined,
-                                onTap: () {},
-                              ),
-                              const SizedBox(width: 8),
-                              _buildCircleAction(
-                                icon: _isFavorited ? Icons.favorite : Icons.favorite_border,
-                                color: _isFavorited ? const Color(0xFFEF4444) : const Color(0xFFF9FAFA),
-                                onTap: _toggleFavorite,
-                              ),
-                            ],
-                          ),
-                        ],
+                const SizedBox(height: 14),
+
+                // Name and Books Open Badge Row
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      widget.artist.name,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFFEEC200),
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: -0.3,
                       ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          if (widget.artist.isBooksOpen)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF4D4530),
-                                border: Border.all(color: const Color(0xFF4D4530)),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                'Books open',
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: const Color(0xFFEEC200),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Icon(Icons.location_on_outlined, color: Color(0xFF919696), size: 14),
-                          const SizedBox(width: 4),
-                          Text(
-                            widget.artist.location,
-                            style: GoogleFonts.plusJakartaSans(
-                              color: const Color(0xFF919696),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
+                    ),
+                    const SizedBox(width: 12),
+                    if (widget.artist.isBooksOpen)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF38351F),
+                          border: Border.all(color: const Color(0xFF7A6B29), width: 1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Books open',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFFEEC200),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
                           ),
-                          const SizedBox(width: 12),
-                          const Icon(Icons.storefront_outlined, color: Color(0xFF919696), size: 14),
-                          const SizedBox(width: 4),
-                          Text(
-                            widget.artist.studioType,
-                            style: GoogleFonts.plusJakartaSans(
-                              color: const Color(0xFF919696),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ],
-                  ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // Location and Studio Type Row
+                Row(
+                  children: [
+                    const Icon(Icons.location_on_outlined, color: Color(0xFF919696), size: 15),
+                    const SizedBox(width: 4),
+                    Text(
+                      widget.artist.location,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF919696),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    const Icon(Icons.storefront_outlined, color: Color(0xFF919696), size: 15),
+                    const SizedBox(width: 4),
+                    Text(
+                      widget.artist.studioType,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF919696),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -252,23 +286,28 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
     );
   }
 
-  Widget _buildCircleAction({required IconData icon, Color color = const Color(0xFFF9FAFA), required VoidCallback onTap}) {
+  Widget _buildCircleAction({
+    required IconData icon,
+    Color color = const Color(0xFFF9FAFA),
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(9),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E2020).withAlpha(200),
+          color: const Color(0xFF1E2020).withAlpha(190),
           shape: BoxShape.circle,
+          border: Border.all(color: const Color(0xFF333737), width: 0.8),
         ),
-        child: Icon(icon, color: color, size: 20),
+        child: Icon(icon, color: color, size: 18),
       ),
     );
   }
 
   Widget _buildAboutSection() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.spaceLg, AppSpacing.spaceLg, AppSpacing.spaceLg, 0),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.spaceLg, 18, AppSpacing.spaceLg, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -276,16 +315,17 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
             'About',
             style: GoogleFonts.plusJakartaSans(
               color: const Color(0xFF919696),
-              fontSize: 14,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
-            'A safe, inclusive space for all bodies. Silent appointments are always available upon request.',
+            widget.artist.bio,
             style: GoogleFonts.plusJakartaSans(
               color: const Color(0xFFF9FAFA),
               fontSize: 13,
-              height: 1.4,
+              height: 1.45,
             ),
           ),
         ],
@@ -293,15 +333,55 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
     );
   }
 
+  Widget _buildFunFactsSection() {
+    final facts = widget.artist.funFacts;
+    if (facts.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.spaceLg, 18, AppSpacing.spaceLg, 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: facts.map((fact) {
+          return Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fact.label,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFF919696),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  fact.value,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFFF9FAFA),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   Widget _buildStatsSection() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg, vertical: AppSpacing.spaceLg),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.spaceLg, 20, AppSpacing.spaceLg, 0),
       child: AdaptiveGlassContainer(
-        borderRadius: 12.0,
+        borderRadius: 14.0,
         unselectedBorderColor: const Color(0xFF262929),
         unselectedBorderWidth: 1.0,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -311,12 +391,12 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
                 label: 'RATING',
                 valueColor: const Color(0xFFEEC200),
               ),
-              Container(width: 1, height: 30, color: const Color(0xFF262929)),
+              Container(width: 1, height: 28, color: const Color(0xFF2A2E2E)),
               _buildStatItem(
                 value: widget.artist.availablePieces.toString(),
                 label: 'AVAIL PIECES',
               ),
-              Container(width: 1, height: 30, color: const Color(0xFF262929)),
+              Container(width: 1, height: 28, color: const Color(0xFF2A2E2E)),
               _buildStatItem(
                 value: '\$${widget.artist.minDeposit}',
                 label: 'MIN DEPOSIT',
@@ -328,7 +408,12 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
     );
   }
 
-  Widget _buildStatItem({IconData? icon, required String value, required String label, Color valueColor = const Color(0xFFF9FAFA)}) {
+  Widget _buildStatItem({
+    IconData? icon,
+    required String value,
+    required String label,
+    Color valueColor = const Color(0xFFF9FAFA),
+  }) {
     return Column(
       children: [
         Row(
@@ -362,8 +447,111 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
     );
   }
 
+  Widget _buildCustomRequestBanner() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.spaceLg, 16, AppSpacing.spaceLg, 0),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CustomRequestScreen(artist: widget.artist),
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF181B1B),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: const Color(0xFF423B22),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(80),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Ticket / Tag Icon Container
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF38331A),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.local_offer_outlined,
+                  color: Color(0xFFEEC200),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+
+              // Banner Titles
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Got an idea? Submit a Custom Request.',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFFF9FAFA),
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    RichText(
+                      text: TextSpan(
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFF919696),
+                          fontSize: 11,
+                        ),
+                        children: const [
+                          TextSpan(text: 'Skip the DM wait '),
+                          TextSpan(
+                            text: '• ',
+                            style: TextStyle(color: Color(0xFFEEC200), fontWeight: FontWeight.bold),
+                          ),
+                          TextSpan(text: '2-minute guided brief'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // Circular Yellow Right-Arrow Button
+              Container(
+                width: 32,
+                height: 32,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFEEC200),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.arrow_forward,
+                  color: Color(0xFF121414),
+                  size: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFlashGrid() {
-    final flashArtworks = widget.artist.flashArtworks.isNotEmpty
+    final allPieces = widget.artist.flashArtworks.isNotEmpty
         ? widget.artist.flashArtworks
         : List.generate(
             widget.artist.images.length,
@@ -371,68 +559,20 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
               id: 'flash_fallback_$index',
               title: 'Original Flash #${index + 1}',
               imageUrl: widget.artist.images[index],
-              location: 'Arms / Legs',
+              location: 'Arm / Thigh',
               deposit: widget.artist.minDeposit,
-              size: '5" x 7"',
+              size: '6" × 12"',
             ),
           );
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Section Title Row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    'Available Flash',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFF9FAFA),
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF262929),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: const Color(0xFF383B3B),
-                        width: 1,
-                      ),
-                    ),
-                    child: Text(
-                      '${flashArtworks.length}',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFFEEC200),
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                'Tap piece to claim',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF919696),
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
+    final visiblePieces = allPieces.take(_visibleFlashCount).toList();
+    final hasMore = visiblePieces.length < allPieces.length;
 
-          // Flash Grid
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.spaceLg, 20, AppSpacing.spaceLg, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           GridView.builder(
             padding: EdgeInsets.zero,
             shrinkWrap: true,
@@ -441,24 +581,34 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
               crossAxisCount: 2,
               crossAxisSpacing: 14,
               mainAxisSpacing: 16,
-              childAspectRatio: 0.60,
+              childAspectRatio: 0.58,
             ),
-            itemCount: flashArtworks.length,
+            itemCount: visiblePieces.length,
             itemBuilder: (context, index) {
-              final item = flashArtworks[index];
+              final item = visiblePieces[index];
               return GestureDetector(
-                onTap: () => _showFlashDetailsSheet(context, item),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => FlashDetailsScreen(
+                        flash: item,
+                        artist: widget.artist,
+                      ),
+                    ),
+                  );
+                },
                 child: Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1B1E1E),
+                    color: const Color(0xFF171A1A),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: const Color(0xFF2D3131),
+                      color: const Color(0xFF262929),
                       width: 1.2,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withAlpha(100),
+                        color: Colors.black.withAlpha(90),
                         blurRadius: 8,
                         offset: const Offset(0, 4),
                       ),
@@ -467,86 +617,20 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Flash Artwork Image with Tag Overlay
+                      // Artwork Image
                       Expanded(
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            ClipRRect(
-                              borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(12),
-                              ),
-                              child: FlashImage(
-                                urlOrPath: item.imageUrl,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                            // Top Status Badge
-                            Positioned(
-                              top: 8,
-                              left: 8,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: item.isClaimed
-                                      ? const Color(0xFF261919).withAlpha(220)
-                                      : const Color(0xFF1A2218).withAlpha(220),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: item.isClaimed
-                                        ? const Color(0xFF7A3535)
-                                        : const Color(0xFF436938),
-                                    width: 0.8,
-                                  ),
-                                ),
-                                child: Text(
-                                  item.status.label.toUpperCase(),
-                                  style: GoogleFonts.plusJakartaSans(
-                                    color: item.isClaimed
-                                        ? const Color(0xFFF87171)
-                                        : const Color(0xFF4ADE80),
-                                    fontSize: 8,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.4,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Top Deposit Badge
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF121414).withAlpha(210),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: const Color(0xFFEEC200).withAlpha(120),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: Text(
-                                  '\$${item.deposit} DEP',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    color: const Color(0xFFEEC200),
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.4,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(13),
+                          ),
+                          child: FlashImage(
+                            urlOrPath: item.imageUrl,
+                            fit: BoxFit.cover,
+                          ),
                         ),
                       ),
-                      // Details Section
+
+                      // Card Details
                       Padding(
                         padding: const EdgeInsets.all(10),
                         child: Column(
@@ -563,14 +647,20 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
                               ),
                             ),
                             const SizedBox(height: 6),
-                            _buildFlashMetaRow(
-                              icon: Icons.place_outlined,
-                              label: item.location,
+                            _buildCardMetaRow(
+                              label: 'Placement:',
+                              value: item.location,
                             ),
                             const SizedBox(height: 3),
-                            _buildFlashMetaRow(
-                              icon: Icons.straighten_outlined,
-                              label: item.size,
+                            _buildCardMetaRow(
+                              label: 'Size:',
+                              value: item.size,
+                            ),
+                            const SizedBox(height: 3),
+                            _buildCardMetaRow(
+                              label: 'Deposit:',
+                              value: '\$${item.deposit}',
+                              valueColor: const Color(0xFFEEC200),
                             ),
                           ],
                         ),
@@ -581,32 +671,69 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
               );
             },
           ),
+          const SizedBox(height: 18),
+
+          // Load More Button
+          if (hasMore)
+            OutlinedButton(
+              onPressed: _isLoadingMore ? null : () => _handleLoadMore(allPieces.length),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFF5A4D2E), width: 1.2),
+                backgroundColor: const Color(0xFF171A1A),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: _isLoadingMore
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFFEEC200),
+                      ),
+                    )
+                  : Text(
+                      'Load More',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFFEEC200),
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildFlashMetaRow({
-    required IconData icon,
+  Widget _buildCardMetaRow({
     required String label,
+    required String value,
+    Color valueColor = const Color(0xFFF9FAFA),
   }) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Icon(
-          icon,
-          size: 11,
-          color: const Color(0xFF919696),
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            color: const Color(0xFF919696),
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
         ),
-        const SizedBox(width: 4),
-        Expanded(
+        Flexible(
           child: Text(
-            label,
+            value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
             style: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFF919696),
-              fontSize: 10,
-              fontWeight: FontWeight.w500,
+              color: valueColor,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
@@ -614,156 +741,139 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
     );
   }
 
-  void _showFlashDetailsSheet(BuildContext context, FlashArtwork item) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (modalContext) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF171A1A),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border(
-              top: BorderSide(color: Color(0xFF38352A), width: 1.5),
-            ),
+  Widget _buildStudioPoliciesSection() {
+    final policies = widget.artist.policies;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.spaceLg, 28, AppSpacing.spaceLg, 0),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF171A1A),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFF262929),
+            width: 1.2,
           ),
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Sheet Grab Handle
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header Row: Shield Icon, Title, and Verified Studio Badge
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF4D5252),
-                    borderRadius: BorderRadius.circular(2),
+                    color: const Color(0xFF38351F),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.shield_outlined,
+                    color: Color(0xFFEEC200),
+                    size: 18,
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-
-              // Image Preview
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: AspectRatio(
-                  aspectRatio: 1.2,
-                  child: FlashImage(
-                    urlOrPath: item.imageUrl,
-                    fit: BoxFit.cover,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'STUDIO POLICIES & HOUSE RULES',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFF9FAFA),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.6,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-
-              // Title and Price
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
+                if (widget.artist.isVerifiedStudio)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF38351F),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFF635626), width: 0.8),
+                    ),
                     child: Text(
-                      item.title,
+                      'VERIFIED STUDIO',
                       style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFFF9FAFA),
-                        fontSize: 20,
+                        color: const Color(0xFFEEC200),
+                        fontSize: 9,
                         fontWeight: FontWeight.bold,
+                        letterSpacing: 0.4,
                       ),
                     ),
                   ),
-                  Text(
-                    '\$${item.fullPrice}',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFEEC200),
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
+              ],
+            ),
+            const SizedBox(height: 20),
 
-              // Specs Grid
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF202323),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF2D3131)),
-                ),
+            // Policy Items List
+            ...policies.map((policy) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 18),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSpecCol('PLACEMENT', item.location),
-                    Container(width: 1, height: 24, color: const Color(0xFF333737)),
-                    _buildSpecCol('SIZE', item.size),
-                    Container(width: 1, height: 24, color: const Color(0xFF333737)),
-                    _buildSpecCol('DEPOSIT', '\$${item.deposit}'),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF202323),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(
+                        _getPolicyIcon(policy.iconKey),
+                        color: const Color(0xFFEEC200),
+                        size: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            policy.title,
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFFF9FAFA),
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            policy.description,
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF919696),
+                              fontSize: 11,
+                              height: 1.45,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 20),
-
-              // Claim Button
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(modalContext);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Claimed "${item.title}"! Proceeding to booking deposit...'),
-                      backgroundColor: const Color(0xFF262929),
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFEEC200),
-                  foregroundColor: const Color(0xFF121414),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Text(
-                  'CLAIM & BOOK FLASH',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+              );
+            }),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _buildSpecCol(String title, String val) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          title,
-          style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFF919696),
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.5,
-          ),
-        ),
-        const SizedBox(height: 3),
-        Text(
-          val,
-          style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFFF9FAFA),
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
-    );
+  IconData _getPolicyIcon(String key) {
+    switch (key.toLowerCase()) {
+      case 'deposit':
+        return Icons.credit_card_outlined;
+      case 'health':
+        return Icons.health_and_safety_outlined;
+      case 'etiquette':
+        return Icons.groups_outlined;
+      case 'touchup':
+        return Icons.auto_awesome_outlined;
+      default:
+        return Icons.info_outline;
+    }
   }
 }

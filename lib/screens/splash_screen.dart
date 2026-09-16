@@ -7,6 +7,8 @@ import 'role_selection_screen.dart';
 import 'main_feed_screen.dart';
 import 'profile_setup_screen.dart';
 import 'aesthetics_selection_screen.dart';
+import 'artist_dashboard/artist_dashboard_screen.dart';
+import 'artist_onboarding/artist_sign_up_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -36,16 +38,26 @@ class _SplashScreenState extends State<SplashScreen> {
 
         // Route based on onboarding progress
         if (data != null && data['role'] != null) {
+          final role = data['role'];
           final profileCompleted = data['profileCompleted'] == true;
-          final aesthetics = data['aesthetics'];
-          final hasAesthetics = aesthetics is List && aesthetics.isNotEmpty;
 
-          if (!profileCompleted) {
-            nextScreen = const ProfileSetupScreen();
-          } else if (!hasAesthetics) {
-            nextScreen = const AestheticsSelectionScreen();
+          if (role == 'artist') {
+            if (profileCompleted) {
+              nextScreen = const ArtistDashboardScreen();
+            } else {
+              nextScreen = const ArtistSignUpScreen();
+            }
           } else {
-            nextScreen = const MainFeedScreen();
+            final aesthetics = data['aesthetics'];
+            final hasAesthetics = aesthetics is List && aesthetics.isNotEmpty;
+
+            if (!profileCompleted) {
+              nextScreen = const ProfileSetupScreen();
+            } else if (!hasAesthetics) {
+              nextScreen = const AestheticsSelectionScreen();
+            } else {
+              nextScreen = const MainFeedScreen();
+            }
           }
         }
       }
