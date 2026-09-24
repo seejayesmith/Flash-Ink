@@ -331,7 +331,6 @@ class FlashCard extends StatelessWidget {
         icon = Icons.all_inclusive;
         break;
       case FlashStatus.available:
-      default:
         bg = const Color(0xFF1A2218).withAlpha(230);
         border = const Color(0xFF436938);
         text = const Color(0xFF4ADE80);

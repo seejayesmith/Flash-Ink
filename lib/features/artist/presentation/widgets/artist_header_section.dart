@@ -168,8 +168,8 @@ class ArtistHeaderSection extends StatelessWidget {
                               if (artist.isBooksOpen)
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: AppSpacing.spaceXs - 1,
-                                    vertical: AppSpacing.spaceXxs - 1,
+                                    horizontal: 7,
+                                    vertical: 2.5,
                                   ),
                                   decoration: BoxDecoration(
                                     color: AppTheme.goldBadgeBackground,
@@ -177,13 +177,17 @@ class ArtistHeaderSection extends StatelessWidget {
                                       color: AppTheme.goldBadgeBorder,
                                       width: 1,
                                     ),
-                                    borderRadius: BorderRadius.circular(AppRadius.radiusXs + 2),
+                                    borderRadius: BorderRadius.circular(AppRadius.radiusXs),
                                   ),
                                   child: Text(
                                     'Books open',
+                                    maxLines: 1,
+                                    softWrap: false,
                                     style: AppTypography.labelBold.copyWith(
                                       color: AppTheme.gold,
                                       fontSize: 10,
+                                      height: 1.1,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ),

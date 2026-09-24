@@ -33,55 +33,39 @@ class StudioPoliciesCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header Row: Shield Icon, Title, and Verified Studio Badge
+            // Header Row: Shield Icon and Title (aligned and single-line)
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(AppSpacing.spaceXxs + 2),
+                  width: 32,
+                  height: 32,
                   decoration: BoxDecoration(
                     color: AppTheme.goldBadgeBackground,
                     borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                   ),
-                  child: const Icon(
-                    Icons.shield_outlined,
-                    color: AppTheme.gold,
-                    size: 18,
+                  child: const Center(
+                    child: Icon(
+                      Icons.shield_outlined,
+                      color: AppTheme.gold,
+                      size: 18,
+                    ),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.spaceSm - 2),
+                const SizedBox(width: AppSpacing.spaceSm),
                 Expanded(
                   child: Text(
                     'STUDIO POLICIES & HOUSE RULES',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: AppTypography.labelBold.copyWith(
                       color: AppTheme.textPrimary,
                       fontSize: 12,
+                      height: 1.2,
                       letterSpacing: 0.6,
                     ),
                   ),
                 ),
-                if (artist.isVerifiedStudio)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.spaceXs,
-                      vertical: AppSpacing.spaceXxs - 1,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppTheme.goldBadgeBackground,
-                      borderRadius: BorderRadius.circular(AppRadius.radiusXs),
-                      border: Border.all(
-                        color: AppTheme.goldBadgeBorder,
-                        width: 0.8,
-                      ),
-                    ),
-                    child: Text(
-                      'VERIFIED STUDIO',
-                      style: AppTypography.labelBold.copyWith(
-                        color: AppTheme.gold,
-                        fontSize: 9,
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                  ),
               ],
             ),
             const SizedBox(height: AppSpacing.spaceLg - 4),
@@ -94,15 +78,18 @@ class StudioPoliciesCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(AppSpacing.spaceXxs + 2),
+                      width: 32,
+                      height: 32,
                       decoration: BoxDecoration(
                         color: AppTheme.actionButtonBackground,
-                        borderRadius: BorderRadius.circular(AppRadius.radiusXs + 2),
+                        borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                       ),
-                      child: Icon(
-                        _getPolicyIcon(policy.iconKey),
-                        color: AppTheme.gold,
-                        size: 16,
+                      child: Center(
+                        child: Icon(
+                          _getPolicyIcon(policy.iconKey),
+                          color: AppTheme.gold,
+                          size: 16,
+                        ),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.spaceSm),
@@ -115,9 +102,10 @@ class StudioPoliciesCard extends StatelessWidget {
                             style: AppTypography.bodySmallBold.copyWith(
                               color: AppTheme.textPrimary,
                               fontSize: 13,
+                              height: 1.3,
                             ),
                           ),
-                          const SizedBox(height: AppSpacing.spaceXxs - 1),
+                          const SizedBox(height: 3),
                           Text(
                             policy.description,
                             style: AppTypography.label.copyWith(

@@ -28,7 +28,7 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  use_frameworks!
+  use_frameworks! :linkage => :static
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
@@ -37,37 +37,14 @@ target 'Runner' do
 end
 
 post_install do |installer|
+  installer.pods_project.root_object.attributes['LastUpgradeCheck'] = '2700'
+  installer.pods_project.root_object.attributes['LastSwiftUpdateCheck'] = '2700'
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-      config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
-      config.build_settings['ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES'] = 'NO'
-      config.build_settings['EMBEDDED_CONTENT_CONTAINS_SWIFT'] = 'NO'
-
-      # Fix for Xcode 16 / leveldb / grpc double-quoted include errors
       config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
-      # Fix for leveldb cstdint file not found (forces C++ compatibility)
-      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
-
-      # Fix for integration_test pod:
-      #   - 'Flutter/Flutter.h' file not found
-      #   - use of '@import' in framework header is discouraged
-      #   - could not build module 'integration_test'
-      if target.name == 'integration_test'
-        # Inject Flutter framework search path so #import <Flutter/Flutter.h> resolves
-        flutter_framework_dir = '${PODS_CONFIGURATION_BUILD_DIR}'
-        existing = config.build_settings['FRAMEWORK_SEARCH_PATHS'] || ['$(inherited)']
-        existing = [existing] unless existing.is_a?(Array)
-        config.build_settings['FRAMEWORK_SEARCH_PATHS'] = existing + [flutter_framework_dir]
-
-        # Suppress @import-in-framework-header warning treated as error
-        config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
-
-        # Disable module map generation to prevent "could not build module 'integration_test'"
-        # The plugin headers use @import which is not compatible with modular frameworks
-        config.build_settings['DEFINES_MODULE'] = 'NO'
-      end
     end
   end
+  installer.pods_project.save
 end

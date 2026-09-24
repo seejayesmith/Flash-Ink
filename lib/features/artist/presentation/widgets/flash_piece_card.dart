@@ -48,8 +48,9 @@ class FlashPieceCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Artwork Image with Top Rounded Corners
+              // Artwork Image: Dominant visual focal point
               Expanded(
+                flex: 12,
                 child: ClipRRect(
                   borderRadius: BorderRadius.vertical(
                     top: Radius.circular(AppRadius.radiusMd + 1),
@@ -58,32 +59,39 @@ class FlashPieceCard extends StatelessWidget {
                 ),
               ),
 
-              // Metadata Section
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.spaceSm - 2),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      piece.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.bodySmallBold.copyWith(
-                        color: AppTheme.textPrimary,
-                        fontSize: 13,
+              // Metadata Section: Evenly spaced details underneath
+              Expanded(
+                flex: 7,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.spaceSm - 2,
+                    AppSpacing.spaceXs,
+                    AppSpacing.spaceSm - 2,
+                    AppSpacing.spaceSm - 2,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        piece.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.bodySmallBold.copyWith(
+                          color: AppTheme.textPrimary,
+                          fontSize: 13,
+                          height: 1.25,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: AppSpacing.spaceXs - 2),
-                    _buildMetaRow('Placement:', piece.location),
-                    const SizedBox(height: AppSpacing.spaceXxs - 1),
-                    _buildMetaRow('Size:', piece.size),
-                    const SizedBox(height: AppSpacing.spaceXxs - 1),
-                    _buildMetaRow(
-                      'Deposit:',
-                      '\$${piece.deposit}',
-                      valueColor: AppTheme.gold,
-                    ),
-                  ],
+                      _buildMetaRow('Placement:', piece.location),
+                      _buildMetaRow('Size:', piece.size),
+                      _buildMetaRow(
+                        'Deposit:',
+                        '\$${piece.deposit}',
+                        valueColor: AppTheme.gold,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -101,6 +109,8 @@ class FlashPieceCard extends StatelessWidget {
     if (_isNetwork) {
       return CachedNetworkImage(
         imageUrl: piece.imageUrl,
+        width: double.infinity,
+        height: double.infinity,
         fit: BoxFit.cover,
         placeholder: (context, url) => _buildShimmerPlaceholder(),
         errorWidget: (context, url, error) => _buildErrorPlaceholder(),
@@ -109,6 +119,8 @@ class FlashPieceCard extends StatelessWidget {
 
     return Image.asset(
       piece.imageUrl,
+      width: double.infinity,
+      height: double.infinity,
       fit: BoxFit.cover,
       errorBuilder: (context, error, stackTrace) => _buildErrorPlaceholder(),
     );
@@ -158,9 +170,11 @@ class FlashPieceCard extends StatelessWidget {
           style: AppTypography.label.copyWith(
             color: AppTheme.navInactive,
             fontSize: 11,
+            height: 1.2,
             fontWeight: FontWeight.w500,
           ),
         ),
+        const SizedBox(width: 4),
         Flexible(
           child: Text(
             value,
@@ -170,6 +184,7 @@ class FlashPieceCard extends StatelessWidget {
             style: AppTypography.labelBold.copyWith(
               color: valueColor,
               fontSize: 11,
+              height: 1.2,
             ),
           ),
         ),

@@ -290,7 +290,8 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
                         ),
                 ),
               ),
-            ],
+            ),
+          ],
 
           const SliverToBoxAdapter(
             child: SizedBox(height: AppSpacing.spaceXl - 4),

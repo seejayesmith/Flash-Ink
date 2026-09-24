@@ -122,7 +122,6 @@ void main() {
 
       // Verify Studio Policies section
       expect(find.text('STUDIO POLICIES & HOUSE RULES'), findsOneWidget);
-      expect(find.text('VERIFIED STUDIO'), findsOneWidget);
       for (final policy in artist.policies) {
         expect(find.text(policy.title), findsOneWidget);
       }
