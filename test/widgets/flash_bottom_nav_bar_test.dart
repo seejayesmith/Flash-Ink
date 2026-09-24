@@ -6,7 +6,7 @@ import 'package:flash_ink/theme/app_theme.dart';
 
 void main() {
   group('FlashBottomNavBar Widget Tests', () {
-    testWidgets('Renders client destinations: HOME, EXPLORE, APPOINTMENTS, ALERTS', (tester) async {
+    testWidgets('Renders client destinations: Discover, Flash Feed, Saved, Profile', (tester) async {
       int activeIndex = 0;
 
       await tester.pumpWidget(
@@ -21,10 +21,10 @@ void main() {
         ),
       );
 
-      expect(find.text('HOME'), findsOneWidget);
-      expect(find.text('EXPLORE'), findsOneWidget);
-      expect(find.text('APPOINTMENTS'), findsOneWidget);
-      expect(find.text('ALERTS'), findsOneWidget);
+      expect(find.text('Discover'), findsOneWidget);
+      expect(find.text('Flash Feed'), findsOneWidget);
+      expect(find.text('Saved'), findsOneWidget);
+      expect(find.text('Profile'), findsOneWidget);
 
       expect(find.byKey(const Key('nav_item_0')), findsOneWidget);
       expect(find.byKey(const Key('nav_item_1')), findsOneWidget);
@@ -32,7 +32,7 @@ void main() {
       expect(find.byKey(const Key('nav_item_3')), findsOneWidget);
     });
 
-    testWidgets('Renders artist destinations: BOOKINGS, CALENDAR, MESSAGES, EARNINGS with badge', (tester) async {
+    testWidgets('Renders artist destinations: Schedule, Requests, Messages, Profile with badge', (tester) async {
       int activeIndex = 0;
 
       await tester.pumpWidget(
@@ -47,15 +47,34 @@ void main() {
         ),
       );
 
-      expect(find.text('BOOKINGS'), findsOneWidget);
-      expect(find.text('CALENDAR'), findsOneWidget);
-      expect(find.text('MESSAGES'), findsOneWidget);
-      expect(find.text('EARNINGS'), findsOneWidget);
+      expect(find.text('Schedule'), findsOneWidget);
+      expect(find.text('Requests'), findsOneWidget);
+      expect(find.text('Messages'), findsOneWidget);
+      expect(find.text('Profile'), findsOneWidget);
 
       expect(find.byKey(const Key('nav_item_0')), findsOneWidget);
       expect(find.byKey(const Key('nav_item_1')), findsOneWidget);
       expect(find.byKey(const Key('nav_item_2')), findsOneWidget);
       expect(find.byKey(const Key('nav_item_3')), findsOneWidget);
+    });
+
+    testWidgets('Renders legacy destinations when specified', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: FlashBottomNavBar(
+              currentIndex: 0,
+              onTap: (_) {},
+              role: 'legacy_client',
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('HOME'), findsOneWidget);
+      expect(find.text('EXPLORE'), findsOneWidget);
+      expect(find.text('APPOINTMENTS'), findsOneWidget);
+      expect(find.text('ALERTS'), findsOneWidget);
     });
 
     testWidgets('Tapping destination fires onTap callback', (tester) async {
@@ -153,7 +172,7 @@ void main() {
       );
 
       expect(find.byType(FlashBottomNavBar), findsOneWidget);
-      expect(find.text('HOME'), findsOneWidget);
+      expect(find.text('Discover'), findsOneWidget);
     });
 
     testWidgets('Enforces 100% visual parity across roles with AppTheme tokens', (tester) async {

@@ -9,6 +9,7 @@ import 'package:flash_ink/models/artist.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_dashboard_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/appointment_detail_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_calendar_screen.dart';
+import 'package:flash_ink/screens/artist_dashboard/artist_earnings_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/booking_request_detail_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_share_link_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
@@ -107,7 +108,7 @@ void main() {
       expect(find.text('Neo-traditional panther head on outer thigh. Looking for heavy blackwork.'), findsOneWidget);
 
       // 7. Bottom Navigation bar
-      expect(find.text('BOOKINGS'), findsOneWidget);
+      expect(find.text('DASHBOARD'), findsOneWidget);
       expect(find.text('CALENDAR'), findsOneWidget);
       expect(find.text('MESSAGES'), findsOneWidget);
       expect(find.text('EARNINGS'), findsOneWidget);
@@ -256,7 +257,8 @@ void main() {
       // Tap Earnings
       await tester.tap(find.byKey(const Key('nav_item_3')));
       await tester.pumpAndSettle();
-      expect(find.text('Earnings & Payouts'), findsOneWidget);
+      expect(find.byType(ArtistEarningsScreen), findsOneWidget);
+      expect(find.byKey(const Key('next_payout_card')), findsOneWidget);
 
       // Return to Bookings
       await tester.tap(find.byKey(const Key('nav_item_0')));

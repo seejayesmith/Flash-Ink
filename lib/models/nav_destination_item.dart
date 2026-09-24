@@ -39,8 +39,73 @@ class NavDestinationItem {
   /// The active icon to render, falling back to [icon] if not provided.
   IconData get effectiveActiveIcon => activeIcon ?? icon;
 
-  /// Standard destinations for the Client interface.
+  /// Standard destinations for the Client interface (Discover, Flash Feed, Saved, Profile).
   static const List<NavDestinationItem> clientDestinations = [
+    NavDestinationItem(
+      icon: Icons.explore_outlined,
+      activeIcon: Icons.explore,
+      label: 'Discover',
+      route: '/client/discover',
+      key: Key('nav_item_0'),
+    ),
+    NavDestinationItem(
+      icon: Icons.bolt_outlined,
+      activeIcon: Icons.bolt,
+      label: 'Flash Feed',
+      route: '/client/flash-feed',
+      key: Key('nav_item_1'),
+    ),
+    NavDestinationItem(
+      icon: Icons.bookmark_border_rounded,
+      activeIcon: Icons.bookmark_rounded,
+      label: 'Saved',
+      route: '/client/saved',
+      key: Key('nav_item_2'),
+    ),
+    NavDestinationItem(
+      icon: Icons.person_outline_rounded,
+      activeIcon: Icons.person_rounded,
+      label: 'Profile',
+      route: '/client/profile',
+      key: Key('nav_item_3'),
+    ),
+  ];
+
+  /// Standard destinations for the Artist interface (Schedule, Requests, Messages, Profile).
+  static const List<NavDestinationItem> artistDestinations = [
+    NavDestinationItem(
+      icon: Icons.calendar_today_outlined,
+      activeIcon: Icons.calendar_today,
+      label: 'Schedule',
+      route: '/artist/schedule',
+      key: Key('nav_item_0'),
+    ),
+    NavDestinationItem(
+      icon: Icons.inbox_outlined,
+      activeIcon: Icons.inbox_rounded,
+      label: 'Requests',
+      route: '/artist/requests',
+      key: Key('nav_item_1'),
+    ),
+    NavDestinationItem(
+      icon: Icons.chat_bubble_outline_rounded,
+      activeIcon: Icons.chat_bubble_rounded,
+      label: 'Messages',
+      route: '/artist/messages',
+      key: Key('nav_item_2'),
+      hasNotificationBadge: true,
+    ),
+    NavDestinationItem(
+      icon: Icons.person_outline_rounded,
+      activeIcon: Icons.person_rounded,
+      label: 'Profile',
+      route: '/artist/profile',
+      key: Key('nav_item_3'),
+    ),
+  ];
+
+  /// Legacy uppercase destinations for backward compatibility.
+  static const List<NavDestinationItem> legacyClientDestinations = [
     NavDestinationItem(
       icon: Icons.home_filled,
       activeIcon: Icons.home,
@@ -71,13 +136,13 @@ class NavDestinationItem {
     ),
   ];
 
-  /// Standard destinations for the Artist interface.
-  static const List<NavDestinationItem> artistDestinations = [
+  /// Legacy artist destinations for backward compatibility.
+  static const List<NavDestinationItem> legacyArtistDestinations = [
     NavDestinationItem(
-      icon: Icons.menu_book,
-      activeIcon: Icons.menu_book,
-      label: 'BOOKINGS',
-      route: '/artist/bookings',
+      icon: Icons.grid_view_outlined,
+      activeIcon: Icons.grid_view_rounded,
+      label: 'DASHBOARD',
+      route: '/artist/dashboard',
       key: Key('nav_item_0'),
     ),
     NavDestinationItem(
@@ -104,44 +169,15 @@ class NavDestinationItem {
     ),
   ];
 
-  /// Alternative role destinations matching the modern role-based naming convention.
-  static const List<NavDestinationItem> artistDestinationsNamed = [
-    NavDestinationItem(
-      icon: Icons.calendar_today_outlined,
-      activeIcon: Icons.calendar_today,
-      label: 'Schedule',
-      route: '/artist/schedule',
-      key: Key('nav_item_0'),
-    ),
-    NavDestinationItem(
-      icon: Icons.menu_book,
-      activeIcon: Icons.menu_book,
-      label: 'Requests',
-      route: '/artist/requests',
-      key: Key('nav_item_1'),
-    ),
-    NavDestinationItem(
-      icon: Icons.chat_bubble_outline,
-      activeIcon: Icons.chat_bubble,
-      label: 'Messages',
-      route: '/artist/messages',
-      key: Key('nav_item_2'),
-      hasNotificationBadge: true,
-    ),
-    NavDestinationItem(
-      icon: Icons.person_outline,
-      activeIcon: Icons.person,
-      label: 'Profile',
-      route: '/artist/profile',
-      key: Key('nav_item_3'),
-    ),
-  ];
-
   /// Dynamically resolves standardized destination items based on the active role.
   static List<NavDestinationItem> forRole(String role) {
     switch (role.toLowerCase().trim()) {
       case 'artist':
         return artistDestinations;
+      case 'legacy_artist':
+        return legacyArtistDestinations;
+      case 'legacy_client':
+        return legacyClientDestinations;
       case 'client':
       default:
         return clientDestinations;

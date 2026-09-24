@@ -11,6 +11,7 @@ import '../artist_profile_screen.dart';
 import '../splash_screen.dart';
 import 'appointment_detail_screen.dart';
 import 'artist_calendar_screen.dart';
+import 'artist_earnings_screen.dart';
 import 'booking_request_detail_screen.dart';
 
 /// The central Artist Dashboard screen shown after completing account onboarding
@@ -269,7 +270,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
               _buildDashboardContent(),
               _buildCalendarTab(),
               _buildMessagesPlaceholder(),
-              _buildEarningsPlaceholder(),
+              _buildEarningsTab(),
             ],
           ),
           Positioned(
@@ -1304,73 +1305,12 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
     );
   }
 
-  Widget _buildEarningsPlaceholder() {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Earnings & Payouts',
-              style: GoogleFonts.plusJakartaSans(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Track completed tattoos, deposits, and payouts.',
-              style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFF8C9191),
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 28),
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E2121),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFF282C2C)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'THIS WEEK',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFF8C9191),
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '\$2,450.00',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '+18% from last week • Next payout Wednesday',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFF22C55E),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+  /// Companion Earnings Tab (Tab 3)
+  Widget _buildEarningsTab() {
+    return ArtistEarningsScreen(
+      artist: widget.artist,
+      authService: _authService,
+      isEmbeddedInTab: true,
     );
   }
 }

@@ -41,6 +41,39 @@ class AppTheme {
   /// Bright primary text color.
   static const Color textPrimary = Color(0xFFF9FAFA);
 
+  /// Background color for books open / verified badges.
+  static const Color goldBadgeBackground = Color(0xFF38351F);
+
+  /// Border color for gold badges.
+  static const Color goldBadgeBorder = Color(0xFF7A6B29);
+
+  /// Surface color for cards, flash tiles, and policy containers.
+  static const Color cardBackground = Color(0xFF171A1A);
+
+  /// Border color for standard cards and flash tiles.
+  static const Color cardBorder = Color(0xFF262929);
+
+  /// Subtle divider color for stat rows.
+  static const Color statDivider = Color(0xFF2A2E2E);
+
+  /// Active favorite heart color.
+  static const Color favoriteActive = Color(0xFFEF4444);
+
+  /// Action icon container background color.
+  static const Color actionButtonBackground = Color(0xFF1E2020);
+
+  /// Action icon container border color.
+  static const Color actionButtonBorder = Color(0xFF333737);
+
+  /// Border color for artist avatar stroke.
+  static const Color avatarBorder = Color(0xFF5A4D2E);
+
+  /// Shimmer base color for image placeholders.
+  static const Color shimmerBase = Color(0xFF1E2020);
+
+  /// Shimmer highlight color for image placeholders.
+  static const Color shimmerHighlight = Color(0xFF2E3232);
+
   // ---------------------------------------------------------------------------
   // Glassmorphic Surface Tokens (Figma Spec)
   // ---------------------------------------------------------------------------

@@ -33,6 +33,9 @@ class FlashBottomNavBar extends StatelessWidget {
   /// Custom container height. Defaults to [AppTheme.navBarHeight].
   final double height;
 
+  /// Custom background color for the glass surface. Defaults to subtle translucent onyx tint.
+  final Color? backgroundColor;
+
   const FlashBottomNavBar({
     super.key,
     required this.currentIndex,
@@ -43,6 +46,7 @@ class FlashBottomNavBar extends StatelessWidget {
     this.borderRadius = AppTheme.navBarBorderRadius,
     this.blurSigma = AppTheme.glassBlurSigma,
     this.height = AppTheme.navBarHeight,
+    this.backgroundColor,
   }) : assert(
           items != null || role != null,
           'Either items or role must be provided to FlashBottomNavBar.',
@@ -57,6 +61,7 @@ class FlashBottomNavBar extends StatelessWidget {
     List<NavDestinationItem>? items,
     String? role,
     bool enableHaptics = true,
+    Color? backgroundColor,
     double horizontalMargin = AppTheme.navBarHorizontalMargin,
     double bottomMargin = AppTheme.navBarBottomMargin,
   }) {
@@ -74,6 +79,7 @@ class FlashBottomNavBar extends StatelessWidget {
             items: items,
             role: role,
             enableHaptics: enableHaptics,
+            backgroundColor: backgroundColor,
           ),
         );
       },
@@ -107,43 +113,17 @@ class FlashBottomNavBar extends StatelessWidget {
             filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
             child: Stack(
               children: [
-                // Layer 1: Base dark liquid onyx tint gradient (high contrast & refraction)
+                // Layer 1: Enhanced translucent liquid glass tint (flat background, increased transparency, no gradient)
                 Positioned.fill(
                   child: Container(
                     decoration: BoxDecoration(
                       borderRadius: radius,
-                      gradient: const LinearGradient(
-                        begin: Alignment(-0.8, -0.8), // Light angle -45°
-                        end: Alignment(0.8, 0.8),
-                        colors: [
-                          Color(0xAF1E2222), // 175 alpha
-                          Color(0xC80F1111), // 200 alpha
-                        ],
-                      ),
+                      color: backgroundColor ?? AppTheme.onyxBackground.withAlpha(85), // ~33% opacity for high transparency
                     ),
                   ),
                 ),
 
-                // Layer 2: Specular light reflection (-45° light highlight)
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: radius,
-                      gradient: const LinearGradient(
-                        begin: Alignment(-1.0, -1.0),
-                        end: Alignment(0.6, 0.6),
-                        colors: [
-                          Color(0x23FFFFFF), // Specular light highlight (~35 alpha)
-                          Color(0x0CFFFFFF), // ~12 alpha
-                          Colors.transparent,
-                        ],
-                        stops: [0.0, 0.30, 0.75],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Layer 3: Subtle border stroke and destination items row
+                // Layer 2: Subtle border stroke and destination items row
                 Positioned.fill(
                   child: Container(
                     padding: AppTheme.navBarPadding,

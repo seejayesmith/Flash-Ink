@@ -108,19 +108,48 @@ void main() {
       // Verify Custom Request banner
       expect(find.text('Got an idea? Submit a Custom Request.'), findsOneWidget);
 
-      // Verify initial flash items (first 6)
-      for (int i = 0; i < 6; i++) {
-        expect(find.text(artist.flashArtworks[i].title), findsOneWidget);
-      }
+      // Verify segmented view toggles
+      expect(find.text('Available'), findsOneWidget);
+      expect(find.text('Completed'), findsOneWidget);
 
-      // Verify Load More button exists when total flash count > 6
-      expect(find.text('Load More'), findsOneWidget);
+      // Verify available flash items
+      final availablePieces = artist.flashArtworks
+          .where((p) => p.status != FlashStatus.claimed)
+          .toList();
+      for (int i = 0; i < availablePieces.take(6).length; i++) {
+        expect(find.text(availablePieces[i].title), findsOneWidget);
+      }
 
       // Verify Studio Policies section
       expect(find.text('STUDIO POLICIES & HOUSE RULES'), findsOneWidget);
       expect(find.text('VERIFIED STUDIO'), findsOneWidget);
       for (final policy in artist.policies) {
         expect(find.text(policy.title), findsOneWidget);
+      }
+    });
+
+    testWidgets('Switching to Completed tab filters completed pieces', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final artist = Artist.mockArtists.first;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistProfileScreen(artist: artist),
+        ),
+      );
+
+      // Tap Completed tab
+      await tester.tap(find.text('Completed'));
+      await tester.pumpAndSettle();
+
+      final claimedPieces = artist.flashArtworks
+          .where((p) => p.status == FlashStatus.claimed)
+          .toList();
+      for (final piece in claimedPieces) {
+        expect(find.text(piece.title), findsOneWidget);
       }
     });
 

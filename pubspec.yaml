@@ -43,6 +43,7 @@ dependencies:
   google_fonts: ^8.2.1
   image_picker: ^1.2.3
   firebase_storage: ^13.5.0
+  cached_network_image: ^4.0.1
 
 dev_dependencies:
   flutter_test:
@@ -62,6 +63,8 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  config:
+    enable-swift-package-manager: false
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

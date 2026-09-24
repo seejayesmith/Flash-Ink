@@ -75,8 +75,147 @@ class ArtistDashboardStats {
   });
 }
 
+/// Represents a past completed booking transaction for the earnings view.
+class PastBookingEarningsItem {
+  final String id;
+  final String title;
+  final String clientName;
+  final String serviceType;
+  final String status;
+  final String dateString;
+  final double amount;
+  final double fee;
+  final String paymentMethod;
+  final String receiptId;
+
+  const PastBookingEarningsItem({
+    required this.id,
+    required this.title,
+    required this.clientName,
+    required this.serviceType,
+    this.status = 'Completed',
+    required this.dateString,
+    required this.amount,
+    this.fee = 0.0,
+    this.paymentMethod = 'Apple Pay',
+    this.receiptId = 'REC-2023-8912',
+  });
+
+  double get netAmount => amount - fee;
+}
+
+/// Earnings metrics and payout information for the artist.
+class ArtistEarningsData {
+  final double nextPayoutAmount;
+  final String payoutDepositDate;
+  final int mtdAmount;
+  final String mtdMonth;
+  final int ytdAmount;
+  final String ytdYear;
+  final List<PastBookingEarningsItem> pastBookings;
+  final List<PastBookingEarningsItem> allPastBookings;
+
+  const ArtistEarningsData({
+    this.nextPayoutAmount = 1256.09,
+    this.payoutDepositDate = 'Friday August 14th',
+    this.mtdAmount = 3467,
+    this.mtdMonth = 'AUGUST',
+    this.ytdAmount = 16987,
+    this.ytdYear = '2026',
+    this.pastBookings = const [
+      PastBookingEarningsItem(
+        id: 'pb_alex_m',
+        title: 'Full Sleeve Session - Alex M.',
+        clientName: 'Alex M.',
+        serviceType: 'Full Sleeve Session',
+        status: 'Completed',
+        dateString: 'Oct 24, 2023',
+        amount: 800.00,
+        fee: 40.00,
+        paymentMethod: 'Direct Deposit / Card',
+        receiptId: 'REC-2023-9041',
+      ),
+      PastBookingEarningsItem(
+        id: 'pb_sarah_t',
+        title: 'Custom Flash - Sarah T.',
+        clientName: 'Sarah T.',
+        serviceType: 'Custom Flash',
+        status: 'Completed',
+        dateString: 'Oct 22, 2023',
+        amount: 250.00,
+        fee: 12.50,
+        paymentMethod: 'Apple Pay',
+        receiptId: 'REC-2023-8974',
+      ),
+    ],
+    this.allPastBookings = const [
+      PastBookingEarningsItem(
+        id: 'pb_alex_m',
+        title: 'Full Sleeve Session - Alex M.',
+        clientName: 'Alex M.',
+        serviceType: 'Full Sleeve Session',
+        status: 'Completed',
+        dateString: 'Oct 24, 2023',
+        amount: 800.00,
+        fee: 40.00,
+        paymentMethod: 'Direct Deposit / Card',
+        receiptId: 'REC-2023-9041',
+      ),
+      PastBookingEarningsItem(
+        id: 'pb_sarah_t',
+        title: 'Custom Flash - Sarah T.',
+        clientName: 'Sarah T.',
+        serviceType: 'Custom Flash',
+        status: 'Completed',
+        dateString: 'Oct 22, 2023',
+        amount: 250.00,
+        fee: 12.50,
+        paymentMethod: 'Apple Pay',
+        receiptId: 'REC-2023-8974',
+      ),
+      PastBookingEarningsItem(
+        id: 'pb_marcus_k',
+        title: 'Fine Line Floral - Marcus K.',
+        clientName: 'Marcus K.',
+        serviceType: 'Fine Line Floral',
+        status: 'Completed',
+        dateString: 'Oct 15, 2023',
+        amount: 320.00,
+        fee: 16.00,
+        paymentMethod: 'Credit Card',
+        receiptId: 'REC-2023-8820',
+      ),
+      PastBookingEarningsItem(
+        id: 'pb_elena_r',
+        title: 'Micro Realism Eye - Elena R.',
+        clientName: 'Elena R.',
+        serviceType: 'Micro Realism Eye',
+        status: 'Completed',
+        dateString: 'Oct 10, 2023',
+        amount: 450.00,
+        fee: 22.50,
+        paymentMethod: 'Apple Pay',
+        receiptId: 'REC-2023-8742',
+      ),
+      PastBookingEarningsItem(
+        id: 'pb_dave_l',
+        title: 'Traditional Dagger - Dave L.',
+        clientName: 'Dave L.',
+        serviceType: 'Traditional Dagger',
+        status: 'Completed',
+        dateString: 'Sep 29, 2023',
+        amount: 300.00,
+        fee: 15.00,
+        paymentMethod: 'Debit Card',
+        receiptId: 'REC-2023-8510',
+      ),
+    ],
+  });
+}
+
 /// Mock data repository for the artist dashboard matching the visual design.
 class ArtistDashboardRepository {
+  static const ArtistEarningsData earningsData = ArtistEarningsData();
   static const DashboardAppointment nextAppointment = DashboardAppointment(
     id: 'apt_hero_tiger',
     clientName: 'Sarah Jenkins',
