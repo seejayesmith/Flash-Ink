@@ -39,35 +39,44 @@ class NavDestinationItem {
   /// The active icon to render, falling back to [icon] if not provided.
   IconData get effectiveActiveIcon => activeIcon ?? icon;
 
-  /// Standard destinations for the Client interface (Discover, Flash Feed, Saved, Profile).
+  /// Standard destinations for the Client interface (Feed, Discover, Explore, Appointments, Messages).
   static const List<NavDestinationItem> clientDestinations = [
     NavDestinationItem(
-      icon: Icons.explore_outlined,
-      activeIcon: Icons.explore,
-      label: 'Discover',
-      route: '/client/discover',
+      icon: Icons.view_stream_outlined,
+      activeIcon: Icons.view_stream_rounded,
+      label: 'Feed',
+      route: '/client/feed',
       key: Key('nav_item_0'),
     ),
     NavDestinationItem(
-      icon: Icons.bolt_outlined,
-      activeIcon: Icons.bolt,
-      label: 'Flash Feed',
-      route: '/client/flash-feed',
+      icon: Icons.auto_awesome_mosaic_outlined,
+      activeIcon: Icons.auto_awesome_mosaic,
+      label: 'Discover',
+      route: '/client/discover',
       key: Key('nav_item_1'),
     ),
     NavDestinationItem(
-      icon: Icons.bookmark_border_rounded,
-      activeIcon: Icons.bookmark_rounded,
-      label: 'Saved',
-      route: '/client/saved',
+      icon: Icons.explore_outlined,
+      activeIcon: Icons.explore,
+      label: 'Explore',
+      route: '/client/explore',
       key: Key('nav_item_2'),
     ),
     NavDestinationItem(
-      icon: Icons.person_outline_rounded,
-      activeIcon: Icons.person_rounded,
-      label: 'Profile',
-      route: '/client/profile',
+      icon: Icons.calendar_today_outlined,
+      activeIcon: Icons.calendar_today,
+      label: 'Appointments',
+      route: '/client/appointments',
       key: Key('nav_item_3'),
+    ),
+    NavDestinationItem(
+      icon: Icons.chat_bubble_outline_rounded,
+      activeIcon: Icons.chat_bubble_rounded,
+      label: 'Messages',
+      route: '/client/messages',
+      key: Key('nav_item_4'),
+      hasNotificationBadge: true,
+      badgeCount: 2,
     ),
   ];
 

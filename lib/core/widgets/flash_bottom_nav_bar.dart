@@ -123,7 +123,7 @@ class FlashBottomNavBar extends StatelessWidget {
                   ),
                 ),
 
-                // Layer 2: Subtle border stroke and destination items row
+                // Layer 2: Subtle border stroke, gliding active pill, and destination items row
                 Positioned.fill(
                   child: Container(
                     padding: AppTheme.navBarPadding,
@@ -134,27 +134,66 @@ class FlashBottomNavBar extends StatelessWidget {
                         width: AppTheme.glassBorderWidth,
                       ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: List.generate(navItems.length, (index) {
-                        final item = navItems[index];
-                        final isSelected = currentIndex == index;
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final itemCount = navItems.length;
+                        final totalWidth = constraints.hasBoundedWidth
+                            ? constraints.maxWidth
+                            : (itemCount * 80.0);
+                        final slotWidth =
+                            itemCount > 0 ? totalWidth / itemCount : 0.0;
+                        final hasValidSelection =
+                            currentIndex >= 0 && currentIndex < itemCount;
 
-                        return Expanded(
-                          child: _FlashNavDestinationButton(
-                            key: item.key ?? Key('nav_item_$index'),
-                            item: item,
-                            isSelected: isSelected,
-                            onTap: () {
-                              if (enableHaptics) {
-                                HapticFeedback.selectionClick();
-                              }
-                              onTap(index);
-                            },
-                          ),
+                        return Stack(
+                          children: [
+                            // Gliding liquid glass indicator pill
+                            if (hasValidSelection && slotWidth > 0)
+                              AnimatedPositioned(
+                                duration: AppTheme.navAnimationDuration,
+                                curve: AppTheme.navAnimationCurve,
+                                left: currentIndex * slotWidth + 4.0,
+                                top: 4.0,
+                                bottom: 4.0,
+                                width: (slotWidth - 8.0).clamp(0.0, double.infinity),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.navActivePillBackground,
+                                    borderRadius: BorderRadius.circular(
+                                      AppTheme.navItemBorderRadius,
+                                    ),
+                                  ),
+                                ),
+                              ),
+
+                            // Destination items row
+                            Positioned.fill(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: List.generate(navItems.length, (index) {
+                                  final item = navItems[index];
+                                  final isSelected = currentIndex == index;
+
+                                  return Expanded(
+                                    child: _FlashNavDestinationButton(
+                                      key: item.key ?? Key('nav_item_$index'),
+                                      item: item,
+                                      isSelected: isSelected,
+                                      onTap: () {
+                                        if (enableHaptics) {
+                                          HapticFeedback.selectionClick();
+                                        }
+                                        onTap(index);
+                                      },
+                                    ),
+                                  );
+                                }),
+                              ),
+                            ),
+                          ],
                         );
-                      }),
+                      },
                     ),
                   ),
                 ),
@@ -199,17 +238,11 @@ class _FlashNavDestinationButton extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(AppTheme.navItemBorderRadius),
-          splashColor: activeColor.withAlpha(30),
-          highlightColor: activeColor.withAlpha(15),
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
           child: Center(
-            child: AnimatedContainer(
-              duration: AppTheme.navAnimationDuration,
-              curve: Curves.easeInOut,
+            child: Padding(
               padding: AppTheme.navItemPadding,
-              decoration: BoxDecoration(
-                color: isSelected ? AppTheme.goldContainer : Colors.transparent,
-                borderRadius: BorderRadius.circular(AppTheme.navItemBorderRadius),
-              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,

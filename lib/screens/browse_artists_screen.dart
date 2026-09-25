@@ -9,13 +9,16 @@ import '../theme/app_theme.dart';
 import '../widgets/artist_card.dart';
 import 'artist_profile_screen.dart';
 import 'splash_screen.dart';
+import 'client_account_screen.dart';
 
 class BrowseArtistsScreen extends StatefulWidget {
   final AuthService? authService;
+  final bool showBottomNav;
 
   const BrowseArtistsScreen({
     super.key,
     this.authService,
+    this.showBottomNav = true,
   });
 
   @override
@@ -29,9 +32,67 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
   int _activeNavIndex = 0;
 
   // Filter selection state
-  bool _filterBooksOpen = true;
-  bool _filterQueerArtists = true;
+  bool _filterBooksOpen = false;
+  bool _filterQueerArtists = false;
   bool _filterNearby = false;
+  final Set<String> _selectedStyles = <String>{};
+  double _maxDeposit = 200.0;
+  double _maxPrice = 800.0;
+
+  bool get _hasActiveFilters =>
+      _filterBooksOpen ||
+      _filterQueerArtists ||
+      _filterNearby ||
+      _selectedStyles.isNotEmpty ||
+      _maxDeposit < 200.0 ||
+      _maxPrice < 800.0;
+
+  int get _activeFilterCount {
+    int count = 0;
+    if (_filterBooksOpen) count++;
+    if (_filterQueerArtists) count++;
+    if (_filterNearby) count++;
+    count += _selectedStyles.length;
+    if (_maxDeposit < 200.0) count++;
+    if (_maxPrice < 800.0) count++;
+    return count;
+  }
+
+  List<Artist> get _filteredArtists {
+    return _artists.where((artist) {
+      if (_filterBooksOpen && !artist.isBooksOpen) {
+        return false;
+      }
+      if (_filterQueerArtists) {
+        final isQueer = artist.tags.any((t) =>
+            t.toLowerCase().contains('queer') ||
+            t.toLowerCase().contains('lgbt'));
+        if (!isQueer) return false;
+      }
+      if (_filterNearby) {
+        final loc = artist.location.toLowerCase();
+        final isNearby = loc.contains('los angeles') ||
+            loc.contains('silver lake') ||
+            loc.contains('downtown') ||
+            loc.contains('arts district') ||
+            loc.contains('little tokyo');
+        if (!isNearby) return false;
+      }
+      if (_selectedStyles.isNotEmpty) {
+        final matchesStyle = artist.tags.any((tag) =>
+            _selectedStyles.any((sel) => tag.toLowerCase().contains(sel.toLowerCase())));
+        if (!matchesStyle) return false;
+      }
+      if (artist.minDeposit > _maxDeposit) {
+        return false;
+      }
+      if (artist.flashArtworks.isNotEmpty) {
+        final hasAffordablePiece = artist.flashArtworks.any((p) => p.price <= _maxPrice);
+        if (!hasAffordablePiece) return false;
+      }
+      return true;
+    }).toList();
+  }
 
   @override
   void initState() {
@@ -39,19 +100,22 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
     _artists = List.from(Artist.mockArtists);
   }
 
-  void _toggleFavorite(int index) {
+  void _toggleFavorite(Artist targetArtist) {
     setState(() {
-      final artist = _artists[index];
-      _artists[index] = artist.copyWith(isFavorited: !artist.isFavorited);
+      final index = _artists.indexWhere((a) => a.id == targetArtist.id);
+      if (index != -1) {
+        final artist = _artists[index];
+        _artists[index] = artist.copyWith(isFavorited: !artist.isFavorited);
+      }
     });
 
-    final isFav = _artists[index].isFavorited;
+    final isFav = !targetArtist.isFavorited;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           isFav
-              ? 'Saved ${_artists[index].name} to favorites'
-              : 'Removed ${_artists[index].name} from favorites',
+              ? 'Saved ${targetArtist.name} to favorites'
+              : 'Removed ${targetArtist.name} from favorites',
         ),
         duration: const Duration(seconds: 1),
         backgroundColor: const Color(0xFF262929),
@@ -112,6 +176,12 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                       final bottomPadding = (constraints.maxHeight - itemExtent - topOffset)
                           .clamp(0.0, double.infinity);
 
+                      final displayArtists = _filteredArtists;
+
+                      if (displayArtists.isEmpty) {
+                        return _buildEmptyState(bottomReserved);
+                      }
+
                       return ListView.builder(
                         physics: SnappingScrollPhysics(itemHeight: itemExtent),
                         padding: EdgeInsets.only(
@@ -120,12 +190,12 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                           top: topOffset,
                           bottom: bottomPadding,
                         ),
-                        itemCount: _artists.length + 1,
+                        itemCount: displayArtists.length + 1,
                         itemBuilder: (context, index) {
-                          if (index == _artists.length) {
+                          if (index == displayArtists.length) {
                             return _buildDeleteAccountFooter(bottomReserved);
                           }
-                          final artist = _artists[index];
+                          final artist = displayArtists[index];
                           return SizedBox(
                             height: itemExtent,
                             child: Padding(
@@ -133,7 +203,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                               child: ArtistCard(
                                 artist: artist,
                                 onViewProfile: () => _handleViewProfile(artist),
-                                onToggleFavorite: () => _toggleFavorite(index),
+                                onToggleFavorite: () => _toggleFavorite(artist),
                               ),
                             ),
                           );
@@ -146,17 +216,18 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
             ),
           ),
 
-          // 2. Floating Translucent/Glassmorphic Bottom Navigation Bar
-          Positioned(
-            left: AppTheme.navBarHorizontalMargin,
-            right: AppTheme.navBarHorizontalMargin,
-            bottom: mediaQuery.padding.bottom + AppTheme.navBarBottomMargin,
-            child: FlashBottomNavBar(
-              currentIndex: _activeNavIndex,
-              onTap: (index) => setState(() => _activeNavIndex = index),
-              role: 'client',
+          // 2. Floating Translucent/Glassmorphic Bottom Navigation Bar (if standalone)
+          if (widget.showBottomNav)
+            Positioned(
+              left: AppTheme.navBarHorizontalMargin,
+              right: AppTheme.navBarHorizontalMargin,
+              bottom: mediaQuery.padding.bottom + AppTheme.navBarBottomMargin,
+              child: FlashBottomNavBar(
+                currentIndex: _activeNavIndex,
+                onTap: (index) => setState(() => _activeNavIndex = index),
+                role: 'legacy_client',
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -182,37 +253,50 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
               letterSpacing: -0.5,
             ),
           ),
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: const Color(0xFF4D4530),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(80),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
+          GestureDetector(
+            key: const Key('client_avatar_button'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ClientAccountScreen(
+                    authService: widget.authService ?? _authService,
+                  ),
                 ),
-              ],
-            ),
-            child: ClipOval(
-              child: Image.network(
-                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: const Color(0xFF262929),
-                    child: const Icon(
-                      Icons.person,
-                      color: Color(0xFFEEC200),
-                      size: 22,
-                    ),
-                  );
-                },
+              );
+            },
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: const Color(0xFF4D4530),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(80),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: ClipOval(
+                child: Image.network(
+                  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: const Color(0xFF262929),
+                      child: const Icon(
+                        Icons.person,
+                        color: Color(0xFFEEC200),
+                        size: 22,
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
           ),
@@ -223,6 +307,9 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
 
   /// Sticky Horizontal Filter Row
   Widget _buildFilterRow() {
+    final activeCount = _activeFilterCount;
+    final filterLabel = activeCount > 0 ? 'Filters ($activeCount)' : 'Filters';
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
@@ -235,16 +322,9 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
           // Outline "Filters" Chip with Settings/Sliders Icon
           _buildOutlineChip(
             icon: Icons.tune,
-            label: 'Filters',
-            isActive: false,
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Filter bottom sheet coming soon'),
-                  duration: Duration(milliseconds: 900),
-                ),
-              );
-            },
+            label: filterLabel,
+            isActive: _hasActiveFilters,
+            onTap: _showFilterModal,
           ),
           AppGaps.gapSm,
 
@@ -274,6 +354,483 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
             onTap: () => setState(() => _filterNearby = !_filterNearby),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Empty state rendered when active filters yield 0 artist matches
+  Widget _buildEmptyState(double bottomReserved) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.spaceLg,
+          32,
+          AppSpacing.spaceLg,
+          bottomReserved,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E2020),
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF383B3B)),
+              ),
+              child: const Icon(
+                Icons.search_off_rounded,
+                color: Color(0xFFEEC200),
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No Artists Found',
+              style: GoogleFonts.plusJakartaSans(
+                color: const Color(0xFFF9FAFA),
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'No artists match your active filter criteria.\nTry clearing or adjusting your filters.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.plusJakartaSans(
+                color: const Color(0xFF919696),
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF262929),
+                foregroundColor: const Color(0xFFEEC200),
+                side: const BorderSide(color: Color(0xFFEEC200)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () {
+                setState(() {
+                  _filterBooksOpen = false;
+                  _filterQueerArtists = false;
+                  _filterNearby = false;
+                  _selectedStyles.clear();
+                  _maxDeposit = 200.0;
+                  _maxPrice = 800.0;
+                });
+              },
+              child: Text(
+                'Reset Filters',
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Solid matte dark sheet modal for advanced filtering
+  void _showFilterModal() {
+    bool tempBooksOpen = _filterBooksOpen;
+    bool tempQueerArtists = _filterQueerArtists;
+    bool tempNearby = _filterNearby;
+    final Set<String> tempSelectedStyles = Set<String>.from(_selectedStyles);
+    double tempMaxDeposit = _maxDeposit;
+    double tempMaxPrice = _maxPrice;
+
+    const availableStyles = [
+      'Traditional',
+      'Fine Line',
+      'Blackwork',
+      'Japanese',
+      'Realism',
+      'Neo-Traditional',
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final mediaQuery = MediaQuery.of(context);
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: mediaQuery.size.height * 0.85,
+              ),
+              decoration: const BoxDecoration(
+                color: Color(0xFF1E2020),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                border: Border(
+                  top: BorderSide(color: Color(0xFF383B3B), width: 1.0),
+                ),
+              ),
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.spaceLg,
+                AppSpacing.spaceMd,
+                AppSpacing.spaceLg,
+                mediaQuery.padding.bottom + AppSpacing.spaceLg,
+              ),
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Grab Handle
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF5A5E5E),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Title Header & Reset Button
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Filters',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFFF9FAFA),
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            setModalState(() {
+                              tempBooksOpen = false;
+                              tempQueerArtists = false;
+                              tempNearby = false;
+                              tempSelectedStyles.clear();
+                              tempMaxDeposit = 200.0;
+                              tempMaxPrice = 800.0;
+                            });
+                          },
+                          child: Text(
+                            'Reset All',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFFEEC200),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Section 1: Tattoo Styles
+                    Text(
+                      'TATTOO STYLES',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF919696),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: availableStyles.map((style) {
+                        final isSelected = tempSelectedStyles.contains(style);
+                        return GestureDetector(
+                          onTap: () {
+                            setModalState(() {
+                              if (isSelected) {
+                                tempSelectedStyles.remove(style);
+                              } else {
+                                tempSelectedStyles.add(style);
+                              }
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? const Color(0xFFEEC200)
+                                  : const Color(0xFF262929),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isSelected
+                                    ? const Color(0xFFEEC200)
+                                    : const Color(0xFF383B3B),
+                                width: 1.0,
+                              ),
+                            ),
+                            child: Text(
+                              style,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: isSelected
+                                    ? const Color(0xFF121414)
+                                    : const Color(0xFFF9FAFA),
+                                fontSize: 13,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 22),
+
+                    // Section 2: Availability & Identity
+                    Text(
+                      'AVAILABILITY & IDENTITY',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF919696),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _buildModalSwitchTile(
+                      icon: Icons.menu_book_rounded,
+                      title: 'Books Open Only',
+                      subtitle: 'Artists currently accepting new bookings',
+                      value: tempBooksOpen,
+                      onChanged: (val) => setModalState(() => tempBooksOpen = val),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildModalSwitchTile(
+                      emoji: '🌈',
+                      title: 'Queer & LGBTQ+ Artists',
+                      subtitle: 'Highlight LGBTQ+ community artists',
+                      value: tempQueerArtists,
+                      onChanged: (val) => setModalState(() => tempQueerArtists = val),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildModalSwitchTile(
+                      icon: Icons.location_on_outlined,
+                      title: 'Nearby (Local Artists)',
+                      subtitle: 'Artists located in Los Angeles area',
+                      value: tempNearby,
+                      onChanged: (val) => setModalState(() => tempNearby = val),
+                    ),
+                    const SizedBox(height: 22),
+
+                    // Section 3: Pricing & Deposits
+                    Text(
+                      'PRICING & DEPOSIT',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF919696),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Max Deposit',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFFF9FAFA),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          tempMaxDeposit >= 200 ? 'Any' : '\$${tempMaxDeposit.round()}',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFFEEC200),
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        activeTrackColor: const Color(0xFFEEC200),
+                        inactiveTrackColor: const Color(0xFF383B3B),
+                        thumbColor: const Color(0xFFEEC200),
+                        overlayColor: const Color(0xFFEEC200).withAlpha(40),
+                        trackHeight: 3.0,
+                      ),
+                      child: Slider(
+                        value: tempMaxDeposit,
+                        min: 50.0,
+                        max: 200.0,
+                        divisions: 15,
+                        onChanged: (val) => setModalState(() => tempMaxDeposit = val),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Max Piece Price',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFFF9FAFA),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          tempMaxPrice >= 800 ? 'Any' : '\$${tempMaxPrice.round()}',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFFEEC200),
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        activeTrackColor: const Color(0xFFEEC200),
+                        inactiveTrackColor: const Color(0xFF383B3B),
+                        thumbColor: const Color(0xFFEEC200),
+                        overlayColor: const Color(0xFFEEC200).withAlpha(40),
+                        trackHeight: 3.0,
+                      ),
+                      child: Slider(
+                        value: tempMaxPrice,
+                        min: 100.0,
+                        max: 800.0,
+                        divisions: 14,
+                        onChanged: (val) => setModalState(() => tempMaxPrice = val),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Apply Button
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFEEC200),
+                        foregroundColor: const Color(0xFF121414),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        elevation: 0,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _filterBooksOpen = tempBooksOpen;
+                          _filterQueerArtists = tempQueerArtists;
+                          _filterNearby = tempNearby;
+                          _selectedStyles.clear();
+                          _selectedStyles.addAll(tempSelectedStyles);
+                          _maxDeposit = tempMaxDeposit;
+                          _maxPrice = tempMaxPrice;
+                        });
+                        Navigator.pop(modalContext);
+                      },
+                      child: Text(
+                        'Apply Filters',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  static Widget _buildModalSwitchTile({
+    IconData? icon,
+    String? emoji,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onChanged(!value),
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF262929),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: value ? const Color(0xFFEEC200).withAlpha(120) : const Color(0xFF383B3B),
+              width: 1.0,
+            ),
+          ),
+          child: Row(
+            children: [
+              if (emoji != null) ...[
+                Text(emoji, style: const TextStyle(fontSize: 18)),
+                const SizedBox(width: 12),
+              ] else if (icon != null) ...[
+                Icon(
+                  icon,
+                  size: 20,
+                  color: value ? const Color(0xFFEEC200) : const Color(0xFF919696),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFFF9FAFA),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF919696),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: value,
+                activeColor: const Color(0xFFEEC200),
+                activeTrackColor: const Color(0xFFEEC200).withAlpha(80),
+                inactiveThumbColor: const Color(0xFF919696),
+                inactiveTrackColor: const Color(0xFF1E2020),
+                onChanged: onChanged,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

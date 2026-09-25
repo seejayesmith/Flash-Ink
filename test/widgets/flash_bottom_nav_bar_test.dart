@@ -6,7 +6,7 @@ import 'package:flash_ink/theme/app_theme.dart';
 
 void main() {
   group('FlashBottomNavBar Widget Tests', () {
-    testWidgets('Renders client destinations: Discover, Flash Feed, Saved, Profile', (tester) async {
+    testWidgets('Renders client destinations: Feed, Discover, Explore, Appointments, Messages', (tester) async {
       int activeIndex = 0;
 
       await tester.pumpWidget(
@@ -21,15 +21,17 @@ void main() {
         ),
       );
 
+      expect(find.text('Feed'), findsOneWidget);
       expect(find.text('Discover'), findsOneWidget);
-      expect(find.text('Flash Feed'), findsOneWidget);
-      expect(find.text('Saved'), findsOneWidget);
-      expect(find.text('Profile'), findsOneWidget);
+      expect(find.text('Explore'), findsOneWidget);
+      expect(find.text('Appointments'), findsOneWidget);
+      expect(find.text('Messages'), findsOneWidget);
 
       expect(find.byKey(const Key('nav_item_0')), findsOneWidget);
       expect(find.byKey(const Key('nav_item_1')), findsOneWidget);
       expect(find.byKey(const Key('nav_item_2')), findsOneWidget);
       expect(find.byKey(const Key('nav_item_3')), findsOneWidget);
+      expect(find.byKey(const Key('nav_item_4')), findsOneWidget);
     });
 
     testWidgets('Renders artist destinations: Schedule, Requests, Messages, Profile with badge', (tester) async {
@@ -196,6 +198,37 @@ void main() {
         expect(navBarWidget.borderRadius, AppTheme.navBarBorderRadius);
         expect(navBarWidget.blurSigma, AppTheme.glassBlurSigma);
       }
+    });
+
+    testWidgets('Renders gliding active indicator pill with translucent gray background token', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: FlashBottomNavBar(
+              currentIndex: 1,
+              onTap: (_) {},
+              role: 'client',
+            ),
+          ),
+        ),
+      );
+
+      final animatedPositionedFinder = find.byType(AnimatedPositioned);
+      expect(animatedPositionedFinder, findsOneWidget);
+
+      final animatedPositioned = tester.widget<AnimatedPositioned>(animatedPositionedFinder);
+      expect(animatedPositioned.duration, AppTheme.navAnimationDuration);
+      expect(animatedPositioned.curve, AppTheme.navAnimationCurve);
+
+      // Verify pill container decoration uses navActivePillBackground
+      final pillContainerFinder = find.descendant(
+        of: animatedPositionedFinder,
+        matching: find.byType(Container),
+      );
+      expect(pillContainerFinder, findsOneWidget);
+      final pillContainer = tester.widget<Container>(pillContainerFinder);
+      final decoration = pillContainer.decoration as BoxDecoration;
+      expect(decoration.color, AppTheme.navActivePillBackground);
     });
   });
 }

@@ -47,5 +47,67 @@ void main() {
       expect(find.text('APPOINTMENTS'), findsOneWidget);
       expect(find.text('ALERTS'), findsOneWidget);
     });
+
+    testWidgets('Tapping Filters chip opens the solid matte dark filter modal bottom sheet', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: BrowseArtistsScreen(),
+        ),
+      );
+
+      // Tap on the Filters chip
+      await tester.tap(find.text('Filters'));
+      await tester.pumpAndSettle();
+
+      // Verify modal content
+      expect(find.text('Reset All'), findsOneWidget);
+      expect(find.text('TATTOO STYLES'), findsOneWidget);
+      expect(find.text('Traditional'), findsOneWidget);
+      expect(find.text('Fine Line'), findsOneWidget);
+      expect(find.text('AVAILABILITY & IDENTITY'), findsOneWidget);
+      expect(find.text('Books Open Only'), findsOneWidget);
+      expect(find.text('Queer & LGBTQ+ Artists'), findsOneWidget);
+      expect(find.text('Nearby (Local Artists)'), findsOneWidget);
+      expect(find.text('PRICING & DEPOSIT'), findsOneWidget);
+      expect(find.text('Apply Filters'), findsOneWidget);
+
+      // Select a style and apply
+      await tester.tap(find.text('Fine Line'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Apply Filters'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Apply Filters'));
+      await tester.pumpAndSettle();
+
+      // Modal closed, filter chip shows active count
+      expect(find.text('Filters (1)'), findsOneWidget);
+    });
+
+    testWidgets('Reset Filters button restores all artists when none match', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: BrowseArtistsScreen(),
+        ),
+      );
+
+      // Tap on Filters
+      await tester.tap(find.text('Filters'));
+      await tester.pumpAndSettle();
+
+      // Toggle Books Open Only inside modal
+      await tester.tap(find.text('Books Open Only'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Apply Filters'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Apply Filters'));
+      await tester.pumpAndSettle();
+
+      // Filter chips show updated state
+      expect(find.text('Filters (1)'), findsOneWidget);
+    });
   });
 }

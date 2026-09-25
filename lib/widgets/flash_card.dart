@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/artist.dart';
+import '../screens/booking/flash_booking_screen.dart';
 import '../theme/app_buttons.dart';
 import '../theme/app_spacing.dart';
 import 'flash_image.dart';
@@ -682,22 +683,22 @@ void showFlashBookingSheet(
 
                   // Confirm Claim Button
                   AppButtons.primaryCTA(
-                    onPressed: () {
+                    onPressed: () async {
                       Navigator.pop(modalContext);
-                      if (onConfirmed != null) {
-                        onConfirmed();
-                      }
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Claimed "${flash.title}" by $artistName! Deposit confirmed.',
+                      final booked = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => FlashBookingScreen(
+                            flash: flash,
+                            artist: artist,
                           ),
-                          backgroundColor: const Color(0xFF262929),
-                          duration: const Duration(seconds: 3),
                         ),
                       );
+                      if (booked == true && onConfirmed != null) {
+                        onConfirmed();
+                      }
                     },
-                    text: 'CONFIRM CLAIM & PAY \$${flash.deposit} DEPOSIT',
+                    text: 'CONFIRM CLAIM & SELECT DATE',
                     backgroundColor: const Color(0xFFEEC200),
                     foregroundColor: const Color(0xFF121414),
                   ),

@@ -17,6 +17,9 @@ class AppTheme {
   /// Semi-transparent gold for active container pills (~14% opacity).
   static const Color goldContainer = Color(0x24EEC200);
 
+  /// Translucent charcoal/gray tint for the active navigation destination pill (~12% white opacity over glass).
+  static const Color navActivePillBackground = Color(0x1FFFFFFF);
+
   /// Refined border stroke color with warm gold undertones.
   static const Color goldBorder = Color(0xFF4D4530);
 
@@ -137,7 +140,10 @@ class AppTheme {
   static const Size navItemMinTouchTarget = Size(48.0, 48.0);
 
   /// Animation duration for active destination state transitions.
-  static const Duration navAnimationDuration = Duration(milliseconds: 200);
+  static const Duration navAnimationDuration = Duration(milliseconds: 280);
+
+  /// Animation curve for fluid liquid glass destination transitions.
+  static const Curve navAnimationCurve = Curves.easeInOutCubic;
 
   // ---------------------------------------------------------------------------
   // Navigation Typography Tokens

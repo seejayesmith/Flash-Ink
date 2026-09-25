@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/artist.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/flash_image.dart';
+import 'booking/flash_booking_screen.dart';
 
 class FlashDetailsScreen extends StatefulWidget {
   final FlashArtwork flash;
@@ -29,38 +30,50 @@ class _FlashDetailsScreenState extends State<FlashDetailsScreen> {
     _isClaimed = widget.flash.isClaimed;
   }
 
-  void _claimFlash() {
-    setState(() {
-      _isClaimed = true;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: const Color(0xFF1E2020),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: const BorderSide(color: Color(0xFFEEC200), width: 1),
+  void _claimFlash() async {
+    final booked = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FlashBookingScreen(
+          flash: widget.flash,
+          artist: widget.artist,
         ),
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_outline, color: Color(0xFFEEC200), size: 22),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Reserved "${widget.flash.title}"! Deposit \$${widget.flash.deposit} will be applied to your session.',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFF9FAFA),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-        duration: const Duration(seconds: 4),
       ),
     );
+
+    if (booked == true && mounted) {
+      setState(() {
+        _isClaimed = true;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF1E2020),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: const BorderSide(color: Color(0xFFEEC200), width: 1),
+          ),
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_outline, color: Color(0xFFEEC200), size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Reserved "${widget.flash.title}"! Deposit \$${widget.flash.deposit} confirmed.',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFFF9FAFA),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
   }
 
   @override
