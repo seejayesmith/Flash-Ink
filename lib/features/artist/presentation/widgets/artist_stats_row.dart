@@ -3,7 +3,6 @@ import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../theme/app_typography.dart';
-import '../../../../widgets/adaptive_glass_container.dart';
 import '../../domain/models/artist_profile.dart';
 
 /// Renders the key metrics row for an artist profile:
@@ -20,10 +19,15 @@ class ArtistStatsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
-      child: AdaptiveGlassContainer(
-        borderRadius: AppRadius.radiusLg,
-        unselectedBorderColor: AppTheme.cardBorder,
-        unselectedBorderWidth: 1.0,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.cardBackground,
+          borderRadius: BorderRadius.circular(AppRadius.radiusLg),
+          border: Border.all(
+            color: AppTheme.cardBorder,
+            width: 1.0,
+          ),
+        ),
         child: Padding(
           padding: const EdgeInsets.symmetric(
             vertical: AppSpacing.spaceMd,

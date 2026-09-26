@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flash_ink/features/artist/presentation/widgets/artist_stats_row.dart';
+import 'package:flash_ink/features/artist/presentation/widgets/custom_request_banner.dart';
 import 'package:flash_ink/models/artist.dart';
 import 'package:flash_ink/screens/artist_profile_screen.dart';
 import 'package:flash_ink/screens/custom_request_screen.dart';
 import 'package:flash_ink/screens/flash_details_screen.dart';
+import 'package:flash_ink/theme/app_theme.dart';
 import 'package:flash_ink/widgets/artist_card.dart';
 
 void main() {
@@ -248,6 +251,55 @@ void main() {
       expect(appBar.surfaceTintColor, Colors.transparent);
       expect(appBar.elevation, 0.0);
       expect(appBar.scrolledUnderElevation, 0.0);
+    });
+
+    testWidgets('ArtistStatsRow renders with solid card background and no gradients', (tester) async {
+      final artist = Artist.mockArtists.first;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ArtistStatsRow(artist: artist),
+          ),
+        ),
+      );
+
+      final containerFinder = find.descendant(
+        of: find.byType(ArtistStatsRow),
+        matching: find.byType(Container),
+      );
+      expect(containerFinder, findsWidgets);
+
+      final container = tester.widget<Container>(containerFinder.first);
+      final decoration = container.decoration as BoxDecoration?;
+      expect(decoration, isNotNull);
+      expect(decoration!.color, equals(AppTheme.cardBackground));
+      expect(decoration.gradient, isNull);
+    });
+
+    testWidgets('CustomRequestBanner renders with subtle gold-to-dark gradient decoration', (tester) async {
+      final artist = Artist.mockArtists.first;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CustomRequestBanner(artist: artist),
+          ),
+        ),
+      );
+
+      final inkFinder = find.descendant(
+        of: find.byType(CustomRequestBanner),
+        matching: find.byType(Ink),
+      );
+      expect(inkFinder, findsOneWidget);
+
+      final ink = tester.widget<Ink>(inkFinder);
+      final decoration = ink.decoration as BoxDecoration?;
+      expect(decoration, isNotNull);
+      expect(decoration!.gradient, isA<LinearGradient>());
+      final gradient = decoration.gradient as LinearGradient;
+      expect(gradient.colors, equals(const [Color(0xFF262218), Color(0xFF141717)]));
     });
   });
 

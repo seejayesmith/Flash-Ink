@@ -1,3 +1,5 @@
+enum ChatMessageType { text, receipt }
+
 /// Individual chat message item.
 class ChatMessage {
   final String id;
@@ -6,6 +8,11 @@ class ChatMessage {
   final String text;
   final DateTime timestamp;
   final bool isFromArtist;
+  
+  final ChatMessageType type;
+  final double? receiptAmount;
+  final DateTime? appointmentDate;
+  final String? flashImageUrl;
 
   const ChatMessage({
     required this.id,
@@ -14,6 +21,10 @@ class ChatMessage {
     required this.text,
     required this.timestamp,
     required this.isFromArtist,
+    this.type = ChatMessageType.text,
+    this.receiptAmount,
+    this.appointmentDate,
+    this.flashImageUrl,
   });
 }
 
@@ -48,6 +59,40 @@ class MessageThread {
   });
 
   static List<MessageThread> mockThreads = [
+    MessageThread(
+      id: 'thread_new_booking',
+      artistId: 'artist_4',
+      artistName: 'Sera Fox',
+      artistAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80',
+      studioName: 'Foxglove Studio',
+      lastMessage: 'Thanks for booking! Take a look at the parking map attached to my profile, and let me know if you have any questions before the session.',
+      lastMessageTime: DateTime.now(),
+      unreadCount: 2,
+      isOnline: true,
+      flashTitleContext: 'Midnight Fox & Ferns',
+      messages: [
+        ChatMessage(
+          id: 'new_booking_receipt',
+          senderId: 'system',
+          senderName: 'System',
+          text: 'Deposit Paid',
+          timestamp: DateTime.now().subtract(const Duration(minutes: 2)),
+          isFromArtist: true,
+          type: ChatMessageType.receipt,
+          receiptAmount: 50.0,
+          appointmentDate: DateTime.now().add(const Duration(days: 7)),
+          flashImageUrl: 'assets/images/placeholder_tattoo_1.png',
+        ),
+        ChatMessage(
+          id: 'new_booking_auto_response',
+          senderId: 'artist_4',
+          senderName: 'Sera Fox',
+          text: 'Thanks for booking! Take a look at the parking map attached to my profile, and let me know if you have any questions before the session.',
+          timestamp: DateTime.now().subtract(const Duration(minutes: 1)),
+          isFromArtist: true,
+        ),
+      ],
+    ),
     MessageThread(
       id: 'thread_1',
       artistId: 'artist_1',

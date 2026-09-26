@@ -5,6 +5,9 @@ import '../../models/booking.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/flash_image.dart';
+import '../../features/messages/domain/models/message_thread.dart';
+import '../../features/messages/presentation/screens/chat_conversation_screen.dart';
+
 
 /// Full-flow booking screen for claiming a flash artwork piece.
 ///
@@ -140,9 +143,21 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
 
     setState(() {
       _isProcessingPayment = false;
-      _currentStep = 3; // Advance to confirmed
     });
+
+    final bookingThread = MessageThread.mockThreads.firstWhere(
+      (t) => t.id == 'thread_new_booking',
+      orElse: () => MessageThread.mockThreads.first,
+    );
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatConversationScreen(thread: bookingThread),
+      ),
+    );
   }
+
 
   @override
   Widget build(BuildContext context) {

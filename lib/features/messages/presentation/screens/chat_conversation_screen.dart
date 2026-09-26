@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
 import '../../domain/models/message_thread.dart';
+import '../widgets/booking_receipt_message_tile.dart';
 
 /// Interactive conversation screen for chatting directly with a tattoo artist.
 class ChatConversationScreen extends StatefulWidget {
@@ -180,6 +181,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 itemCount: _messages.length,
                 itemBuilder: (context, index) {
                   final msg = _messages[index];
+                  if (msg.type == ChatMessageType.receipt) {
+                    return BookingReceiptMessageTile(message: msg);
+                  }
+
                   final isClient = !msg.isFromArtist;
 
                   return Align(

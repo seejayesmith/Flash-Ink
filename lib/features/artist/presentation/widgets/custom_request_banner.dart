@@ -37,7 +37,14 @@ class CustomRequestBanner extends StatelessWidget {
           child: Ink(
             padding: const EdgeInsets.all(AppSpacing.spaceSm + 2),
             decoration: BoxDecoration(
-              color: AppTheme.cardBackground,
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF262218), // Warm gold-tinted dark onyx
+                  Color(0xFF141717), // Deep obsidian onyx
+                ],
+              ),
               borderRadius: BorderRadius.circular(AppRadius.radiusLg),
               border: Border.all(
                 color: AppTheme.goldBorder,
