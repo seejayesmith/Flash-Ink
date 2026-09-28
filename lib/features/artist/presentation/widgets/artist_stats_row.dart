@@ -105,6 +105,7 @@ class ArtistStatsRow extends StatelessWidget {
           style: AppTypography.labelBold.copyWith(
             color: AppTheme.navInactive,
             letterSpacing: 0.6,
+            height: 1.1,
           ),
         ),
       ],

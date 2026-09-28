@@ -8,6 +8,7 @@ import 'package:firebase_core_platform_interface/test.dart';
 import 'package:flash_ink/models/artist.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_dashboard_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/appointment_detail_screen.dart';
+import 'package:flash_ink/screens/artist_dashboard/artist_books_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_calendar_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_earnings_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/booking_request_detail_screen.dart';
@@ -108,10 +109,11 @@ void main() {
       expect(find.text('Neo-traditional panther head on outer thigh. Looking for heavy blackwork.'), findsOneWidget);
 
       // 7. Bottom Navigation bar
-      expect(find.text('DASHBOARD'), findsOneWidget);
-      expect(find.text('CALENDAR'), findsOneWidget);
-      expect(find.text('MESSAGES'), findsOneWidget);
-      expect(find.text('EARNINGS'), findsOneWidget);
+      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('Calendar'), findsOneWidget);
+      expect(find.text('Messages'), findsOneWidget);
+      expect(find.text('Books'), findsOneWidget);
+      expect(find.text('Earnings'), findsOneWidget);
     });
 
     testWidgets('Tapping View Details on Next Appointment opens AppointmentDetailScreen', (tester) async {
@@ -243,24 +245,31 @@ void main() {
       await tester.pumpWidget(buildTestWidget());
       await tester.pumpAndSettle();
 
-      // Tap Calendar
+      // Tap Calendar (Tab 1)
       await tester.tap(find.byKey(const Key('nav_item_1')));
       await tester.pumpAndSettle();
       expect(find.byType(ArtistCalendarScreen), findsOneWidget);
       expect(find.byKey(const Key('calendar_day_9')), findsOneWidget);
 
-      // Tap Messages
+      // Tap Messages (Tab 2)
       await tester.tap(find.byKey(const Key('nav_item_2')));
       await tester.pumpAndSettle();
       expect(find.text('Client Messages'), findsOneWidget);
 
-      // Tap Earnings
+      // Tap Books (Tab 3)
       await tester.tap(find.byKey(const Key('nav_item_3')));
+      await tester.pumpAndSettle();
+      expect(find.byType(ArtistBooksScreen), findsOneWidget);
+      expect(find.text('Books & Schedule'), findsOneWidget);
+      expect(find.byKey(const Key('books_status_card')), findsOneWidget);
+
+      // Tap Earnings (Tab 4)
+      await tester.tap(find.byKey(const Key('nav_item_4')));
       await tester.pumpAndSettle();
       expect(find.byType(ArtistEarningsScreen), findsOneWidget);
       expect(find.byKey(const Key('next_payout_card')), findsOneWidget);
 
-      // Return to Bookings
+      // Return to Home (Tab 0)
       await tester.tap(find.byKey(const Key('nav_item_0')));
       await tester.pumpAndSettle();
       expect(find.text("Today's Schedule"), findsOneWidget);

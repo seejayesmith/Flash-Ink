@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -1392,29 +1393,34 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return SwitchListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      secondary: Icon(icon, color: AppTheme.gold, size: 20),
-      title: Text(
-        title,
-        style: GoogleFonts.plusJakartaSans(
-          color: AppTheme.textPrimary,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+        leading: Icon(icon, color: AppTheme.gold, size: 20),
+        title: Text(
+          title,
+          style: GoogleFonts.plusJakartaSans(
+            color: AppTheme.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
         ),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: GoogleFonts.plusJakartaSans(
-          color: const Color(0xFF919696),
-          fontSize: 12,
+        subtitle: Text(
+          subtitle,
+          style: GoogleFonts.plusJakartaSans(
+            color: const Color(0xFF919696),
+            fontSize: 12,
+          ),
         ),
+        trailing: CupertinoSwitch(
+          value: value,
+          activeColor: const Color(0xFF34C759),
+          trackColor: const Color(0xFF39393D),
+          onChanged: onChanged,
+        ),
+        onTap: () => onChanged(!value),
       ),
-      value: value,
-      activeColor: AppTheme.gold,
-      activeTrackColor: AppTheme.gold.withAlpha(80),
-      inactiveTrackColor: const Color(0xFF262929),
-      onChanged: onChanged,
     );
   }
 

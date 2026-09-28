@@ -204,6 +204,18 @@ class AppTheme {
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
       ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          return Colors.white;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const Color(0xFF34C759);
+          }
+          return const Color(0xFF39393D);
+        }),
+        trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+      ),
     );
   }
 }

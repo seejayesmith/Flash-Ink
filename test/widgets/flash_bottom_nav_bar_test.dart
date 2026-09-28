@@ -34,7 +34,7 @@ void main() {
       expect(find.byKey(const Key('nav_item_4')), findsOneWidget);
     });
 
-    testWidgets('Renders artist destinations: Schedule, Requests, Messages, Profile with badge', (tester) async {
+    testWidgets('Renders artist destinations: Home, Calendar, Messages, Books, Earnings with badge', (tester) async {
       int activeIndex = 0;
 
       await tester.pumpWidget(
@@ -49,15 +49,17 @@ void main() {
         ),
       );
 
-      expect(find.text('Schedule'), findsOneWidget);
-      expect(find.text('Requests'), findsOneWidget);
+      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('Calendar'), findsOneWidget);
       expect(find.text('Messages'), findsOneWidget);
-      expect(find.text('Profile'), findsOneWidget);
+      expect(find.text('Books'), findsOneWidget);
+      expect(find.text('Earnings'), findsOneWidget);
 
       expect(find.byKey(const Key('nav_item_0')), findsOneWidget);
       expect(find.byKey(const Key('nav_item_1')), findsOneWidget);
       expect(find.byKey(const Key('nav_item_2')), findsOneWidget);
       expect(find.byKey(const Key('nav_item_3')), findsOneWidget);
+      expect(find.byKey(const Key('nav_item_4')), findsOneWidget);
     });
 
     testWidgets('Renders legacy destinations when specified', (tester) async {

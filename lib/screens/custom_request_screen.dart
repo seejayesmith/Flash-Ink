@@ -349,12 +349,12 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
                               ],
                             ),
                           ),
-                          Switch(
+                          Switch.adaptive(
                             value: _requestSilentAppointment,
-                            activeColor: const Color(0xFFEEC200),
-                            activeTrackColor: const Color(0xFF4D4530),
-                            inactiveThumbColor: const Color(0xFF919696),
-                            inactiveTrackColor: const Color(0xFF2E3333),
+                            activeColor: const Color(0xFF34C759),
+                            activeTrackColor: const Color(0xFF34C759),
+                            inactiveTrackColor: const Color(0xFF39393D),
+                            applyCupertinoTheme: true,
                             onChanged: (val) {
                               setState(() {
                                 _requestSilentAppointment = val;

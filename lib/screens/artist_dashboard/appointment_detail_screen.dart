@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist_dashboard_data.dart';
-import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
 
 /// Full-screen view presenting comprehensive appointment details.
@@ -42,9 +41,16 @@ class AppointmentDetailScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Status & Time Header Card
-            AdaptiveGlassContainer(
-              borderRadius: 16,
+            Container(
               padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E2020),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: const Color(0xFF2E3232),
+                  width: 1.0,
+                ),
+              ),
               child: Row(
                 children: [
                   Container(
@@ -122,9 +128,16 @@ class AppointmentDetailScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            AdaptiveGlassContainer(
-              borderRadius: 16,
+            Container(
               padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E2020),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: const Color(0xFF2E3232),
+                  width: 1.0,
+                ),
+              ),
               child: Row(
                 children: [
                   CircleAvatar(
@@ -191,9 +204,16 @@ class AppointmentDetailScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            AdaptiveGlassContainer(
-              borderRadius: 16,
+            Container(
               padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E2020),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: const Color(0xFF2E3232),
+                  width: 1.0,
+                ),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -286,9 +306,16 @@ class AppointmentDetailScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            AdaptiveGlassContainer(
-              borderRadius: 16,
+            Container(
               padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E2020),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: const Color(0xFF2E3232),
+                  width: 1.0,
+                ),
+              ),
               child: Column(
                 children: [
                   _buildPaymentRow('Total Service Estimate', '\$${appointment.fullPrice}'),

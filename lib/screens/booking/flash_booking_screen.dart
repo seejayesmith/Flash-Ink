@@ -688,17 +688,17 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
               ],
             ),
           ),
-          Switch(
+          Switch.adaptive(
             value: _isSilentSession,
             onChanged: (val) {
               setState(() {
                 _isSilentSession = val;
               });
             },
-            activeThumbColor: const Color(0xFFEEC200),
-            activeTrackColor: const Color(0xFF4D4530),
-            inactiveThumbColor: const Color(0xFF6B7272),
-            inactiveTrackColor: const Color(0xFF202323),
+            activeColor: const Color(0xFF34C759),
+            activeTrackColor: const Color(0xFF34C759),
+            inactiveTrackColor: const Color(0xFF39393D),
+            applyCupertinoTheme: true,
           ),
         ],
       ),

@@ -213,8 +213,143 @@ class ArtistEarningsData {
   });
 }
 
+/// Represents the configuration for an artist's booking schedule ("Books").
+class ArtistBooksSchedule {
+  final bool isBooksOpen;
+  final DateTime bookingWindowStart;
+  final DateTime bookingWindowEnd;
+  final Set<int> workingDays; // 1 = Mon, 7 = Sun (DateTime weekday constants)
+  final TimeOfDay startTime;
+  final TimeOfDay endTime;
+  final int slotDurationMinutes; // e.g. 60, 120, 180
+  final int bufferDurationMinutes; // e.g. 15, 30, 45, 60
+  final int defaultDepositAmount; // e.g. 50, 80, 100
+  final bool acceptFlash;
+  final bool acceptCustom;
+  final bool acceptTouchUps;
+  final String locationNote;
+
+  const ArtistBooksSchedule({
+    this.isBooksOpen = true,
+    required this.bookingWindowStart,
+    required this.bookingWindowEnd,
+    this.workingDays = const {2, 3, 4, 5, 6}, // Tue - Sat
+    this.startTime = const TimeOfDay(hour: 11, minute: 0),
+    this.endTime = const TimeOfDay(hour: 19, minute: 0),
+    this.slotDurationMinutes = 120,
+    this.bufferDurationMinutes = 30,
+    this.defaultDepositAmount = 80,
+    this.acceptFlash = true,
+    this.acceptCustom = true,
+    this.acceptTouchUps = true,
+    this.locationNote = 'OddMaree Studio • Portland, OR',
+  });
+
+  ArtistBooksSchedule copyWith({
+    bool? isBooksOpen,
+    DateTime? bookingWindowStart,
+    DateTime? bookingWindowEnd,
+    Set<int>? workingDays,
+    TimeOfDay? startTime,
+    TimeOfDay? endTime,
+    int? slotDurationMinutes,
+    int? bufferDurationMinutes,
+    int? defaultDepositAmount,
+    bool? acceptFlash,
+    bool? acceptCustom,
+    bool? acceptTouchUps,
+    String? locationNote,
+  }) {
+    return ArtistBooksSchedule(
+      isBooksOpen: isBooksOpen ?? this.isBooksOpen,
+      bookingWindowStart: bookingWindowStart ?? this.bookingWindowStart,
+      bookingWindowEnd: bookingWindowEnd ?? this.bookingWindowEnd,
+      workingDays: workingDays ?? this.workingDays,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      slotDurationMinutes: slotDurationMinutes ?? this.slotDurationMinutes,
+      bufferDurationMinutes: bufferDurationMinutes ?? this.bufferDurationMinutes,
+      defaultDepositAmount: defaultDepositAmount ?? this.defaultDepositAmount,
+      acceptFlash: acceptFlash ?? this.acceptFlash,
+      acceptCustom: acceptCustom ?? this.acceptCustom,
+      acceptTouchUps: acceptTouchUps ?? this.acceptTouchUps,
+      locationNote: locationNote ?? this.locationNote,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'isBooksOpen': isBooksOpen,
+      'bookingWindowStart': bookingWindowStart.toIso8601String(),
+      'bookingWindowEnd': bookingWindowEnd.toIso8601String(),
+      'workingDays': workingDays.toList(),
+      'startHour': startTime.hour,
+      'startMinute': startTime.minute,
+      'endHour': endTime.hour,
+      'endMinute': endTime.minute,
+      'slotDurationMinutes': slotDurationMinutes,
+      'bufferDurationMinutes': bufferDurationMinutes,
+      'defaultDepositAmount': defaultDepositAmount,
+      'acceptFlash': acceptFlash,
+      'acceptCustom': acceptCustom,
+      'acceptTouchUps': acceptTouchUps,
+      'locationNote': locationNote,
+    };
+  }
+
+  factory ArtistBooksSchedule.fromMap(Map<String, dynamic> map) {
+    return ArtistBooksSchedule(
+      isBooksOpen: map['isBooksOpen'] as bool? ?? true,
+      bookingWindowStart: map['bookingWindowStart'] != null
+          ? DateTime.tryParse(map['bookingWindowStart'] as String) ?? DateTime(2026, 10, 1)
+          : DateTime(2026, 10, 1),
+      bookingWindowEnd: map['bookingWindowEnd'] != null
+          ? DateTime.tryParse(map['bookingWindowEnd'] as String) ?? DateTime(2026, 12, 31)
+          : DateTime(2026, 12, 31),
+      workingDays: map['workingDays'] != null
+          ? (map['workingDays'] as List).map((e) => (e as num).toInt()).toSet()
+          : const {2, 3, 4, 5, 6},
+      startTime: TimeOfDay(
+        hour: (map['startHour'] as num?)?.toInt() ?? 11,
+        minute: (map['startMinute'] as num?)?.toInt() ?? 0,
+      ),
+      endTime: TimeOfDay(
+        hour: (map['endHour'] as num?)?.toInt() ?? 19,
+        minute: (map['endMinute'] as num?)?.toInt() ?? 0,
+      ),
+      slotDurationMinutes: (map['slotDurationMinutes'] as num?)?.toInt() ?? 120,
+      bufferDurationMinutes: (map['bufferDurationMinutes'] as num?)?.toInt() ?? 30,
+      defaultDepositAmount: (map['defaultDepositAmount'] as num?)?.toInt() ?? 80,
+      acceptFlash: map['acceptFlash'] as bool? ?? true,
+      acceptCustom: map['acceptCustom'] as bool? ?? true,
+      acceptTouchUps: map['acceptTouchUps'] as bool? ?? true,
+      locationNote: map['locationNote'] as String? ?? 'OddMaree Studio • Portland, OR',
+    );
+  }
+}
+
 /// Mock data repository for the artist dashboard matching the visual design.
 class ArtistDashboardRepository {
+  static ArtistBooksSchedule booksSchedule = ArtistBooksSchedule(
+    isBooksOpen: true,
+    bookingWindowStart: DateTime(2026, 10, 1),
+    bookingWindowEnd: DateTime(2026, 12, 31),
+    workingDays: const {2, 3, 4, 5, 6},
+    startTime: const TimeOfDay(hour: 11, minute: 0),
+    endTime: const TimeOfDay(hour: 19, minute: 0),
+    slotDurationMinutes: 120,
+    bufferDurationMinutes: 30,
+    defaultDepositAmount: 80,
+    acceptFlash: true,
+    acceptCustom: true,
+    acceptTouchUps: true,
+    locationNote: 'OddMaree Studio • Portland, OR',
+  );
+
+  static void updateBooksSchedule(ArtistBooksSchedule updated) {
+    booksSchedule = updated;
+  }
+
   static const ArtistEarningsData earningsData = ArtistEarningsData();
   static const DashboardAppointment nextAppointment = DashboardAppointment(
     id: 'apt_hero_tiger',

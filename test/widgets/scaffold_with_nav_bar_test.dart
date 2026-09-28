@@ -77,9 +77,10 @@ void main() {
                 },
                 role: 'artist',
                 pages: const [
-                  Center(child: Text('Bookings View')),
+                  Center(child: Text('Home View')),
                   Center(child: Text('Calendar View')),
                   Center(child: Text('Messages View')),
+                  Center(child: Text('Books View')),
                   Center(child: Text('Earnings View')),
                 ],
               );
@@ -88,7 +89,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Bookings View'), findsOneWidget);
+      expect(find.text('Home View'), findsOneWidget);
 
       // Tap CALENDAR
       await tester.tap(find.byKey(const Key('nav_item_1')));

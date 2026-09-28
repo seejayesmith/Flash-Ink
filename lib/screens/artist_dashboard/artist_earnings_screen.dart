@@ -782,9 +782,9 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
             right: AppTheme.navBarHorizontalMargin,
             bottom: MediaQuery.paddingOf(context).bottom + AppTheme.navBarBottomMargin,
             child: FlashBottomNavBar(
-              currentIndex: 3,
+              currentIndex: 4,
               onTap: (index) {
-                if (widget.onBack != null && index != 3) {
+                if (widget.onBack != null && index != 4) {
                   widget.onBack!();
                 }
               },

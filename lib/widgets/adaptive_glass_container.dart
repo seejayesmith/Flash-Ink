@@ -20,6 +20,9 @@ class AdaptiveGlassContainer extends StatelessWidget {
   final Color androidSurfaceColor;
   final double blurSigma;
   final int? baseTintAlpha;
+  final int? selectedBaseTintAlpha;
+  final int? unselectedBaseTintAlpha;
+  final bool useGradient;
   final bool glassEnabled;
   final VoidCallback? onTap;
 
@@ -38,6 +41,9 @@ class AdaptiveGlassContainer extends StatelessWidget {
     this.androidSurfaceColor = const Color(0xFF1E2020),
     this.blurSigma = 16.0, // Silky liquid diffusion for high contrast & legibility
     this.baseTintAlpha,
+    this.selectedBaseTintAlpha,
+    this.unselectedBaseTintAlpha,
+    this.useGradient = true,
     this.glassEnabled = true,
     this.onTap,
   });
@@ -54,8 +60,19 @@ class AdaptiveGlassContainer extends StatelessWidget {
     Widget surface;
     if (glassEnabled) {
       // 💎 High-fidelity Liquid Glass View
-      final topAlpha = baseTintAlpha ?? (isSelected ? 165 : 130);
-      final bottomAlpha = baseTintAlpha != null ? (baseTintAlpha! + 25).clamp(0, 255) : (isSelected ? 190 : 155);
+      final int topAlpha;
+      final int bottomAlpha;
+      if (isSelected) {
+        topAlpha = selectedBaseTintAlpha ?? baseTintAlpha ?? 165;
+        bottomAlpha = selectedBaseTintAlpha != null
+            ? (selectedBaseTintAlpha! + 25).clamp(0, 255)
+            : (baseTintAlpha != null ? (baseTintAlpha! + 25).clamp(0, 255) : 190);
+      } else {
+        topAlpha = unselectedBaseTintAlpha ?? baseTintAlpha ?? 130;
+        bottomAlpha = unselectedBaseTintAlpha != null
+            ? (unselectedBaseTintAlpha! + 25).clamp(0, 255)
+            : (baseTintAlpha != null ? (baseTintAlpha! + 25).clamp(0, 255) : 155);
+      }
 
       surface = ClipRRect(
         borderRadius: radius,
@@ -69,14 +86,17 @@ class AdaptiveGlassContainer extends StatelessWidget {
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: radius,
-                    gradient: LinearGradient(
-                      begin: const Alignment(-0.8, -0.8), // Light angle -45°
-                      end: const Alignment(0.8, 0.8),
-                      colors: [
-                        const Color(0xFF1E2222).withAlpha(topAlpha),
-                        const Color(0xFF0F1111).withAlpha(bottomAlpha),
-                      ],
-                    ),
+                    color: useGradient ? null : const Color(0xFF1E2222).withAlpha(topAlpha),
+                    gradient: useGradient
+                        ? LinearGradient(
+                            begin: const Alignment(-0.8, -0.8), // Light angle -45°
+                            end: const Alignment(0.8, 0.8),
+                            colors: [
+                              const Color(0xFF1E2222).withAlpha(topAlpha),
+                              const Color(0xFF0F1111).withAlpha(bottomAlpha),
+                            ],
+                          )
+                        : null,
                   ),
                 ),
               ),

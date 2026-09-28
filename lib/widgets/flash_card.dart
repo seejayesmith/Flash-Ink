@@ -5,6 +5,7 @@ import '../screens/booking/flash_booking_screen.dart';
 import '../theme/app_buttons.dart';
 import '../theme/app_spacing.dart';
 import 'flash_image.dart';
+import 'animated_favorite_button.dart';
 
 /// A card component dedicated to displaying a purchasable tattoo flash design.
 ///
@@ -277,29 +278,13 @@ class FlashCard extends StatelessWidget {
             Positioned(
               top: 10,
               right: 10,
-              child: GestureDetector(
-                onTap: onToggleFavorite,
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF171A1A).withAlpha(200),
-                    border: Border.all(
-                      color: isFavorited
-                          ? const Color(0xFFEEC200)
-                          : const Color(0xFF383B3B),
-                      width: 1.2,
-                    ),
-                  ),
-                  child: Icon(
-                    isFavorited ? Icons.favorite : Icons.favorite_border,
-                    color: isFavorited
-                        ? const Color(0xFFEEC200)
-                        : const Color(0xFFF9FAFA),
-                    size: 18,
-                  ),
-                ),
+              child: AnimatedFavoriteButton(
+                isFavorited: isFavorited,
+                onToggle: onToggleFavorite,
+                size: 36,
+                iconSize: 18,
+                backgroundColor: const Color(0xFF171A1A).withAlpha(200),
+                inactiveBorderColor: const Color(0xFF383B3B),
               ),
             ),
           ],

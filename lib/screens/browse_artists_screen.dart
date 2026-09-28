@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../core/widgets/flash_bottom_nav_bar.dart';
@@ -820,12 +821,10 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                   ],
                 ),
               ),
-              Switch(
+              CupertinoSwitch(
                 value: value,
-                activeColor: const Color(0xFFEEC200),
-                activeTrackColor: const Color(0xFFEEC200).withAlpha(80),
-                inactiveThumbColor: const Color(0xFF919696),
-                inactiveTrackColor: const Color(0xFF1E2020),
+                activeColor: const Color(0xFF34C759),
+                trackColor: const Color(0xFF39393D),
                 onChanged: onChanged,
               ),
             ],

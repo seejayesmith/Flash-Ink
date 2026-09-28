@@ -57,6 +57,9 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
       padding: const EdgeInsets.all(AppSpacing.spaceLg),
       borderRadius: 16.0,
       isSelected: isSelected,
+      useGradient: false,
+      unselectedBaseTintAlpha: 82, // ~32% opacity for glass-like transparency
+      selectedBaseTintAlpha: 115,   // ~45% opacity for tactile depth on selection
       onTap: () => setState(() => _selectedRole = role),
       child: Column(
         children: [

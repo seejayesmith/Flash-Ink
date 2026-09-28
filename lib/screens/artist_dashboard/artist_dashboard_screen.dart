@@ -10,6 +10,7 @@ import '../../widgets/flash_image.dart';
 import '../artist_profile_screen.dart';
 import '../splash_screen.dart';
 import 'appointment_detail_screen.dart';
+import 'artist_books_screen.dart';
 import 'artist_calendar_screen.dart';
 import 'artist_earnings_screen.dart';
 import 'booking_request_detail_screen.dart';
@@ -270,6 +271,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
               _buildDashboardContent(),
               _buildCalendarTab(),
               _buildMessagesPlaceholder(),
+              _buildBooksTab(),
               _buildEarningsTab(),
             ],
           ),
@@ -1305,7 +1307,16 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
     );
   }
 
-  /// Companion Earnings Tab (Tab 3)
+  /// Companion Books Tab (Tab 3)
+  Widget _buildBooksTab() {
+    return ArtistBooksScreen(
+      artist: widget.artist,
+      authService: _authService,
+      isEmbeddedInTab: true,
+    );
+  }
+
+  /// Companion Earnings Tab (Tab 4)
   Widget _buildEarningsTab() {
     return ArtistEarningsScreen(
       artist: widget.artist,

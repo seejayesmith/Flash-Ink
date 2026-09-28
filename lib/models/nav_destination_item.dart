@@ -80,20 +80,20 @@ class NavDestinationItem {
     ),
   ];
 
-  /// Standard destinations for the Artist interface (Schedule, Requests, Messages, Profile).
+  /// Standard destinations for the Artist interface (Home, Calendar, Messages, Books, Earnings).
   static const List<NavDestinationItem> artistDestinations = [
     NavDestinationItem(
-      icon: Icons.calendar_today_outlined,
-      activeIcon: Icons.calendar_today,
-      label: 'Schedule',
-      route: '/artist/schedule',
+      icon: Icons.home_outlined,
+      activeIcon: Icons.home_rounded,
+      label: 'Home',
+      route: '/artist/home',
       key: Key('nav_item_0'),
     ),
     NavDestinationItem(
-      icon: Icons.inbox_outlined,
-      activeIcon: Icons.inbox_rounded,
-      label: 'Requests',
-      route: '/artist/requests',
+      icon: Icons.calendar_today_outlined,
+      activeIcon: Icons.calendar_today,
+      label: 'Calendar',
+      route: '/artist/calendar',
       key: Key('nav_item_1'),
     ),
     NavDestinationItem(
@@ -105,11 +105,18 @@ class NavDestinationItem {
       hasNotificationBadge: true,
     ),
     NavDestinationItem(
-      icon: Icons.person_outline_rounded,
-      activeIcon: Icons.person_rounded,
-      label: 'Profile',
-      route: '/artist/profile',
+      icon: Icons.auto_stories_outlined,
+      activeIcon: Icons.auto_stories,
+      label: 'Books',
+      route: '/artist/books',
       key: Key('nav_item_3'),
+    ),
+    NavDestinationItem(
+      icon: Icons.attach_money_rounded,
+      activeIcon: Icons.attach_money_rounded,
+      label: 'Earnings',
+      route: '/artist/earnings',
+      key: Key('nav_item_4'),
     ),
   ];
 
@@ -148,10 +155,10 @@ class NavDestinationItem {
   /// Legacy artist destinations for backward compatibility.
   static const List<NavDestinationItem> legacyArtistDestinations = [
     NavDestinationItem(
-      icon: Icons.grid_view_outlined,
-      activeIcon: Icons.grid_view_rounded,
-      label: 'DASHBOARD',
-      route: '/artist/dashboard',
+      icon: Icons.home_outlined,
+      activeIcon: Icons.home_rounded,
+      label: 'HOME',
+      route: '/artist/home',
       key: Key('nav_item_0'),
     ),
     NavDestinationItem(
@@ -170,11 +177,18 @@ class NavDestinationItem {
       hasNotificationBadge: true,
     ),
     NavDestinationItem(
+      icon: Icons.auto_stories_outlined,
+      activeIcon: Icons.auto_stories,
+      label: 'BOOKS',
+      route: '/artist/books',
+      key: Key('nav_item_3'),
+    ),
+    NavDestinationItem(
       icon: Icons.attach_money,
       activeIcon: Icons.attach_money,
       label: 'EARNINGS',
       route: '/artist/earnings',
-      key: Key('nav_item_3'),
+      key: Key('nav_item_4'),
     ),
   ];
 

@@ -4,6 +4,7 @@ import '../models/artist.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_buttons.dart';
 import 'flash_image.dart';
+import 'animated_favorite_button.dart';
 
 /// Full artist showcase card for the "Browse Artists" feed.
 ///
@@ -426,30 +427,12 @@ class ArtistCard extends StatelessWidget {
           ),
         ),
         AppGaps.gapSm,
-        // Circular Outline Heart Button
-        GestureDetector(
-          onTap: onToggleFavorite,
-          child: Container(
-            width: AppButtons.ctaHeightPrimary, // 42.0px height & width
-            height: AppButtons.ctaHeightPrimary,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: const Color(0xFF1E2020),
-              border: Border.all(
-                color: artist.isFavorited
-                    ? const Color(0xFFEEC200)
-                    : const Color(0xFF4D5252),
-                width: 1.5,
-              ),
-            ),
-            child: Icon(
-              artist.isFavorited ? Icons.favorite : Icons.favorite_border,
-              color: artist.isFavorited
-                  ? const Color(0xFFEEC200)
-                  : const Color(0xFFF9FAFA),
-              size: 20,
-            ),
-          ),
+        // Circular Outline Heart Button with micro-pulse animation
+        AnimatedFavoriteButton(
+          isFavorited: artist.isFavorited,
+          onToggle: onToggleFavorite,
+          size: AppButtons.ctaHeightPrimary,
+          iconSize: 20,
         ),
       ],
     );

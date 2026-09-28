@@ -604,10 +604,13 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
                   ),
                 ],
               ),
-              Switch(
+              Switch.adaptive(
                 key: const Key('repeatable_switch'),
                 value: _isRepeatable,
-                activeColor: const Color(0xFFEEC200),
+                activeColor: const Color(0xFF34C759),
+                activeTrackColor: const Color(0xFF34C759),
+                inactiveTrackColor: const Color(0xFF39393D),
+                applyCupertinoTheme: true,
                 onChanged: (val) {
                   setState(() => _isRepeatable = val);
                 },
