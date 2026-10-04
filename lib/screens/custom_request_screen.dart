@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/artist.dart';
 import '../theme/app_spacing.dart';
+import '../widgets/flash_switch.dart';
 
 class CustomRequestScreen extends StatefulWidget {
   final Artist artist;
@@ -349,12 +350,8 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
                               ],
                             ),
                           ),
-                          Switch.adaptive(
+                          FlashSwitch(
                             value: _requestSilentAppointment,
-                            activeColor: const Color(0xFF34C759),
-                            activeTrackColor: const Color(0xFF34C759),
-                            inactiveTrackColor: const Color(0xFF39393D),
-                            applyCupertinoTheme: true,
                             onChanged: (val) {
                               setState(() {
                                 _requestSilentAppointment = val;

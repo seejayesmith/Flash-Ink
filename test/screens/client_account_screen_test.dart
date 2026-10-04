@@ -9,7 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flash_ink/screens/browse_artists_screen.dart';
 import 'package:flash_ink/screens/client_account_screen.dart';
 import 'package:flash_ink/screens/splash_screen.dart';
-import 'package:flash_ink/features/discover/presentation/screens/discover_screen.dart';
+import 'package:flash_ink/features/explore/presentation/screens/explore_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
 
 class MockTestUser extends Fake implements User {
@@ -115,19 +115,19 @@ void main() {
     );
 
     testWidgets(
-      'Tapping avatar icon at top right of DiscoverScreen navigates to ClientAccountScreen',
+      'Tapping avatar icon at top right of ExploreScreen navigates to ClientAccountScreen',
       (WidgetTester tester) async {
         final fakeAuth = FakeAccountAuthService();
         await tester.pumpWidget(
           MaterialApp(
-            home: DiscoverScreen(
+            home: ExploreScreen(
               authService: fakeAuth,
             ),
           ),
         );
         await tester.pumpAndSettle();
 
-        // Verify avatar button is present in DiscoverScreen actions
+        // Verify avatar button is present in ExploreScreen actions
         final avatarButton = find.byKey(const Key('discover_avatar_button'));
         expect(avatarButton, findsOneWidget);
 
@@ -138,6 +138,54 @@ void main() {
         // Verify navigation to ClientAccountScreen
         expect(find.byType(ClientAccountScreen), findsOneWidget);
         expect(find.text('Account'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Home screen avatars display user photoURL when authenticated and fallback to person icon when null',
+      (WidgetTester tester) async {
+        final userWithPhoto = MockTestUser(
+          photoURL: 'https://example.com/user_photo.jpg',
+        );
+        final authWithPhoto = FakeAccountAuthService(testUser: userWithPhoto);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: BrowseArtistsScreen(
+              authService: authWithPhoto,
+              showBottomNav: false,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Verify Image.network is rendered with user's photoURL
+        final imageFinder = find.descendant(
+          of: find.byKey(const Key('client_avatar_button')),
+          matching: find.byType(Image),
+        );
+        expect(imageFinder, findsOneWidget);
+        final imageWidget = tester.widget<Image>(imageFinder);
+        expect((imageWidget.image as NetworkImage).url, 'https://example.com/user_photo.jpg');
+
+        // Test fallback to generic person icon when photoURL is null
+        final userWithoutPhoto = MockTestUser(photoURL: null);
+        final authWithoutPhoto = FakeAccountAuthService(testUser: userWithoutPhoto);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ExploreScreen(
+              authService: authWithoutPhoto,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final iconFinder = find.descendant(
+          of: find.byKey(const Key('discover_avatar_button')),
+          matching: find.byIcon(Icons.person),
+        );
+        expect(iconFinder, findsOneWidget);
       },
     );
 

@@ -91,14 +91,14 @@ void main() {
         ),
       );
 
-      // Verify artist name and stats
+      // Verify artist name, studio name, and books open
       expect(find.text(artist.name), findsOneWidget);
-      expect(find.text(artist.location), findsOneWidget);
       expect(find.text(artist.studioType), findsOneWidget);
       expect(find.text('Books open'), findsOneWidget);
 
       // Verify stats
-      expect(find.text('RATING'), findsOneWidget);
+      expect(find.text('DISTANCE'), findsOneWidget);
+      expect(find.text(artist.distance), findsOneWidget);
       expect(find.text('AVAIL PIECES'), findsOneWidget);
       expect(find.text('MIN DEPOSIT'), findsOneWidget);
 
@@ -349,15 +349,14 @@ void main() {
         ),
       );
 
-      // Artist name, Books open, location, and studio
+      // Artist name, Books open, and studio
       expect(find.text(artist.name), findsOneWidget);
       expect(find.text('Books open'), findsOneWidget);
-      expect(find.text(artist.location), findsOneWidget);
       expect(find.text(artist.studioType), findsOneWidget);
 
       // 3-column stats pill
-      expect(find.text('RATING'), findsOneWidget);
-      expect(find.text(artist.rating.toStringAsFixed(1)), findsOneWidget);
+      expect(find.text('DISTANCE'), findsOneWidget);
+      expect(find.text(artist.distance), findsOneWidget);
       expect(find.text('AVAIL PIECES'), findsOneWidget);
       expect(find.text('${artist.availablePieces}'), findsOneWidget);
       expect(find.text('MIN DEPOSIT'), findsOneWidget);

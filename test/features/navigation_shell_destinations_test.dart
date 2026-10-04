@@ -4,13 +4,13 @@ import 'package:flash_ink/core/widgets/flash_bottom_nav_bar.dart';
 import 'package:flash_ink/features/appointments/presentation/screens/appointments_screen.dart';
 import 'package:flash_ink/features/appointments/presentation/widgets/appointment_card.dart';
 import 'package:flash_ink/features/appointments/presentation/widgets/appointment_detail_modal.dart';
-import 'package:flash_ink/features/discover/presentation/screens/discover_screen.dart';
 import 'package:flash_ink/features/explore/presentation/screens/explore_screen.dart';
 import 'package:flash_ink/features/messages/presentation/screens/chat_conversation_screen.dart';
 import 'package:flash_ink/features/messages/presentation/screens/messages_screen.dart';
 import 'package:flash_ink/features/messages/presentation/widgets/message_thread_tile.dart';
 import 'package:flash_ink/models/nav_destination_item.dart';
 import 'package:flash_ink/screens/main_feed_screen.dart';
+import 'package:flash_ink/screens/browse_artists_screen.dart';
 
 void main() {
   group('Navigation Shell & 4 Primary Root Screens Tests', () {
@@ -35,9 +35,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Discover'), findsOneWidget);
-      expect(find.text('Appointments'), findsOneWidget);
+      expect(find.text('Feed'), findsOneWidget);
       expect(find.text('Explore'), findsOneWidget);
+      expect(find.text('Appointments'), findsOneWidget);
       expect(find.text('Messages'), findsOneWidget);
 
       // Verify unread notification badge on Messages
@@ -52,18 +52,18 @@ void main() {
 
       await tester.pumpWidget(
         const MaterialApp(
-          home: MainFeedScreen(),
+          home: MainFeedScreen(initialIndex: 1),
         ),
       );
       await tester.pumpAndSettle();
 
-      // Tab 0: DiscoverScreen is active initially
-      expect(find.byType(DiscoverScreen), findsOneWidget);
+      // Tab 1: ExploreScreen
+      expect(find.byType(ExploreScreen), findsOneWidget);
       expect(find.text('TRENDING IN YOUR AREA'), findsOneWidget);
       expect(find.text('FEATURED ARTIST SPOTLIGHT'), findsOneWidget);
-      expect(find.text('TRENDING FLASH DROPS'), findsOneWidget);
+      expect(find.text('TRENDING SHOPS & STUDIOS'), findsOneWidget);
 
-      // Switch to Tab 1: Appointments
+      // Switch to Tab 2: Appointments
       await tester.tap(find.text('Appointments'));
       await tester.pumpAndSettle();
 
@@ -72,15 +72,6 @@ void main() {
       expect(find.textContaining('Past ('), findsOneWidget);
       expect(find.byType(AppointmentCard), findsWidgets);
 
-      // Switch to Tab 2: Explore
-      await tester.tap(find.text('Explore'));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(ExploreScreen), findsOneWidget);
-      expect(find.text('Explore Directory'), findsOneWidget);
-      expect(find.textContaining('Artists ('), findsOneWidget);
-      expect(find.textContaining('Studios ('), findsOneWidget);
-
       // Switch to Tab 3: Messages
       await tester.tap(find.text('Messages'));
       await tester.pumpAndSettle();
@@ -88,11 +79,11 @@ void main() {
       expect(find.byType(MessagesScreen), findsOneWidget);
       expect(find.byType(MessageThreadTile), findsWidgets);
 
-      // Switch back to Tab 0: DiscoverScreen
-      await tester.tap(find.text('Discover'));
+      // Switch back to Tab 0: Feed
+      await tester.tap(find.text('Feed'));
       await tester.pumpAndSettle();
-
-      expect(find.text('TRENDING IN YOUR AREA'), findsOneWidget);
+      
+      expect(find.byType(BrowseArtistsScreen), findsOneWidget);
     });
 
     testWidgets('AppointmentsScreen toggles between Upcoming and Past, and opens detail modal',
@@ -129,7 +120,7 @@ void main() {
       expect(find.text('CONTACT'), findsOneWidget);
     });
 
-    testWidgets('ExploreScreen search bar filters and toggles between Artists and Studios',
+    testWidgets('ExploreScreen search filters artists and studios',
         (tester) async {
       tester.view.physicalSize = const Size(800, 1400);
       tester.view.devicePixelRatio = 1.0;
@@ -144,22 +135,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Verify Artists tab is default
-      expect(find.textContaining('Artists ('), findsOneWidget);
-
-      // Toggle to Studios tab
-      await tester.tap(find.textContaining('Studios ('));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Obsidian Atelier'), findsOneWidget);
-      expect(find.text('Void & Bloom Tattoo Studio'), findsOneWidget);
+      expect(find.text('TRENDING IN YOUR AREA'), findsOneWidget);
+      expect(find.text('TRENDING SHOPS & STUDIOS'), findsOneWidget);
 
       // Enter search query
       await tester.enterText(find.byType(TextField), 'Obsidian');
       await tester.pumpAndSettle();
 
+      // Check for results
       expect(find.text('Obsidian Atelier'), findsOneWidget);
-      expect(find.text('Void & Bloom Tattoo Studio'), findsNothing);
     });
 
     testWidgets('MessagesScreen displays threads and navigates to ChatConversationScreen',

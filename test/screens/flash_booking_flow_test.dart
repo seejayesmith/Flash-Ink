@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flash_ink/models/artist.dart';
 import 'package:flash_ink/screens/booking/flash_booking_screen.dart';
 import 'package:flash_ink/screens/flash_details_screen.dart';
+import 'package:flash_ink/widgets/flash_switch.dart';
 
 void main() {
   group('Flash Booking Flow Tests', () {
@@ -94,7 +95,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Toggle silent appointment switch
-      await tester.tap(find.byType(Switch));
+      await tester.tap(find.byType(FlashSwitch));
       await tester.pumpAndSettle();
 
       // Tap CONTINUE TO DETAILS

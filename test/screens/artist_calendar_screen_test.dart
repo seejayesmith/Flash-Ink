@@ -7,6 +7,7 @@ import 'package:firebase_core_platform_interface/test.dart';
 
 import 'package:flash_ink/models/artist.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_calendar_screen.dart';
+import 'package:flash_ink/screens/artist_dashboard/artist_account_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_dashboard_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/appointment_detail_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
@@ -81,7 +82,7 @@ void main() {
       // Month & Year dropdowns
       expect(find.byKey(const Key('calendar_month_dropdown')), findsOneWidget);
       expect(find.byKey(const Key('calendar_year_dropdown')), findsOneWidget);
-      expect(find.text('Sep'), findsOneWidget);
+      expect(find.text('September'), findsOneWidget);
       expect(find.text('2026'), findsOneWidget);
 
       // Weekday headers
@@ -121,41 +122,50 @@ void main() {
 
       // Schedule should now display Sarah Jenkins
       expect(find.text('Sarah Jenkins'), findsOneWidget);
-      expect(find.text('Neo-traditional TIGER • 3 hrs'), findsOneWidget);
+      expect(find.text('Neo-traditional TIGER'), findsOneWidget);
+      expect(find.text('• 3 hrs'), findsOneWidget);
+      expect(find.text('Cost: \$400'), findsOneWidget);
+      expect(find.text('CUSTOM TATTOO'), findsOneWidget);
     });
 
-    testWidgets('Tapping the trailing arrow button toggles inline details accordion', (tester) async {
+    testWidgets('Tapping month selector expands inline animated month grid and selecting month updates view', (tester) async {
       await tester.pumpWidget(buildCalendarTestWidget());
       await tester.pumpAndSettle();
 
-      // Elena Rostova appointment
-      expect(find.byKey(const Key('calendar_arrow_cal_apt_elena_1')), findsOneWidget);
-      expect(find.byKey(const Key('calendar_expanded_panel_cal_apt_elena_1')), findsNothing);
+      // Initially weekday header is visible and days view is shown
+      expect(find.text('Su'), findsOneWidget);
+      expect(find.byKey(const Key('calendar_day_9')), findsOneWidget);
+      expect(find.byKey(const ValueKey('month_picker_grid')), findsNothing);
 
-      // Tap arrow to expand
-      await tester.tap(find.byKey(const Key('calendar_arrow_cal_apt_elena_1')));
+      // Tap month selector
+      final monthDropdown = find.byKey(const Key('calendar_month_dropdown'));
+      await tester.tap(monthDropdown);
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('calendar_expanded_panel_cal_apt_elena_1')), findsOneWidget);
-      expect(find.text('Message Client'), findsOneWidget);
-      expect(find.text('Full Details'), findsOneWidget);
-      expect(find.text('Placement: Upper Arm / Half Sleeve'), findsOneWidget);
+      // Weekday header is hidden, month picker grid is visible
+      expect(find.text('Su'), findsNothing);
+      expect(find.byKey(const ValueKey('month_picker_grid')), findsOneWidget);
+      expect(find.byKey(const Key('calendar_select_month_10')), findsOneWidget); // October
 
-      // Tap arrow again to collapse
-      await tester.tap(find.byKey(const Key('calendar_arrow_cal_apt_elena_1')));
+      // Tap October (month 10)
+      await tester.tap(find.byKey(const Key('calendar_select_month_10')));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('calendar_expanded_panel_cal_apt_elena_1')), findsNothing);
+      // Returns to days view with October active
+      expect(find.text('October'), findsOneWidget);
+      expect(find.text('Su'), findsOneWidget);
+      expect(find.byKey(const ValueKey('month_picker_grid')), findsNothing);
     });
 
-    testWidgets('Tapping appointment item navigates to AppointmentDetailScreen', (tester) async {
+    testWidgets('Tapping View Details button navigates to AppointmentDetailScreen', (tester) async {
       await tester.pumpWidget(buildCalendarTestWidget());
       await tester.pumpAndSettle();
 
-      final itemFinder = find.byKey(const Key('calendar_appointment_item_cal_apt_elena_1'));
-      expect(itemFinder, findsOneWidget);
+      final detailsBtn = find.byKey(const Key('calendar_view_details_btn_cal_apt_elena_1'));
+      expect(detailsBtn, findsOneWidget);
+      expect(find.text('View Details'), findsWidgets);
 
-      await tester.tap(itemFinder);
+      await tester.tap(detailsBtn);
       await tester.pumpAndSettle();
 
       expect(find.byType(AppointmentDetailScreen), findsOneWidget);
@@ -174,7 +184,7 @@ void main() {
       expect(find.byKey(const Key('all_appointments_sheet_item_cal_apt_marcus_2')), findsOneWidget);
     });
 
-    testWidgets('Tapping avatar opens profile settings modal', (tester) async {
+    testWidgets('Tapping avatar opens ArtistAccountScreen', (tester) async {
       await tester.pumpWidget(buildCalendarTestWidget());
       await tester.pumpAndSettle();
 
@@ -182,8 +192,8 @@ void main() {
       await tester.tap(avatarBtn);
       await tester.pumpAndSettle();
 
-      expect(find.text('View Public Profile'), findsOneWidget);
-      expect(find.text('Edit Pricing & Policies'), findsOneWidget);
+      expect(find.byType(ArtistAccountScreen), findsOneWidget);
+      expect(find.text('Account'), findsOneWidget);
       expect(find.text('Sign Out'), findsOneWidget);
     });
 
@@ -204,10 +214,44 @@ void main() {
       await tester.tap(calendarTabFinder);
       await tester.pumpAndSettle();
 
-      // Calendar screen is now visible
+      // Calendar screen is now visible (title text in screen header + bottom nav bar label)
       expect(find.byType(ArtistCalendarScreen), findsOneWidget);
-      expect(find.text('Calendar'), findsOneWidget);
+      expect(find.text('Calendar'), findsNWidgets(2));
       expect(find.byKey(const Key('calendar_day_9')), findsOneWidget);
+    });
+
+    testWidgets('Each appointment displays thumbnail, type of visit, client name, duration, and cost visibly', (tester) async {
+      await tester.pumpWidget(buildCalendarTestWidget());
+      await tester.pumpAndSettle();
+
+      // Verify client names are visible
+      expect(find.text('Elena Rostova'), findsOneWidget);
+      expect(find.text('Marcus Cole'), findsWidgets);
+      expect(find.text('Jennie Banks'), findsWidgets);
+
+      // Verify type of visit badges are visible
+      expect(find.text('COVER-UP'), findsOneWidget);
+      expect(find.text('CONSULTATION'), findsWidgets);
+
+      // Verify duration and times are visible
+      expect(find.text('3:30 PM'), findsOneWidget);
+      expect(find.text('• 2.5 hrs'), findsOneWidget);
+      expect(find.text('2:00 PM'), findsWidgets);
+      expect(find.text('• 1 hr'), findsWidgets);
+
+      // Verify costs are visible
+      expect(find.text('Cost: \$420'), findsOneWidget);
+      expect(find.text('Cost: \$50'), findsWidgets);
+      expect(find.text('Cost: \$150'), findsWidgets);
+
+      // Verify deposit details when applicable
+      expect(find.text('(\$120 dep)'), findsOneWidget);
+
+      // Verify tattoo service names are visible
+      expect(find.text('Hannya mask cover-up'), findsOneWidget);
+
+      // Verify View Details button is visible
+      expect(find.byKey(const Key('calendar_view_details_btn_cal_apt_elena_1')), findsOneWidget);
     });
   });
 }

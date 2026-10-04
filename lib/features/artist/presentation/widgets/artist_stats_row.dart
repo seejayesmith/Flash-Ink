@@ -6,7 +6,7 @@ import '../../../../theme/app_typography.dart';
 import '../../domain/models/artist_profile.dart';
 
 /// Renders the key metrics row for an artist profile:
-/// Rating (with gold star), Available Pieces, and Minimum Deposit.
+/// Distance, Available Pieces, and Minimum Deposit.
 class ArtistStatsRow extends StatelessWidget {
   final ArtistProfile artist;
 
@@ -38,10 +38,11 @@ class ArtistStatsRow extends StatelessWidget {
             children: [
               _buildStatItem(
                 context,
-                icon: Icons.star,
-                value: artist.rating.toStringAsFixed(1),
-                label: 'RATING',
-                valueColor: AppTheme.gold,
+                icon: Icons.location_on_outlined,
+                iconColor: AppTheme.navInactive,
+                value: artist.distance,
+                label: 'DISTANCE',
+                valueColor: AppTheme.textPrimary,
               ),
               Container(
                 width: 1,
@@ -75,6 +76,7 @@ class ArtistStatsRow extends StatelessWidget {
   Widget _buildStatItem(
     BuildContext context, {
     IconData? icon,
+    Color? iconColor,
     required String value,
     required String label,
     required Color valueColor,
@@ -87,7 +89,7 @@ class ArtistStatsRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             if (icon != null) ...[
-              Icon(icon, color: valueColor, size: 16),
+              Icon(icon, color: iconColor ?? valueColor, size: 16),
               const SizedBox(width: AppSpacing.spaceXxs),
             ],
             Text(

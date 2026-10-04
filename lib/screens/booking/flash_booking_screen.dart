@@ -5,6 +5,7 @@ import '../../models/booking.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/flash_image.dart';
+import '../../widgets/flash_switch.dart';
 import '../../features/messages/domain/models/message_thread.dart';
 import '../../features/messages/presentation/screens/chat_conversation_screen.dart';
 
@@ -688,17 +689,13 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
               ],
             ),
           ),
-          Switch.adaptive(
+          FlashSwitch(
             value: _isSilentSession,
             onChanged: (val) {
               setState(() {
                 _isSilentSession = val;
               });
             },
-            activeColor: const Color(0xFF34C759),
-            activeTrackColor: const Color(0xFF34C759),
-            inactiveTrackColor: const Color(0xFF39393D),
-            applyCupertinoTheme: true,
           ),
         ],
       ),

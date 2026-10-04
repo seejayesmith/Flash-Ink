@@ -8,6 +8,7 @@ import '../../widgets/tattoo_machine_icon.dart';
 import '../artist_profile_screen.dart';
 import '../splash_screen.dart';
 import 'appointment_detail_screen.dart';
+import 'artist_account_screen.dart';
 
 /// Interactive artist calendar screen matching the Flash.Ink dark aesthetic.
 ///
@@ -37,8 +38,7 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
   // Active viewing month and selected date (defaults to September 9, 2026 per mockup)
   late DateTime _activeMonth;
   late DateTime _selectedDate;
-
-  final Set<String> _expandedAppointmentIds = {};
+  bool _isPickingMonth = false;
 
   static const List<String> _monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -78,16 +78,6 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
     return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
   }
 
-  void _toggleAppointmentExpanded(String id) {
-    setState(() {
-      if (_expandedAppointmentIds.contains(id)) {
-        _expandedAppointmentIds.remove(id);
-      } else {
-        _expandedAppointmentIds.add(id);
-      }
-    });
-  }
-
   void _selectMonth(int month) {
     setState(() {
       _activeMonth = DateTime(_activeMonth.year, month, 1);
@@ -95,6 +85,7 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
       final daysInMonth = DateTime(_activeMonth.year, month + 1, 0).day;
       final newDay = _selectedDate.day.clamp(1, daysInMonth);
       _selectedDate = DateTime(_activeMonth.year, month, newDay);
+      _isPickingMonth = false;
     });
   }
 
@@ -290,27 +281,56 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       child: GestureDetector(
-        onHorizontalDragEnd: (details) {
-          if (details.primaryVelocity != null) {
-            if (details.primaryVelocity! < -200) {
-              _nextMonth();
-            } else if (details.primaryVelocity! > 200) {
-              _prevMonth();
-            }
-          }
-        },
+        onHorizontalDragEnd: _isPickingMonth
+            ? null
+            : (details) {
+                if (details.primaryVelocity != null) {
+                  if (details.primaryVelocity! < -200) {
+                    _nextMonth();
+                  } else if (details.primaryVelocity! > 200) {
+                    _prevMonth();
+                  }
+                }
+              },
         child: Column(
           children: [
             // Month & Year Selector Pills
             _buildMonthYearSelectors(),
             const SizedBox(height: 20),
 
-            // Weekday labels: Su Mo Tu We Th Fr Sa
-            _buildWeekdayHeader(),
-            const SizedBox(height: 14),
+            // Animated switcher between Days view and Month selection grid
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              switchInCurve: Curves.easeInOutCubic,
+              switchOutCurve: Curves.easeInOutCubic,
+              transitionBuilder: (Widget child, Animation<double> animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: Tween<double>(begin: 0.96, end: 1.0).animate(
+                      CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeInOutCubic,
+                      ),
+                    ),
+                    child: child,
+                  ),
+                );
+              },
+              child: _isPickingMonth
+                  ? _buildMonthGrid(key: const ValueKey('month_picker_grid'))
+                  : Column(
+                      key: const ValueKey('calendar_days_view'),
+                      children: [
+                        // Weekday labels: Su Mo Tu We Th Fr Sa
+                        _buildWeekdayHeader(),
+                        const SizedBox(height: 14),
 
-            // Calendar grid
-            _buildCalendarDaysGrid(),
+                        // Calendar grid
+                        _buildCalendarDaysGrid(),
+                      ],
+                    ),
+            ),
           ],
         ),
       ),
@@ -319,63 +339,56 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
 
   /// Month & Year dropdown pills in header of calendar card
   Widget _buildMonthYearSelectors() {
-    final currentMonthShort = _monthShortNames[_activeMonth.month - 1];
+    final currentMonthFull = _monthNames[_activeMonth.month - 1];
     final currentYear = _activeMonth.year;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         // Month Selector Pill
-        PopupMenuButton<int>(
+        GestureDetector(
           key: const Key('calendar_month_dropdown'),
-          color: const Color(0xFF202323),
-          elevation: 8,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: Color(0xFF333737)),
-          ),
-          initialValue: _activeMonth.month,
-          onSelected: _selectMonth,
-          itemBuilder: (context) {
-            return List.generate(12, (index) {
-              final monthNum = index + 1;
-              final isSelected = monthNum == _activeMonth.month;
-              return PopupMenuItem<int>(
-                value: monthNum,
-                child: Text(
-                  _monthNames[index],
-                  style: GoogleFonts.plusJakartaSans(
-                    color: isSelected ? const Color(0xFFEEC200) : Colors.white,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    fontSize: 14,
-                  ),
-                ),
-              );
+          onTap: () {
+            setState(() {
+              _isPickingMonth = !_isPickingMonth;
             });
           },
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             decoration: BoxDecoration(
               color: const Color(0xFF121414),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF282B2B)),
+              border: Border.all(
+                color: _isPickingMonth
+                    ? const Color(0xFFEEC200)
+                    : const Color(0xFF282B2B),
+                width: 1.0,
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  currentMonthShort,
+                  currentMonthFull,
                   style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
+                    color: _isPickingMonth ? const Color(0xFFEEC200) : Colors.white,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(width: 4),
-                const Icon(
-                  Icons.keyboard_arrow_down,
-                  color: Color(0xFF8C9191),
-                  size: 18,
+                AnimatedRotation(
+                  turns: _isPickingMonth ? 0.5 : 0.0,
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOutCubic,
+                  child: Icon(
+                    Icons.keyboard_arrow_down,
+                    color: _isPickingMonth
+                        ? const Color(0xFFEEC200)
+                        : const Color(0xFF8C9191),
+                    size: 18,
+                  ),
                 ),
               ],
             ),
@@ -607,6 +620,64 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
     );
   }
 
+  /// 3x4 grid for selecting any month of the year
+  Widget _buildMonthGrid({Key? key}) {
+    return Column(
+      key: key,
+      children: List.generate(4, (rowIndex) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            children: List.generate(3, (colIndex) {
+              final monthIndex = rowIndex * 3 + colIndex;
+              final monthNum = monthIndex + 1;
+              final isSelected = monthNum == _activeMonth.month;
+              final monthName = _monthNames[monthIndex];
+
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: colIndex == 0 ? 0 : 5,
+                    right: colIndex == 2 ? 0 : 5,
+                  ),
+                  child: GestureDetector(
+                    key: Key('calendar_select_month_$monthNum'),
+                    onTap: () => _selectMonth(monthNum),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      height: 46,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? const Color(0xFFEEC200).withAlpha(35)
+                            : const Color(0xFF141616),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected
+                              ? const Color(0xFFEEC200)
+                              : const Color(0xFF282B2B),
+                          width: isSelected ? 1.5 : 1.0,
+                        ),
+                      ),
+                      child: Text(
+                        monthName,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: isSelected ? const Color(0xFFEEC200) : Colors.white,
+                          fontSize: 13,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        );
+      }),
+    );
+  }
+
   /// Header row for the schedule section: "Today's Schedule" + "VIEW ALL"
   Widget _buildScheduleHeader() {
     return Row(
@@ -683,294 +754,271 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
     );
   }
 
-  /// Individual appointment card matching the visual mockup
+  /// Individual appointment card with primary details:
+  /// tattoo thumbnail, client name, visit type badge, service description,
+  /// duration, cost, and a "View Details" button.
   Widget _buildAppointmentCard(DashboardAppointment item) {
-    final isExpanded = _expandedAppointmentIds.contains(item.id);
-
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      key: Key('calendar_appointment_item_${item.id}'),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: const Color(0xFF191B1B),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isExpanded ? const Color(0xFF383C3C) : const Color(0xFF252828),
+          color: const Color(0xFF252828),
           width: 1.0,
         ),
       ),
-      child: Column(
-        children: [
-          // Main Row
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                // Primary interactive area: navigates to AppointmentDetailScreen
-                Expanded(
-                  child: InkWell(
-                    key: Key('calendar_appointment_item_${item.id}'),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => AppointmentDetailScreen(appointment: item),
-                        ),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(10),
-                    child: Row(
-                      children: [
-                        // Time
-                        Text(
-                          item.time,
-                          style: GoogleFonts.plusJakartaSans(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-
-                        // Status dot
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: item.dotColor,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-
-                        // Client Name
-                        Text(
-                          item.clientName,
-                          style: GoogleFonts.plusJakartaSans(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-
-                        // Service description & duration
-                        Expanded(
-                          child: Text(
-                            '${item.serviceType} • ${item.duration}',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: const Color(0xFF8C9191),
-                              fontSize: 12,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-
-                // Trailing vertical arrows button (mirroring Bookings accordion behavior)
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    key: Key('calendar_arrow_${item.id}'),
-                    onTap: () => _toggleAppointmentExpanded(item.id),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isExpanded
-                            ? const Color(0xFF2D3030)
-                            : const Color(0xFF242727),
-                        border: Border.all(
-                          color: isExpanded
-                              ? const Color(0xFFEEC200).withAlpha(140)
-                              : const Color(0xFF333737),
-                          width: 1.0,
-                        ),
-                      ),
-                      alignment: Alignment.center,
-                      child: Icon(
-                        isExpanded ? Icons.unfold_less : Icons.unfold_more,
-                        color: isExpanded
-                            ? const Color(0xFFEEC200)
-                            : const Color(0xFF8C9191),
-                        size: 16,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Inline expanded accordion details
-          if (isExpanded) _buildExpandedAppointmentDetails(item),
-        ],
-      ),
-    );
-  }
-
-  /// Expanded inline details accordion panel
-  Widget _buildExpandedAppointmentDetails(DashboardAppointment item) {
-    return Container(
-      key: Key('calendar_expanded_panel_${item.id}'),
-      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-      child: Container(
+      child: Padding(
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFF141616),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: const Color(0xFF262929),
-            width: 1.0,
-          ),
-        ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (item.artworkImageUrl.isNotEmpty) ...[
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      width: 54,
-                      height: 54,
-                      color: const Color(0xFF222525),
-                      child: FlashImage(
-                        urlOrPath: item.artworkImageUrl,
-                        fit: BoxFit.cover,
-                        errorWidget: const Icon(
-                          Icons.image_not_supported_outlined,
-                          color: Color(0xFF8C9191),
-                          size: 24,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                ],
+                // 1. Tattoo Thumbnail
+                _buildTattooThumbnail(item),
+                const SizedBox(width: 12),
+
+                // 2. Middle Details: Client Name, Visit Type, Service, Duration & Cost
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        item.serviceType,
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      // Top Row: Client Name & Type of Visit Badge
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.clientName,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          _buildVisitTypeBadge(item),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Placement: ${item.placement}',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFF8C9191),
-                          fontSize: 12,
-                        ),
+                      const SizedBox(height: 5),
+
+                      // Second Row: Service / Tattoo Name & Status Dot
+                      Row(
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: item.dotColor,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              item.serviceType,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: const Color(0xFFD1D5DB),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Deposit: \$${item.depositPaid} • Balance Due: \$${item.balanceDue}',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFFEEC200),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      const SizedBox(height: 8),
+
+                      // Third Row: Duration, Time & Cost
+                      Wrap(
+                        spacing: 14,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          // Time & Duration
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.access_time_rounded,
+                                size: 13,
+                                color: Color(0xFF8C9191),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                item.time,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '• ${item.duration}',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: const Color(0xFF8C9191),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          // Cost
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.payments_outlined,
+                                size: 13,
+                                color: Color(0xFFEEC200),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Cost: \$${item.fullPrice}',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: const Color(0xFFEEC200),
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              if (item.depositPaid > 0) ...[
+                                const SizedBox(width: 4),
+                                Text(
+                                  '(\$${item.depositPaid} dep)',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: const Color(0xFF8C9191),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
               ],
             ),
-            if (item.notes.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1C1C),
-                  borderRadius: BorderRadius.circular(8),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                key: Key('calendar_view_details_btn_${item.id}'),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AppointmentDetailScreen(appointment: item),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFEEC200),
+                  foregroundColor: const Color(0xFF121414),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
                 child: Text(
-                  item.notes,
+                  'View Details',
                   style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFFD1D5DB),
-                    fontSize: 12,
-                    height: 1.4,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.2,
                   ),
                 ),
               ),
-            ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    key: Key('calendar_message_btn_${item.id}'),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Opening chat with ${item.clientName}...'),
-                          backgroundColor: const Color(0xFF242727),
-                        ),
-                      );
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: Color(0xFF383C3C)),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: Text(
-                      'Message Client',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton(
-                    key: Key('calendar_full_details_btn_${item.id}'),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => AppointmentDetailScreen(appointment: item),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEEC200),
-                      foregroundColor: const Color(0xFF121414),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: Text(
-                      'Full Details',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Thumbnail of the tattoo artwork with fallback placeholder
+  Widget _buildTattooThumbnail(DashboardAppointment item) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: 62,
+        height: 62,
+        decoration: BoxDecoration(
+          color: const Color(0xFF222525),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: const Color(0xFF2E3232),
+            width: 1.0,
+          ),
+        ),
+        child: item.artworkImageUrl.isNotEmpty
+            ? FlashImage(
+                urlOrPath: item.artworkImageUrl,
+                width: 62,
+                height: 62,
+                fit: BoxFit.cover,
+                errorWidget: _buildThumbnailFallback(item),
+              )
+            : _buildThumbnailFallback(item),
+      ),
+    );
+  }
+
+  /// Placeholder when artwork image is not present or fails to load
+  Widget _buildThumbnailFallback(DashboardAppointment item) {
+    return Container(
+      width: 62,
+      height: 62,
+      color: const Color(0xFF222525),
+      alignment: Alignment.center,
+      child: item.isConsultation
+          ? const Icon(
+              Icons.forum_outlined,
+              color: Color(0xFFEEC200),
+              size: 24,
+            )
+          : const TattooMachineIcon(
+              size: 24,
+              color: Color(0xFFEEC200),
+            ),
+    );
+  }
+
+  /// Pill badge showing the visit type (e.g. CONSULTATION, COVER-UP, FLASH TATTOO, CUSTOM)
+  Widget _buildVisitTypeBadge(DashboardAppointment item) {
+    final isConsultation = item.isConsultation;
+    final badgeColor = isConsultation ? const Color(0xFF8C9191) : const Color(0xFFEEC200);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+      decoration: BoxDecoration(
+        color: isConsultation
+            ? const Color(0xFF242727)
+            : const Color(0xFFEEC200).withAlpha(28),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isConsultation
+              ? const Color(0xFF383C3C)
+              : const Color(0xFFEEC200).withAlpha(100),
+          width: 0.8,
+        ),
+      ),
+      child: Text(
+        item.effectiveVisitType.toUpperCase(),
+        style: GoogleFonts.plusJakartaSans(
+          color: badgeColor,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.4,
         ),
       ),
     );
@@ -1031,40 +1079,73 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
                     controller: scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     itemCount: allAppointments.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
                     itemBuilder: (_, index) {
                       final item = allAppointments[index];
                       return ListTile(
                         key: Key('all_appointments_sheet_item_${item.id}'),
                         tileColor: const Color(0xFF141616),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                           side: const BorderSide(color: Color(0xFF262929)),
                         ),
-                        leading: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: item.dotColor,
+                        leading: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            width: 48,
+                            height: 48,
+                            color: const Color(0xFF222525),
+                            child: item.artworkImageUrl.isNotEmpty
+                                ? FlashImage(
+                                    urlOrPath: item.artworkImageUrl,
+                                    fit: BoxFit.cover,
+                                    errorWidget: _buildThumbnailFallback(item),
+                                  )
+                                : _buildThumbnailFallback(item),
                           ),
                         ),
-                        title: Text(
-                          item.clientName,
-                          style: GoogleFonts.plusJakartaSans(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.clientName,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            _buildVisitTypeBadge(item),
+                          ],
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '${item.date} • ${item.time} • ${item.duration}',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: const Color(0xFF8C9191),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '\$${item.fullPrice}',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: const Color(0xFFEEC200),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        subtitle: Text(
-                          '${item.date} • ${item.time} • ${item.serviceType}',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: const Color(0xFF8C9191),
-                            fontSize: 12,
-                          ),
-                        ),
-                        trailing: const Icon(Icons.chevron_right, color: Color(0xFF8C9191)),
+                        trailing: const Icon(Icons.chevron_right, color: Color(0xFF8C9191), size: 18),
                         onTap: () {
                           Navigator.pop(sheetContext);
                           Navigator.push(
@@ -1086,132 +1167,18 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
     );
   }
 
-  /// Profile Settings Modal matching the dashboard
-  void _showProfileSettingsModal() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E2121),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+  /// Profile Settings Navigation to ArtistAccountScreen
+  void _navigateToAccountScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ArtistAccountScreen(
+          artist: widget.artist,
+          authService: _authService,
+        ),
       ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF383C3C),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                _buildAvatarWidget(radius: 36),
-                const SizedBox(height: 12),
-                Text(
-                  _artistDisplayName,
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Portland, OR • Flash & Custom',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFF919696),
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                ListTile(
-                  key: const Key('calendar_modal_view_public_profile'),
-                  leading: const Icon(Icons.remove_red_eye_outlined, color: Color(0xFFEEC200)),
-                  title: Text(
-                    'View Public Profile',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Preview how clients see your portfolio & flash',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFF8C9191),
-                      fontSize: 12,
-                    ),
-                  ),
-                  trailing: const Icon(Icons.chevron_right, color: Color(0xFF8C9191)),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    final effectiveArtist = widget.artist ??
-                        Artist.mockArtists.firstWhere(
-                          (a) => a.name.toLowerCase() == 'oddmaree',
-                          orElse: () => Artist.mockArtists.first,
-                        );
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ArtistProfileScreen(artist: effectiveArtist),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(color: Color(0xFF2C2F30), height: 1),
-                ListTile(
-                  leading: const Icon(Icons.tune_outlined, color: Colors.white),
-                  title: Text(
-                    'Edit Pricing & Policies',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  trailing: const Icon(Icons.chevron_right, color: Color(0xFF8C9191)),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Pricing & Policies settings coming soon.'),
-                        backgroundColor: Color(0xFF262929),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(color: Color(0xFF2C2F30), height: 1),
-                ListTile(
-                  key: const Key('calendar_modal_sign_out'),
-                  leading: const Icon(Icons.logout, color: Color(0xFFEF4444)),
-                  title: Text(
-                    'Sign Out',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFEF4444),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  onTap: () async {
-                    Navigator.pop(sheetContext);
-                    await _authService.signOut();
-                    if (mounted) {
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (_) => const SplashScreen()),
-                        (route) => false,
-                      );
-                    }
-                  },
-                ),
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
+
+  void _showProfileSettingsModal() => _navigateToAccountScreen();
 }

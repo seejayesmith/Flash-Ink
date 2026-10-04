@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/adaptive_glass_container.dart';
+import '../widgets/flash_switch.dart';
 import '../widgets/tattoo_machine_icon.dart';
 import 'splash_screen.dart';
 
@@ -1413,10 +1414,8 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
             fontSize: 12,
           ),
         ),
-        trailing: CupertinoSwitch(
+        trailing: FlashSwitch(
           value: value,
-          activeColor: const Color(0xFF34C759),
-          trackColor: const Color(0xFF39393D),
           onChanged: onChanged,
         ),
         onTap: () => onChanged(!value),

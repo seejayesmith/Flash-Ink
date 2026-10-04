@@ -6,7 +6,7 @@ import 'package:flash_ink/theme/app_theme.dart';
 
 void main() {
   group('FlashBottomNavBar Widget Tests', () {
-    testWidgets('Renders client destinations: Feed, Discover, Explore, Appointments, Messages', (tester) async {
+    testWidgets('Renders client destinations: Feed, Explore, Appointments, Messages', (tester) async {
       int activeIndex = 0;
 
       await tester.pumpWidget(
@@ -22,7 +22,6 @@ void main() {
       );
 
       expect(find.text('Feed'), findsOneWidget);
-      expect(find.text('Discover'), findsOneWidget);
       expect(find.text('Explore'), findsOneWidget);
       expect(find.text('Appointments'), findsOneWidget);
       expect(find.text('Messages'), findsOneWidget);
@@ -31,7 +30,6 @@ void main() {
       expect(find.byKey(const Key('nav_item_1')), findsOneWidget);
       expect(find.byKey(const Key('nav_item_2')), findsOneWidget);
       expect(find.byKey(const Key('nav_item_3')), findsOneWidget);
-      expect(find.byKey(const Key('nav_item_4')), findsOneWidget);
     });
 
     testWidgets('Renders artist destinations: Home, Calendar, Messages, Books, Earnings with badge', (tester) async {
@@ -176,7 +174,7 @@ void main() {
       );
 
       expect(find.byType(FlashBottomNavBar), findsOneWidget);
-      expect(find.text('Discover'), findsOneWidget);
+      expect(find.text('Explore'), findsOneWidget);
     });
 
     testWidgets('Enforces 100% visual parity across roles with AppTheme tokens', (tester) async {

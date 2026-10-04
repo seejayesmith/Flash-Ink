@@ -12,6 +12,7 @@ import '../login_screen.dart';
 import 'artist_phone_verification_screen.dart';
 import 'artist_profile_photo_screen.dart';
 import '../../models/artist.dart';
+import '../../widgets/social_auth_buttons.dart';
 import '../artist_dashboard/artist_dashboard_screen.dart';
 
 class ArtistSignUpScreen extends StatefulWidget {
@@ -38,6 +39,8 @@ class _ArtistSignUpScreenState extends State<ArtistSignUpScreen> {
   bool _obscurePassword = true;
   bool _agreedToTerms = false;
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
+  bool _isAppleLoading = false;
   String? _errorMessage;
 
   @override
@@ -178,8 +181,16 @@ class _ArtistSignUpScreenState extends State<ArtistSignUpScreen> {
     }
   }
 
-  Future<void> _handleOAuth(Future<UserCredential?> Function() method) async {
-    setState(() => _isLoading = true);
+  Future<void> _handleOAuth(
+    Future<UserCredential?> Function() method, {
+    bool isGoogle = false,
+    bool isApple = false,
+  }) async {
+    setState(() {
+      _isLoading = true;
+      if (isGoogle) _isGoogleLoading = true;
+      if (isApple) _isAppleLoading = true;
+    });
     try {
       final credential = await method();
       if (credential != null && credential.user != null) {
@@ -216,7 +227,11 @@ class _ArtistSignUpScreenState extends State<ArtistSignUpScreen> {
       _showErrorSnackBar(e.toString());
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _isGoogleLoading = false;
+          _isAppleLoading = false;
+        });
       }
     }
   }
@@ -615,77 +630,22 @@ class _ArtistSignUpScreenState extends State<ArtistSignUpScreen> {
                 const SizedBox(height: 24),
 
                 // Divider: ── OR CONTINUE WITH ──
-                Row(
-                  children: [
-                    const Expanded(child: Divider(color: Color(0xFF2B2E2E), thickness: 1)),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      child: Text(
-                        'OR CONTINUE WITH',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
-                          color: const Color(0xFF6C7272),
-                        ),
-                      ),
-                    ),
-                    const Expanded(child: Divider(color: Color(0xFF2B2E2E), thickness: 1)),
-                  ],
-                ),
+                const SocialAuthDivider(),
                 const SizedBox(height: 20),
 
-                // Social Auth Buttons: Google & Apple
-                Row(
-                  children: [
-                    // Google
-                    Expanded(
-                      child: SizedBox(
-                        height: 46,
-                        child: OutlinedButton.icon(
-                          onPressed: _isLoading ? null : () => _handleOAuth(_authService.signInWithGoogle),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Color(0xFF383C3C)),
-                            backgroundColor: const Color(0xFF1A1C1C),
-                            shape: const StadiumBorder(),
-                          ),
-                          icon: const Icon(Icons.g_mobiledata, size: 24, color: Colors.white),
-                          label: Text(
-                            'Google',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFFF9FAFA),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    // Apple
-                    Expanded(
-                      child: SizedBox(
-                        height: 46,
-                        child: OutlinedButton.icon(
-                          onPressed: _isLoading ? null : () => _handleOAuth(_authService.signInWithApple),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Color(0xFF383C3C)),
-                            backgroundColor: const Color(0xFF1A1C1C),
-                            shape: const StadiumBorder(),
-                          ),
-                          icon: const Icon(Icons.apple, size: 20, color: Colors.white),
-                          label: Text(
-                            'Apple',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFFF9FAFA),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                // Social Auth Buttons: Google & Apple (Circular)
+                SocialAuthRow(
+                  onGooglePressed: () => _handleOAuth(
+                    _authService.signInWithGoogle,
+                    isGoogle: true,
+                  ),
+                  onApplePressed: () => _handleOAuth(
+                    _authService.signInWithApple,
+                    isApple: true,
+                  ),
+                  isLoading: _isLoading,
+                  isGoogleLoading: _isGoogleLoading,
+                  isAppleLoading: _isAppleLoading,
                 ),
                 const SizedBox(height: 28),
 

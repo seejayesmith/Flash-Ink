@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../features/appointments/presentation/screens/appointments_screen.dart';
-import '../features/discover/presentation/screens/discover_screen.dart';
 import '../features/explore/presentation/screens/explore_screen.dart';
 import '../features/messages/presentation/screens/messages_screen.dart';
 import '../models/nav_destination_item.dart';
@@ -8,12 +7,11 @@ import '../services/auth_service.dart';
 import '../widgets/scaffold_with_nav_bar.dart';
 import 'browse_artists_screen.dart';
 
-/// Main client feed & navigation shell hosting the 5 primary root screens:
+/// Main client feed & navigation shell hosting the 4 primary root screens:
 /// 1. Feed (Browse Artists)
-/// 2. Discover (Curated Drops & Spotlight)
-/// 3. Explore (Artists & Studios Directory)
-/// 4. Appointments (Bookings Management)
-/// 5. Messages (Direct Messaging Inbox)
+/// 2. Explore (Curated Drops & Spotlight)
+/// 3. Appointments (Bookings Management)
+/// 4. Messages (Direct Messaging Inbox)
 class MainFeedScreen extends StatefulWidget {
   final AuthService? authService;
   final int initialIndex;
@@ -50,10 +48,9 @@ class _MainFeedScreenState extends State<MainFeedScreen> {
         authService: widget.authService,
         showBottomNav: false,
       ),
-      DiscoverScreen(authService: widget.authService),
-      const ExploreScreen(),
+      ExploreScreen(authService: widget.authService),
       AppointmentsScreen(
-        onExploreTap: () => _navigateToTab(2), // Switch to Explore tab
+        onExploreTap: () => _navigateToTab(1), // Switch to Explore tab
       ),
       const MessagesScreen(),
     ];

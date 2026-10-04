@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_buttons.dart';
+import '../widgets/social_auth_buttons.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,10 +15,18 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final AuthService _authService = AuthService();
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
+  bool _isAppleLoading = false;
 
-  Future<void> _handleSignIn(Future<dynamic> Function() signInMethod) async {
+  Future<void> _handleSignIn(
+    Future<dynamic> Function() signInMethod, {
+    bool isGoogle = false,
+    bool isApple = false,
+  }) async {
     setState(() {
       _isLoading = true;
+      if (isGoogle) _isGoogleLoading = true;
+      if (isApple) _isAppleLoading = true;
     });
     try {
       await signInMethod();
@@ -31,6 +40,8 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         setState(() {
           _isLoading = false;
+          _isGoogleLoading = false;
+          _isAppleLoading = false;
         });
       }
     }
@@ -72,18 +83,20 @@ class _LoginScreenState extends State<LoginScreen> {
                   padding: AppPadding.screenHorizontal,
                   child: Column(
                     children: [
-                      AppButtons.primaryCTA(
-                        onPressed: _isLoading ? null : () => _handleSignIn(_authService.signInWithGoogle),
-                        text: 'Continue with Google',
-                        backgroundColor: const Color(0xFFF9FAFA),
-                        foregroundColor: const Color(0xFF121414),
-                      ),
-                      AppGaps.gapMd,
-                      AppButtons.primaryCTA(
-                        onPressed: _isLoading ? null : () => _handleSignIn(_authService.signInWithApple),
-                        text: 'Continue with Apple',
-                        backgroundColor: const Color(0xFF1E2020),
-                        foregroundColor: const Color(0xFFF9FAFA),
+                      const SocialAuthDivider(label: 'SIGN IN WITH'),
+                      AppGaps.gapLg,
+                      SocialAuthRow(
+                        onGooglePressed: () => _handleSignIn(
+                          _authService.signInWithGoogle,
+                          isGoogle: true,
+                        ),
+                        onApplePressed: () => _handleSignIn(
+                          _authService.signInWithApple,
+                          isApple: true,
+                        ),
+                        isLoading: _isLoading,
+                        isGoogleLoading: _isGoogleLoading,
+                        isAppleLoading: _isAppleLoading,
                       ),
                       AppGaps.gapLg,
                       TextButton(

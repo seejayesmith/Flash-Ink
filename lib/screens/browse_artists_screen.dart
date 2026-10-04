@@ -2,15 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/widgets/flash_bottom_nav_bar.dart';
 import '../models/artist.dart';
 import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 import '../widgets/artist_card.dart';
+import '../widgets/flash_switch.dart';
 import 'artist_profile_screen.dart';
 import 'splash_screen.dart';
 import 'client_account_screen.dart';
+
+enum ArtistSortOption {
+  recommended('Recommended', 'Sort by'),
+  distance('Distance: Nearest First', 'Sort: Nearest'),
+  rating('Rating: Highest Rated', 'Sort: Top Rated'),
+  deposit('Min Deposit: Low to High', 'Sort: Min Deposit');
+
+  final String label;
+  final String chipLabel;
+  const ArtistSortOption(this.label, this.chipLabel);
+}
 
 class BrowseArtistsScreen extends StatefulWidget {
   final AuthService? authService;
@@ -31,18 +44,33 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
   bool _isDeleting = false;
   late List<Artist> _artists;
   int _activeNavIndex = 0;
+  String? _photoUrl;
+
+  // Search state
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  // Sort state
+  ArtistSortOption _sortOption = ArtistSortOption.recommended;
 
   // Filter selection state
   bool _filterBooksOpen = false;
   bool _filterQueerArtists = false;
+  bool _filterFemale = false;
+  bool _filterBipoc = false;
+  bool _filterSilentAppointment = false;
   bool _filterNearby = false;
   final Set<String> _selectedStyles = <String>{};
   double _maxDeposit = 200.0;
   double _maxPrice = 800.0;
 
   bool get _hasActiveFilters =>
+      _searchQuery.isNotEmpty ||
       _filterBooksOpen ||
       _filterQueerArtists ||
+      _filterFemale ||
+      _filterBipoc ||
+      _filterSilentAppointment ||
       _filterNearby ||
       _selectedStyles.isNotEmpty ||
       _maxDeposit < 200.0 ||
@@ -52,6 +80,9 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
     int count = 0;
     if (_filterBooksOpen) count++;
     if (_filterQueerArtists) count++;
+    if (_filterFemale) count++;
+    if (_filterBipoc) count++;
+    if (_filterSilentAppointment) count++;
     if (_filterNearby) count++;
     count += _selectedStyles.length;
     if (_maxDeposit < 200.0) count++;
@@ -59,8 +90,25 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
     return count;
   }
 
+  double _parseDistance(String distanceStr) {
+    final match = RegExp(r'([0-9]+(?:\.[0-9]+)?)').firstMatch(distanceStr);
+    if (match != null) {
+      return double.tryParse(match.group(1)!) ?? 0.0;
+    }
+    return 0.0;
+  }
+
   List<Artist> get _filteredArtists {
-    return _artists.where((artist) {
+    final query = _searchQuery.trim().toLowerCase();
+
+    final filtered = _artists.where((artist) {
+      if (query.isNotEmpty) {
+        final matchesQuery = artist.name.toLowerCase().contains(query) ||
+            artist.studioType.toLowerCase().contains(query) ||
+            artist.location.toLowerCase().contains(query) ||
+            artist.tags.any((t) => t.toLowerCase().contains(query));
+        if (!matchesQuery) return false;
+      }
       if (_filterBooksOpen && !artist.isBooksOpen) {
         return false;
       }
@@ -69,6 +117,26 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
             t.toLowerCase().contains('queer') ||
             t.toLowerCase().contains('lgbt'));
         if (!isQueer) return false;
+      }
+      if (_filterFemale) {
+        final isFemale = artist.tags.any((t) =>
+            t.toLowerCase().contains('female') ||
+            t.toLowerCase().contains('women'));
+        if (!isFemale) return false;
+      }
+      if (_filterBipoc) {
+        final isBipoc = artist.tags.any((t) =>
+            t.toLowerCase().contains('bipoc') ||
+            t.toLowerCase().contains('indigenous') ||
+            t.toLowerCase().contains('black') ||
+            t.toLowerCase().contains('person of color'));
+        if (!isBipoc) return false;
+      }
+      if (_filterSilentAppointment) {
+        final isSilent = artist.tags.any((t) => t.toLowerCase().contains('silent')) ||
+            artist.policies.any((p) => p.description.toLowerCase().contains('silent')) ||
+            artist.bio.toLowerCase().contains('silent');
+        if (!isSilent) return false;
       }
       if (_filterNearby) {
         final loc = artist.location.toLowerCase();
@@ -93,12 +161,74 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
       }
       return true;
     }).toList();
+
+    switch (_sortOption) {
+      case ArtistSortOption.distance:
+        filtered.sort((a, b) {
+          final distA = _parseDistance(a.distance);
+          final distB = _parseDistance(b.distance);
+          return distA.compareTo(distB);
+        });
+        break;
+      case ArtistSortOption.rating:
+        filtered.sort((a, b) => b.rating.compareTo(a.rating));
+        break;
+      case ArtistSortOption.deposit:
+        filtered.sort((a, b) => a.minDeposit.compareTo(b.minDeposit));
+        break;
+      case ArtistSortOption.recommended:
+      default:
+        break;
+    }
+
+    return filtered;
   }
 
   @override
   void initState() {
     super.initState();
     _artists = List.from(Artist.mockArtists);
+    _loadUserProfile();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final user = _authService.currentUser;
+      if (user != null) {
+        if (mounted) {
+          setState(() {
+            if (user.photoURL != null && user.photoURL!.isNotEmpty) {
+              _photoUrl = user.photoURL;
+            }
+          });
+        }
+
+        try {
+          final doc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+          if (doc.exists && doc.data() != null && mounted) {
+            final data = doc.data()!;
+            if (data['photoURL'] != null && (data['photoURL'] as String).isNotEmpty) {
+              setState(() {
+                _photoUrl = data['photoURL'] as String;
+              });
+            }
+          }
+        } catch (_) {
+          // Fallback gracefully if Firestore is unavailable
+        }
+      }
+    } catch (_) {
+      // Fallback gracefully if FirebaseAuth is unavailable or uninitialized
+    }
   }
 
   void _toggleFavorite(Artist targetArtist) {
@@ -148,6 +278,9 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
               children: [
                 // Top Header (Sticky)
                 _buildHeader(),
+
+                // Search Bar (Sticky)
+                _buildSearchBar(),
 
                 // Filter Chips Row (Sticky)
                 _buildFilterRow(),
@@ -256,8 +389,8 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
           ),
           GestureDetector(
             key: const Key('client_avatar_button'),
-            onTap: () {
-              Navigator.push(
+            onTap: () async {
+              await Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => ClientAccountScreen(
@@ -265,6 +398,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                   ),
                 ),
               );
+              _loadUserProfile();
             },
             child: Container(
               width: 40,
@@ -284,20 +418,25 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                 ],
               ),
               child: ClipOval(
-                child: Image.network(
-                  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: const Color(0xFF262929),
-                      child: const Icon(
-                        Icons.person,
-                        color: Color(0xFFEEC200),
-                        size: 22,
+                child: _photoUrl != null && _photoUrl!.isNotEmpty
+                    ? Image.network(
+                        _photoUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Center(
+                            child: Icon(
+                              Icons.person,
+                              size: 22,
+                            ),
+                          );
+                        },
+                      )
+                    : const Center(
+                        child: Icon(
+                          Icons.person,
+                          size: 22,
+                        ),
                       ),
-                    );
-                  },
-                ),
               ),
             ),
           ),
@@ -306,10 +445,62 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
     );
   }
 
+  /// Sticky Search Bar: Dark rounded pill container matching Explore design language
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.spaceLg,
+        vertical: AppSpacing.spaceXs,
+      ),
+      child: Container(
+        height: 46,
+        decoration: BoxDecoration(
+          color: AppTheme.cardBackground,
+          borderRadius: BorderRadius.circular(23),
+          border: Border.all(color: AppTheme.cardBorder, width: 1.2),
+        ),
+        child: TextField(
+          controller: _searchController,
+          onChanged: (val) {
+            setState(() {
+              _searchQuery = val;
+            });
+          },
+          style: GoogleFonts.plusJakartaSans(
+            color: AppTheme.textPrimary,
+            fontSize: 14,
+          ),
+          decoration: InputDecoration(
+            hintText: 'Search artists, studios, styles...',
+            hintStyle: GoogleFonts.plusJakartaSans(
+              color: AppTheme.navInactive,
+              fontSize: 13,
+            ),
+            prefixIcon: const Icon(Icons.search, color: AppTheme.gold, size: 20),
+            suffixIcon: _searchController.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.close, color: AppTheme.navInactive, size: 18),
+                    onPressed: () {
+                      setState(() {
+                        _searchController.clear();
+                        _searchQuery = '';
+                      });
+                    },
+                  )
+                : null,
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(vertical: 12),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Sticky Horizontal Filter Row
   Widget _buildFilterRow() {
     final activeCount = _activeFilterCount;
     final filterLabel = activeCount > 0 ? 'Filters ($activeCount)' : 'Filters';
+    final sortLabel = _sortOption == ArtistSortOption.recommended ? 'Sort by' : _sortOption.chipLabel;
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -320,8 +511,19 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
       ),
       child: Row(
         children: [
+          // Outline "Sort by" Chip with Sort Icon
+          _buildOutlineChip(
+            key: const Key('sort_by_chip'),
+            icon: Icons.swap_vert_rounded,
+            label: sortLabel,
+            isActive: _sortOption != ArtistSortOption.recommended,
+            onTap: _showSortModal,
+          ),
+          AppGaps.gapSm,
+
           // Outline "Filters" Chip with Settings/Sliders Icon
           _buildOutlineChip(
+            key: const Key('filters_chip'),
             icon: Icons.tune,
             label: filterLabel,
             isActive: _hasActiveFilters,
@@ -331,6 +533,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
 
           // Filled Yellow "Books Open" Chip
           _buildFilledChip(
+            key: const Key('filter_chip_books_open'),
             icon: Icons.menu_book_rounded,
             label: 'Books Open',
             isActive: _filterBooksOpen,
@@ -340,6 +543,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
 
           // Filled Yellow "Queer Artists" Chip with Rainbow Emoji/Icon
           _buildFilledChip(
+            key: const Key('filter_chip_queer_artists'),
             emoji: '🌈',
             label: 'Queer Artists',
             isActive: _filterQueerArtists,
@@ -347,8 +551,39 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
           ),
           AppGaps.gapSm,
 
+          // Filled Yellow "Female" Chip
+          _buildFilledChip(
+            key: const Key('filter_chip_female'),
+            emoji: '♀️',
+            label: 'Female',
+            isActive: _filterFemale,
+            onTap: () => setState(() => _filterFemale = !_filterFemale),
+          ),
+          AppGaps.gapSm,
+
+          // Filled Yellow "BIPOC" Chip
+          _buildFilledChip(
+            key: const Key('filter_chip_bipoc'),
+            emoji: '✊🏾',
+            label: 'BIPOC',
+            isActive: _filterBipoc,
+            onTap: () => setState(() => _filterBipoc = !_filterBipoc),
+          ),
+          AppGaps.gapSm,
+
+          // Filled Yellow "Silent Appt" Chip
+          _buildFilledChip(
+            key: const Key('filter_chip_silent_appointment'),
+            emoji: '🤫',
+            label: 'Silent Appt',
+            isActive: _filterSilentAppointment,
+            onTap: () => setState(() => _filterSilentAppointment = !_filterSilentAppointment),
+          ),
+          AppGaps.gapSm,
+
           // Outline "Nearby" Chip
           _buildOutlineChip(
+            key: const Key('filter_chip_nearby'),
             icon: Icons.location_on_outlined,
             label: 'Nearby',
             isActive: _filterNearby,
@@ -417,12 +652,18 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
               ),
               onPressed: () {
                 setState(() {
+                  _searchController.clear();
+                  _searchQuery = '';
                   _filterBooksOpen = false;
                   _filterQueerArtists = false;
+                  _filterFemale = false;
+                  _filterBipoc = false;
+                  _filterSilentAppointment = false;
                   _filterNearby = false;
                   _selectedStyles.clear();
                   _maxDeposit = 200.0;
                   _maxPrice = 800.0;
+                  _sortOption = ArtistSortOption.recommended;
                 });
               },
               child: Text(
@@ -443,6 +684,9 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
   void _showFilterModal() {
     bool tempBooksOpen = _filterBooksOpen;
     bool tempQueerArtists = _filterQueerArtists;
+    bool tempFemale = _filterFemale;
+    bool tempBipoc = _filterBipoc;
+    bool tempSilentAppointment = _filterSilentAppointment;
     bool tempNearby = _filterNearby;
     final Set<String> tempSelectedStyles = Set<String>.from(_selectedStyles);
     double tempMaxDeposit = _maxDeposit;
@@ -518,6 +762,9 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                             setModalState(() {
                               tempBooksOpen = false;
                               tempQueerArtists = false;
+                              tempFemale = false;
+                              tempBipoc = false;
+                              tempSilentAppointment = false;
                               tempNearby = false;
                               tempSelectedStyles.clear();
                               tempMaxDeposit = 200.0;
@@ -623,6 +870,30 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                       subtitle: 'Highlight LGBTQ+ community artists',
                       value: tempQueerArtists,
                       onChanged: (val) => setModalState(() => tempQueerArtists = val),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildModalSwitchTile(
+                      emoji: '♀️',
+                      title: 'Female Artists',
+                      subtitle: 'Highlight female and women-owned artists',
+                      value: tempFemale,
+                      onChanged: (val) => setModalState(() => tempFemale = val),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildModalSwitchTile(
+                      emoji: '✊🏾',
+                      title: 'BIPOC Artists',
+                      subtitle: 'Black, Indigenous, & People of Color artists',
+                      value: tempBipoc,
+                      onChanged: (val) => setModalState(() => tempBipoc = val),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildModalSwitchTile(
+                      emoji: '🤫',
+                      title: 'Silent Appointments',
+                      subtitle: 'Artists offering quiet, low-interaction sessions',
+                      value: tempSilentAppointment,
+                      onChanged: (val) => setModalState(() => tempSilentAppointment = val),
                     ),
                     const SizedBox(height: 8),
                     _buildModalSwitchTile(
@@ -737,6 +1008,9 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                         setState(() {
                           _filterBooksOpen = tempBooksOpen;
                           _filterQueerArtists = tempQueerArtists;
+                          _filterFemale = tempFemale;
+                          _filterBipoc = tempBipoc;
+                          _filterSilentAppointment = tempSilentAppointment;
                           _filterNearby = tempNearby;
                           _selectedStyles.clear();
                           _selectedStyles.addAll(tempSelectedStyles);
@@ -758,6 +1032,164 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
               ),
             );
           },
+        );
+      },
+    );
+  }
+
+  /// Solid matte dark sheet modal for selecting sort order
+  void _showSortModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (modalContext) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF1E2020),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border(
+              top: BorderSide(color: Color(0xFF383B3B), width: 1.0),
+            ),
+          ),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.spaceLg,
+            AppSpacing.spaceMd,
+            AppSpacing.spaceLg,
+            MediaQuery.of(context).padding.bottom + AppSpacing.spaceLg,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Grab Handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF5A5E5E),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Title Header & Reset Button
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Sort Artists',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFF9FAFA),
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (_sortOption != ArtistSortOption.recommended)
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _sortOption = ArtistSortOption.recommended;
+                        });
+                        Navigator.pop(modalContext);
+                      },
+                      child: Text(
+                        'Reset',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFFEEC200),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              ...ArtistSortOption.values.map((option) {
+                final isSelected = _sortOption == option;
+                IconData icon;
+                switch (option) {
+                  case ArtistSortOption.recommended:
+                    icon = Icons.auto_awesome_rounded;
+                    break;
+                  case ArtistSortOption.distance:
+                    icon = Icons.near_me_outlined;
+                    break;
+                  case ArtistSortOption.rating:
+                    icon = Icons.star_rounded;
+                    break;
+                  case ArtistSortOption.deposit:
+                    icon = Icons.attach_money_rounded;
+                    break;
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      key: Key('sort_option_${option.name}'),
+                      onTap: () {
+                        setState(() {
+                          _sortOption = option;
+                        });
+                        Navigator.pop(modalContext);
+                      },
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: isSelected ? const Color(0xFF262312) : const Color(0xFF262929),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF383B3B),
+                            width: isSelected ? 1.5 : 1.0,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              icon,
+                              size: 20,
+                              color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF919696),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Text(
+                                option.label,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: isSelected ? const Color(0xFFEEC200) : const Color(0xFFF9FAFA),
+                                  fontSize: 14,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            if (isSelected)
+                              const Icon(
+                                Icons.check_circle_rounded,
+                                color: Color(0xFFEEC200),
+                                size: 20,
+                              )
+                            else
+                              Container(
+                                width: 20,
+                                height: 20,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: const Color(0xFF5A5E5E), width: 1.5),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
         );
       },
     );
@@ -821,10 +1253,8 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                   ],
                 ),
               ),
-              CupertinoSwitch(
+              FlashSwitch(
                 value: value,
-                activeColor: const Color(0xFF34C759),
-                trackColor: const Color(0xFF39393D),
                 onChanged: onChanged,
               ),
             ],
@@ -836,12 +1266,14 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
 
   /// Outline Filter Chip
   Widget _buildOutlineChip({
+    Key? key,
     required IconData icon,
     required String label,
     required bool isActive,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
+      key: key,
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -878,6 +1310,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
 
   /// Filled Yellow Filter Chip
   Widget _buildFilledChip({
+    Key? key,
     IconData? icon,
     String? emoji,
     required String label,
@@ -885,6 +1318,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
     required VoidCallback onTap,
   }) {
     return GestureDetector(
+      key: key,
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -1101,7 +1535,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
 }
 
 /// Custom snapping scroll physics that ensures each artist card snaps cleanly
-/// into the exact viewport position as the first card.
+/// into the exact viewport position as the first card with snappy, responsive mechanics.
 class SnappingScrollPhysics extends ScrollPhysics {
   final double itemHeight;
 
@@ -1118,12 +1552,30 @@ class SnappingScrollPhysics extends ScrollPhysics {
     );
   }
 
+  /// Snappier spring configuration with a subtle bounce:
+  /// higher stiffness and lower damping ratio (0.75) for a playful snap.
+  @override
+  SpringDescription get spring => SpringDescription.withDampingRatio(
+        mass: 0.5,
+        stiffness: 250.0,
+        ratio: 0.75,
+      );
+
   double _getTargetPixels(ScrollMetrics position, Tolerance tolerance, double velocity) {
     double page = position.pixels / itemHeight;
     if (velocity < -tolerance.velocity) {
       page -= 0.5;
     } else if (velocity > tolerance.velocity) {
       page += 0.5;
+    } else {
+      // Snappier drag release threshold: if the user dragged >= 35% of the card,
+      // commit to snapping into the next card instead of requiring a 50% pull.
+      final double progress = page - page.floor();
+      if (progress >= 0.35 && progress < 0.5) {
+        page += (0.5 - progress);
+      } else if (progress > 0.5 && progress <= 0.65) {
+        page -= (progress - 0.5);
+      }
     }
     return (page.roundToDouble() * itemHeight).clamp(
       position.minScrollExtent,
@@ -1145,7 +1597,7 @@ class SnappingScrollPhysics extends ScrollPhysics {
         spring,
         position.pixels,
         target,
-        velocity,
+        velocity.clamp(-1200.0, 1200.0),
         tolerance: tolerance,
       );
     }

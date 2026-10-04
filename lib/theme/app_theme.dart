@@ -62,6 +62,12 @@ class AppTheme {
   /// Active favorite heart color.
   static const Color favoriteActive = Color(0xFFEF4444);
 
+  /// Vibrant green accent for active switches (#34C759).
+  static const Color switchActive = Color(0xFF34C759);
+
+  /// Dark charcoal background for inactive switch tracks (#39393D).
+  static const Color switchInactive = Color(0xFF39393D);
+
   /// Action icon container background color.
   static const Color actionButtonBackground = Color(0xFF1E2020);
 
@@ -210,9 +216,9 @@ class AppTheme {
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const Color(0xFF34C759);
+            return switchActive;
           }
-          return const Color(0xFF39393D);
+          return switchInactive;
         }),
         trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
       ),

@@ -4,11 +4,13 @@ import '../../core/widgets/flash_bottom_nav_bar.dart';
 import '../../models/artist.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../services/auth_service.dart';
+import '../../services/stripe_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/tattoo_machine_icon.dart';
 import '../artist_profile_screen.dart';
 import '../splash_screen.dart';
+import 'artist_account_screen.dart';
 
 /// The interactive Artist Earnings & Payouts screen matching the Flash.Ink design.
 ///
@@ -17,6 +19,7 @@ import '../splash_screen.dart';
 class ArtistEarningsScreen extends StatefulWidget {
   final Artist? artist;
   final AuthService? authService;
+  final StripeService? stripeService;
   final bool isEmbeddedInTab;
   final VoidCallback? onBack;
   final ArtistEarningsData? earningsData;
@@ -25,6 +28,7 @@ class ArtistEarningsScreen extends StatefulWidget {
     super.key,
     this.artist,
     this.authService,
+    this.stripeService,
     this.isEmbeddedInTab = false,
     this.onBack,
     this.earningsData,
@@ -38,6 +42,8 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
   late final AuthService _authService = widget.authService ?? AuthService();
   late final ArtistEarningsData _earningsData =
       widget.earningsData ?? ArtistDashboardRepository.earningsData;
+  late final StripeService _stripeService =
+      widget.stripeService ?? StripeService(initialData: _earningsData);
 
   String get _artistDisplayName {
     if (widget.artist != null && widget.artist!.name.isNotEmpty) {
@@ -84,116 +90,19 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
     );
   }
 
-  void _showProfileSettingsModal() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E2121),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+  void _navigateToAccountScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ArtistAccountScreen(
+          artist: widget.artist,
+          authService: _authService,
+        ),
       ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF383C3C),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    _buildAvatarWidget(radius: 26),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _artistDisplayName,
-                            style: GoogleFonts.plusJakartaSans(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Resident Artist • Flash.Ink',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: const Color(0xFF8C9191),
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                const Divider(color: Color(0xFF2C2F30), height: 1),
-                ListTile(
-                  leading: const Icon(Icons.person_outline, color: Colors.white),
-                  title: Text(
-                    'View Public Profile',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  trailing: const Icon(Icons.chevron_right, color: Color(0xFF8C9191)),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    final effectiveArtist = widget.artist ??
-                        Artist.mockArtists.firstWhere(
-                          (a) => a.name.toLowerCase() == 'oddmaree',
-                          orElse: () => Artist.mockArtists.first,
-                        );
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ArtistProfileScreen(artist: effectiveArtist),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(color: Color(0xFF2C2F30), height: 1),
-                ListTile(
-                  key: const Key('modal_sign_out'),
-                  leading: const Icon(Icons.logout, color: Color(0xFFEF4444)),
-                  title: Text(
-                    'Sign Out',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFEF4444),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  onTap: () async {
-                    Navigator.pop(sheetContext);
-                    await _authService.signOut();
-                    if (mounted) {
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (_) => const SplashScreen()),
-                        (route) => false,
-                      );
-                    }
-                  },
-                ),
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
+
+  void _showProfileSettingsModal() => _navigateToAccountScreen();
 
   void _showBookingReceiptModal(BuildContext context, PastBookingEarningsItem item) {
     showModalBottomSheet(
@@ -442,9 +351,12 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
       ),
       builder: (sheetContext) {
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: Column(
+          child: Material(
+            color: const Color(0xFF1A1D1D),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -531,10 +443,11 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
               ],
             ),
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
   Widget _buildTaxItem({
     required String title,
@@ -543,44 +456,58 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
     Color statusColor = const Color(0xFFEEC200),
     required VoidCallback onTap,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF121414),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF282C2C)),
-      ),
-      child: ListTile(
-        title: Text(
-          title,
-          style: GoogleFonts.plusJakartaSans(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-          ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF121414),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF282C2C)),
         ),
-        subtitle: Text(
-          subtitle,
-          style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFF8C9191),
-            fontSize: 12,
-          ),
-        ),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: statusColor.withAlpha(35),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(
-            status,
-            style: GoogleFonts.plusJakartaSans(
-              color: statusColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 11,
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFF8C9191),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withAlpha(35),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                status,
+                style: GoogleFonts.plusJakartaSans(
+                  color: statusColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          ],
         ),
-        onTap: onTap,
       ),
     );
   }
@@ -743,6 +670,269 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
     );
   }
 
+  void _showInstantTransferModal(BuildContext context) {
+    final nextPayout = _earningsData.nextPayoutAmount;
+    final wholePart = nextPayout.truncate();
+    final centsPart =
+        ((nextPayout - wholePart) * 100).round().toString().padLeft(2, '0');
+    final formattedWhole = _formatWithCommas(wholePart);
+    final fee = nextPayout * 0.015;
+    final netAmount = nextPayout - fee;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1D1D),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF383C3C),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.goldContainer,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.goldBorder, width: 1),
+                      ),
+                      child: const Icon(
+                        Icons.bolt_rounded,
+                        color: AppTheme.gold,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Instant Stripe Transfer',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Direct deposit via Stripe Connect',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF8C9191),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF121414),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF282C2C)),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Available Balance',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF8C9191),
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            '\$$formattedWhole.$centsPart',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Transfer Fee (1.5%)',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF8C9191),
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            '-\$${fee.toStringAsFixed(2)}',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF8C9191),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 10),
+                        child: Divider(color: Color(0xFF282C2C), height: 1),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'You Receive',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            '\$${netAmount.toStringAsFixed(2)}',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: AppTheme.gold,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF121414),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF282C2C)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.account_balance, color: Color(0xFF8C9191), size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Destination: Chase Bank •••• 4821',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF22C55E).withAlpha(35),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'INSTANT',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF22C55E),
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    key: const Key('confirm_instant_transfer_button'),
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Transfer of \$${netAmount.toStringAsFixed(2)} initiated via Stripe Direct Deposit.',
+                            style: GoogleFonts.plusJakartaSans(color: Colors.white),
+                          ),
+                          backgroundColor: const Color(0xFF1E2121),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.gold,
+                      foregroundColor: const Color(0xFF121414),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      'Transfer \$${netAmount.toStringAsFixed(2)} Now via Stripe',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Redirecting to Stripe Express Dashboard...',
+                            style: GoogleFonts.plusJakartaSans(color: Colors.white),
+                          ),
+                          backgroundColor: const Color(0xFF1E2121),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.open_in_new, size: 14, color: Color(0xFF8C9191)),
+                    label: Text(
+                      'Manage in Stripe Express',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF8C9191),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final content = SafeArea(
@@ -754,11 +944,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
           children: [
             _buildTopActionBar(),
             const SizedBox(height: 20),
-            _buildHeroNextPayoutCard(),
-            const SizedBox(height: 28),
-            _buildEarningsTitle(),
-            const SizedBox(height: 16),
-            _buildMetricsRow(),
+            _buildHeroAvailableFundsCard(),
             const SizedBox(height: 28),
             _buildPastBookingsSection(),
             const SizedBox(height: 24),
@@ -837,124 +1023,296 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
     );
   }
 
-  /// Hero Next Payout Card with bold amount and deposit schedule
-  Widget _buildHeroNextPayoutCard() {
-    final nextPayout = _earningsData.nextPayoutAmount;
-    final wholePart = nextPayout.truncate();
-    final centsPart = ((nextPayout - wholePart) * 100).round().toString().padLeft(2, '0');
-
-    // Format thousands with commas
+  /// Hero Available Funds Card reflecting Stripe API balance with embedded YTD Earnings
+  Widget _buildHeroAvailableFundsCard() {
+    final availableFunds = _earningsData.availableFundsAmount;
+    final wholePart = availableFunds.truncate();
+    final centsPart =
+        ((availableFunds - wholePart) * 100).round().toString().padLeft(2, '0');
     final formattedWhole = _formatWithCommas(wholePart);
 
     return Container(
-      key: const Key('next_payout_card'),
+      key: const Key('available_funds_card'),
       width: double.infinity,
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E2121),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF282C2C)),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF232727),
+            Color(0xFF1B1E1E),
+            Color(0xFF161818),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: AppTheme.goldBorder,
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.gold.withAlpha(20),
+            blurRadius: 28,
+            spreadRadius: -2,
+            offset: const Offset(0, 8),
+          ),
+          BoxShadow(
+            color: Colors.black.withAlpha(120),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
+        key: const Key('next_payout_card'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Available Funds Header & Stripe Badge
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
-                'Next Payout',
-                style: GoogleFonts.plusJakartaSans(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+              Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFF22C55E),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0x6622C55E),
+                          blurRadius: 6,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Available Funds',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF15221B),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF22C55E).withAlpha(80),
+                    width: 1.2,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const _BanknoteIconWidget(),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Stripe Active',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF22C55E),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const _BanknoteIconWidget(),
             ],
           ),
           const SizedBox(height: 16),
+          // Large Available Balance Display
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(
-                '\$$formattedWhole',
-                style: GoogleFonts.plusJakartaSans(
-                  color: Colors.white,
-                  fontSize: 44,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.5,
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '\$',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppTheme.gold,
+                        fontSize: 34,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    TextSpan(
+                      text: formattedWhole,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontSize: 44,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               Text(
                 '.$centsPart',
                 style: GoogleFonts.plusJakartaSans(
-                  color: Colors.white,
+                  color: const Color(0xFFC5C8C8),
                   fontSize: 26,
                   fontWeight: FontWeight.w800,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          RichText(
-            text: TextSpan(
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 14,
-                color: const Color(0xFF8C9191),
-              ),
+          const SizedBox(height: 12),
+          // Bank destination subtext pill
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF121414).withAlpha(180),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF2A2E2E)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const TextSpan(text: 'to be deposited '),
-                TextSpan(
-                  text: _earningsData.payoutDepositDate,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+                const Icon(
+                  Icons.account_balance_rounded,
+                  color: AppTheme.gold,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Ready to transfer to Chase Bank •••• 4821',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    color: const Color(0xFFC5C8C8),
+                    fontWeight: FontWeight.w500,
                   ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          // Primary Transfer to Bank CTA
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: ElevatedButton(
+              key: const Key('instant_transfer_button'),
+              onPressed: () => _showInstantTransferModal(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.gold,
+                foregroundColor: const Color(0xFF121414),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.bolt_rounded, size: 20, color: Color(0xFF121414)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Transfer to Bank',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 18),
+            child: Divider(color: Color(0xFF2E3232), height: 1),
+          ),
+          // Integrated YTD Earnings Container inside Hero Card
+          Container(
+            key: const Key('hero_ytd_earnings'),
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF141717),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF282C2C)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${_earningsData.ytdYear} YTD EARNINGS',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppTheme.gold,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    Container(
+                      key: const Key('metric_card_ytd'),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E2121),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'YTD ${_earningsData.ytdYear}',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFF8C9191),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '\$${_formatWithCommas(_earningsData.ytdAmount)}',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Total volume earned this year',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF8C9191),
+                        fontSize: 12,
+                      ),
+                    ),
+                    Text(
+                      'MTD: \$${_formatWithCommas(_earningsData.mtdAmount)}',
+                      key: const Key('metric_card_mtd'),
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF22C55E),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
         ],
       ),
-    );
-  }
-
-  /// Section heading: "Earnings"
-  Widget _buildEarningsTitle() {
-    return Text(
-      'Earnings',
-      style: GoogleFonts.plusJakartaSans(
-        color: Colors.white,
-        fontSize: 24,
-        fontWeight: FontWeight.w800,
-      ),
-    );
-  }
-
-  /// 2-Column Metrics Cards: MTD and YTD
-  Widget _buildMetricsRow() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildMetricCard(
-            key: const Key('metric_card_mtd'),
-            tag: 'MTD',
-            timeframe: _earningsData.mtdMonth,
-            amount: '\$${_formatWithCommas(_earningsData.mtdAmount)}',
-          ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: _buildMetricCard(
-            key: const Key('metric_card_ytd'),
-            tag: 'YTD',
-            timeframe: _earningsData.ytdYear,
-            amount: '\$${_formatWithCommas(_earningsData.ytdAmount)}',
-          ),
-        ),
-      ],
     );
   }
 
@@ -1139,43 +1497,37 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
     required String label,
     required VoidCallback onTap,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: key,
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        splashColor: const Color(0xFFEEC200).withAlpha(20),
-        highlightColor: const Color(0xFFEEC200).withAlpha(10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 22),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E2121),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: const Color(0xFF383C3C),
-              width: 1.2,
+    return GestureDetector(
+      key: key,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 22),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E2121),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFF383C3C),
+            width: 1.2,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: const Color(0xFFC5CECE),
+              size: 26,
             ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                color: const Color(0xFFC5CECE),
-                size: 26,
+            const SizedBox(height: 10),
+            Text(
+              label,
+              style: GoogleFonts.plusJakartaSans(
+                color: const Color(0xFFD4D8D8),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
               ),
-              const SizedBox(height: 10),
-              Text(
-                label,
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFD4D8D8),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

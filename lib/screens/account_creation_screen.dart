@@ -14,6 +14,7 @@ import 'artist_dashboard/artist_dashboard_screen.dart';
 import 'main_feed_screen.dart';
 import 'profile_setup_screen.dart';
 import '../widgets/adaptive_glass_container.dart';
+import '../widgets/social_auth_buttons.dart';
 
 class AccountCreationScreen extends StatefulWidget {
   final String role;
@@ -32,6 +33,8 @@ class AccountCreationScreen extends StatefulWidget {
 class _AccountCreationScreenState extends State<AccountCreationScreen> {
   late final AuthService _authService = widget.authService ?? AuthService();
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
+  bool _isAppleLoading = false;
 
   void _bypassEntireAccountCreation([BuildContext? modalContext]) {
     if (modalContext != null) {
@@ -80,8 +83,16 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
     );
   }
 
-  Future<void> _handleOAuth(Future<UserCredential?> Function() signInMethod) async {
-    setState(() => _isLoading = true);
+  Future<void> _handleOAuth(
+    Future<UserCredential?> Function() signInMethod, {
+    bool isGoogle = false,
+    bool isApple = false,
+  }) async {
+    setState(() {
+      _isLoading = true;
+      if (isGoogle) _isGoogleLoading = true;
+      if (isApple) _isAppleLoading = true;
+    });
     try {
       final credential = await signInMethod();
       if (credential != null && credential.user != null) {
@@ -104,7 +115,11 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
       _showErrorSnackBar(e.toString());
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _isGoogleLoading = false;
+          _isAppleLoading = false;
+        });
       }
     }
   }
@@ -634,66 +649,31 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                             AdaptiveGlassContainer(
                               borderRadius: 20.0,
                               padding: const EdgeInsets.all(AppSpacing.spaceMd),
-                              child: Column(
-                                children: [
-                                  // Google OAuth Button
-                                  AppButtons.primaryCTA(
-                                    icon: Icons.g_mobiledata,
-                                    text: 'Continue with Google',
-                                    onPressed: _isLoading ? null : () => _handleOAuth(_authService.signInWithGoogle),
-                                    backgroundColor: const Color(0xFFF9FAFA),
-                                    foregroundColor: const Color(0xFF121414),
-                                  ),
-                                  AppGaps.gapSm,
-                                  // Apple OAuth Button
-                                  AppButtons.primaryCTA(
-                                    icon: Icons.apple,
-                                    text: 'Continue with Apple',
-                                    onPressed: _isLoading ? null : () => _handleOAuth(_authService.signInWithApple),
-                                    backgroundColor: const Color(0xFF1E2020),
-                                    foregroundColor: const Color(0xFFF9FAFA),
-                                  ),
-                                  AppGaps.gapSm,
-                                  // Email / Password Button
-                                  AppButtons.primaryCTA(
-                                    icon: Icons.mail_outline,
-                                    text: 'Continue with Email',
-                                    onPressed: _isLoading ? null : _showEmailAuthModal,
-                                    backgroundColor: const Color(0xFF262929),
-                                    foregroundColor: const Color(0xFFF9FAFA),
-                                  ),
-                                ],
+                              child: AppButtons.primaryCTA(
+                                icon: Icons.mail_outline,
+                                text: 'Continue with Email',
+                                onPressed: _isLoading ? null : _showEmailAuthModal,
+                                backgroundColor: const Color(0xFF262929),
+                                foregroundColor: const Color(0xFFF9FAFA),
                               ),
                             ),
                             AppGaps.gapLg,
-                            // Visual Divider with "OR"
-                            Row(
-                              children: [
-                                const Expanded(
-                                  child: Divider(
-                                    color: Color(0xFF333737),
-                                    thickness: 1,
-                                  ),
-                                ),
-                                Padding(
-                                  padding: AppPadding.screenHorizontal,
-                                  child: Text(
-                                    'OR',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      color: const Color(0xFF919696),
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1.5,
-                                    ),
-                                  ),
-                                ),
-                                const Expanded(
-                                  child: Divider(
-                                    color: Color(0xFF333737),
-                                    thickness: 1,
-                                  ),
-                                ),
-                              ],
+                            // Visual Divider with "OR CONTINUE WITH"
+                            const SocialAuthDivider(),
+                            AppGaps.gapMd,
+                            // Circular Google & Apple buttons
+                            SocialAuthRow(
+                              onGooglePressed: () => _handleOAuth(
+                                _authService.signInWithGoogle,
+                                isGoogle: true,
+                              ),
+                              onApplePressed: () => _handleOAuth(
+                                _authService.signInWithApple,
+                                isApple: true,
+                              ),
+                              isLoading: _isLoading,
+                              isGoogleLoading: _isGoogleLoading,
+                              isAppleLoading: _isAppleLoading,
                             ),
                             AppGaps.gapLg,
                             // Guest Mode Action

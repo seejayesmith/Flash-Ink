@@ -7,6 +7,7 @@ import 'package:firebase_core_platform_interface/test.dart';
 
 import 'package:flash_ink/models/artist.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_dashboard_screen.dart';
+import 'package:flash_ink/screens/artist_dashboard/artist_account_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/appointment_detail_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_books_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_calendar_screen.dart';
@@ -106,6 +107,7 @@ void main() {
 
       // 6. Pending Requests section
       expect(find.text('Pending Requests'), findsOneWidget);
+      expect(find.text('12 requests'), findsOneWidget);
       expect(find.text('Neo-traditional panther head on outer thigh. Looking for heavy blackwork.'), findsOneWidget);
 
       // 7. Bottom Navigation bar
@@ -230,15 +232,16 @@ void main() {
       expect(find.byType(ArtistDashboardScreen), findsOneWidget);
     });
 
-    testWidgets('Tapping avatar opens profile modal with View Public Profile', (tester) async {
+    testWidgets('Tapping avatar opens ArtistAccountScreen with profile and settings', (tester) async {
       await tester.pumpWidget(buildTestWidget());
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('artist_avatar_button')));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('modal_view_public_profile')), findsOneWidget);
-      expect(find.byKey(const Key('modal_sign_out')), findsOneWidget);
+      expect(find.byType(ArtistAccountScreen), findsOneWidget);
+      expect(find.byKey(const Key('artist_account_view_public_profile_button')), findsOneWidget);
+      expect(find.byKey(const Key('artist_account_sign_out_button')), findsOneWidget);
     });
 
     testWidgets('Bottom navigation tabs switch smoothly between views', (tester) async {

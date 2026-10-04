@@ -10,6 +10,7 @@ import '../../widgets/flash_image.dart';
 import '../artist_profile_screen.dart';
 import '../splash_screen.dart';
 import 'appointment_detail_screen.dart';
+import 'artist_account_screen.dart';
 import 'artist_books_screen.dart';
 import 'artist_calendar_screen.dart';
 import 'artist_earnings_screen.dart';
@@ -131,133 +132,19 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
     );
   }
 
-  void _showProfileSettingsModal() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E2121),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+  void _navigateToAccountScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ArtistAccountScreen(
+          artist: widget.artist,
+          authService: _authService,
+        ),
       ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF383C3C),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                _buildAvatarWidget(radius: 36),
-                const SizedBox(height: 12),
-                Text(
-                  _artistDisplayName,
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Portland, OR • Flash & Custom',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFF919696),
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                ListTile(
-                  key: const Key('modal_view_public_profile'),
-                  leading: const Icon(Icons.remove_red_eye_outlined, color: Color(0xFFEEC200)),
-                  title: Text(
-                    'View Public Profile',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Preview how clients see your portfolio & flash',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFF8C9191),
-                      fontSize: 12,
-                    ),
-                  ),
-                  trailing: const Icon(Icons.chevron_right, color: Color(0xFF8C9191)),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    final effectiveArtist = widget.artist ??
-                        Artist.mockArtists.firstWhere(
-                          (a) => a.name.toLowerCase() == 'oddmaree',
-                          orElse: () => Artist.mockArtists.first,
-                        );
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ArtistProfileScreen(artist: effectiveArtist),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(color: Color(0xFF2C2F30), height: 1),
-                ListTile(
-                  leading: const Icon(Icons.tune_outlined, color: Colors.white),
-                  title: Text(
-                    'Edit Pricing & Policies',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  trailing: const Icon(Icons.chevron_right, color: Color(0xFF8C9191)),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Pricing & Policies settings coming soon.'),
-                        backgroundColor: Color(0xFF262929),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(color: Color(0xFF2C2F30), height: 1),
-                ListTile(
-                  key: const Key('modal_sign_out'),
-                  leading: const Icon(Icons.logout, color: Color(0xFFEF4444)),
-                  title: Text(
-                    'Sign Out',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFEF4444),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  onTap: () async {
-                    Navigator.pop(sheetContext);
-                    await _authService.signOut();
-                    if (mounted) {
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (_) => const SplashScreen()),
-                        (route) => false,
-                      );
-                    }
-                  },
-                ),
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
+
+  void _showProfileSettingsModal() => _navigateToAccountScreen();
 
   @override
   Widget build(BuildContext context) {
@@ -1024,37 +911,31 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
     );
   }
 
-  /// Pending Requests section with red counter badge and request cards
+  /// Pending Requests section with right-aligned request counter and cards
   Widget _buildPendingRequestsSection() {
+    final count = _stats.pendingCount;
+    final countText = count == 1 ? '1 request' : '$count requests';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Container(
-              width: 24,
-              height: 24,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color(0xFFEF4444),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                '${_stats.pendingCount}',
-                style: GoogleFonts.plusJakartaSans(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
             Text(
               'Pending Requests',
               style: GoogleFonts.plusJakartaSans(
                 color: Colors.white,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              countText,
+              style: GoogleFonts.plusJakartaSans(
+                color: AppTheme.navInactiveAlt,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],

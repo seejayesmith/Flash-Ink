@@ -7,8 +7,10 @@ import '../../models/artist_dashboard_data.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/flash_image.dart';
+import '../../widgets/flash_switch.dart';
 import '../../widgets/tattoo_machine_icon.dart';
 import '../artist_profile_screen.dart';
+import 'artist_account_screen.dart';
 
 /// Screen allowing tattoo artists to manage and create their "Books" schedule.
 ///
@@ -319,15 +321,13 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
         GestureDetector(
           key: const Key('books_artist_avatar_button'),
           onTap: () {
-            final effectiveArtist = widget.artist ??
-                Artist.mockArtists.firstWhere(
-                  (a) => a.name.toLowerCase() == 'oddmaree',
-                  orElse: () => Artist.mockArtists.first,
-                );
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => ArtistProfileScreen(artist: effectiveArtist),
+                builder: (_) => ArtistAccountScreen(
+                  artist: widget.artist,
+                  authService: widget.authService,
+                ),
               ),
             );
           },
@@ -450,13 +450,9 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
                   ),
                 ],
               ),
-              Switch.adaptive(
+              FlashSwitch(
                 key: const Key('books_status_switch'),
                 value: _isBooksOpen,
-                activeColor: const Color(0xFFEEC200),
-                activeTrackColor: const Color(0xFFEEC200).withAlpha(100),
-                inactiveThumbColor: const Color(0xFF8C9191),
-                inactiveTrackColor: const Color(0xFF262929),
                 onChanged: (val) {
                   setState(() => _isBooksOpen = val);
                 },
@@ -953,12 +949,8 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
               ],
             ),
           ),
-          Switch.adaptive(
+          FlashSwitch(
             value: value,
-            activeColor: const Color(0xFFEEC200),
-            activeTrackColor: const Color(0xFFEEC200).withAlpha(100),
-            inactiveThumbColor: const Color(0xFF8C9191),
-            inactiveTrackColor: const Color(0xFF262929),
             onChanged: onChanged,
           ),
         ],

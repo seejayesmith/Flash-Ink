@@ -120,6 +120,7 @@ class Artist {
   final bool isBooksOpen;
   final String location;
   final String studioType;
+  final String distance;
   final double rating;
   final int availablePieces;
   final int minDeposit;
@@ -143,6 +144,7 @@ class Artist {
     this.isBooksOpen = true,
     required this.location,
     required this.studioType,
+    this.distance = '1.2 mi',
     required this.rating,
     required this.availablePieces,
     required this.minDeposit,
@@ -212,6 +214,7 @@ class Artist {
     bool? isBooksOpen,
     String? location,
     String? studioType,
+    String? distance,
     double? rating,
     int? availablePieces,
     int? minDeposit,
@@ -233,6 +236,7 @@ class Artist {
       isBooksOpen: isBooksOpen ?? this.isBooksOpen,
       location: location ?? this.location,
       studioType: studioType ?? this.studioType,
+      distance: distance ?? this.distance,
       rating: rating ?? this.rating,
       availablePieces: availablePieces ?? this.availablePieces,
       minDeposit: minDeposit ?? this.minDeposit,
@@ -258,10 +262,11 @@ class Artist {
       isBooksOpen: true,
       location: 'Portland, OR',
       studioType: 'Private Studio',
+      distance: '1.2 mi',
       rating: 5.0,
       availablePieces: 12,
       minDeposit: 50,
-      tags: ['Traditional', 'Queer Artists'],
+      tags: ['Traditional', 'Queer Artists', 'Female', 'Silent Appointment'],
       previewImages: [
         'assets/images/flash_traditional_dagger.jpg',
         'assets/images/flash_blackwork_skull.jpg',
@@ -391,10 +396,11 @@ class Artist {
       isBooksOpen: true,
       location: 'San Francisco, CA',
       studioType: 'Black Veil Studio',
+      distance: '2.8 mi',
       rating: 4.9,
       availablePieces: 8,
       minDeposit: 75,
-      tags: ['Japanese', 'Queer Artists'],
+      tags: ['Japanese', 'Queer Artists', 'BIPOC'],
       previewImages: [
         'assets/images/flash_japanese_koi.jpg',
         'assets/images/flash_japanese_oni.jpg',
@@ -524,10 +530,11 @@ class Artist {
       isBooksOpen: false,
       location: 'Brooklyn, NY',
       studioType: 'Rose & Dagger',
+      distance: '4.5 mi',
       rating: 5.0,
       availablePieces: 15,
       minDeposit: 100,
-      tags: ['Fine Line', 'Blackwork'],
+      tags: ['Fine Line', 'Blackwork', 'Female', 'BIPOC', 'Silent Appointment'],
       previewImages: [
         'assets/images/flash_fineline_flora.jpg',
         'assets/images/flash_butterfly.jpg',
@@ -657,10 +664,11 @@ class Artist {
       isBooksOpen: true,
       location: 'Austin, TX',
       studioType: 'Golden Needle',
+      distance: '8.3 mi',
       rating: 4.8,
       availablePieces: 6,
       minDeposit: 60,
-      tags: ['Realism', 'Traditional'],
+      tags: ['Realism', 'Traditional', 'BIPOC', 'Silent Appointment'],
       previewImages: [
         'assets/images/flash_traditional_panther.jpg',
         'assets/images/flash_anchor.jpg',

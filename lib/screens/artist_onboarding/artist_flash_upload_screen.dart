@@ -8,6 +8,7 @@ import '../../models/artist.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/artist_stepper_header.dart';
+import '../../widgets/flash_switch.dart';
 import '../../widgets/tattoo_background_wrapper.dart';
 import 'artist_identity_tags_screen.dart';
 
@@ -604,13 +605,9 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
                   ),
                 ],
               ),
-              Switch.adaptive(
+              FlashSwitch(
                 key: const Key('repeatable_switch'),
                 value: _isRepeatable,
-                activeColor: const Color(0xFF34C759),
-                activeTrackColor: const Color(0xFF34C759),
-                inactiveTrackColor: const Color(0xFF39393D),
-                applyCupertinoTheme: true,
                 onChanged: (val) {
                   setState(() => _isRepeatable = val);
                 },

@@ -11,8 +11,8 @@ import 'animated_favorite_button.dart';
 /// Features:
 /// 1. Top Section: 2x2 Artwork Grid showcasing 4 preview images of flash artwork/tattoos.
 /// 2. Middle Section: Overlapping circular artist avatar, display name, "Books open" tag,
-///    and location/studio sub-details.
-/// 3. Stats Row: Contained 3-column pill for Rating, Available Flash Count, and Min Deposit.
+///    and studio sub-details.
+/// 3. Stats Row: Contained 3-column pill for Distance, Available Flash Count, and Min Deposit.
 /// 4. Action Row: Full-width "VIEW PROFILE" primary accent CTA and circular favorite heart button.
 class ArtistCard extends StatelessWidget {
   final Artist artist;
@@ -186,32 +186,9 @@ class ArtistCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 3),
-                      // Location and Studio Type Row
+                      // Studio Name Row
                       Row(
                         children: [
-                          const Icon(
-                            Icons.location_on_outlined,
-                            size: 14,
-                            color: Color(0xFF919696),
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            artist.location,
-                            style: GoogleFonts.plusJakartaSans(
-                              color: const Color(0xFF919696),
-                              fontSize: 13,
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 6),
-                            child: Text(
-                              '•',
-                              style: GoogleFonts.plusJakartaSans(
-                                color: const Color(0xFF6B7280),
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
                           const Icon(
                             Icons.storefront_outlined,
                             size: 14,
@@ -289,7 +266,7 @@ class ArtistCard extends StatelessWidget {
     );
   }
 
-  /// Stats Row container with 3 columns (Rating, Avail Pieces, Min Deposit)
+  /// Stats Row container with 3 columns (Distance, Avail Pieces, Min Deposit)
   Widget _buildStatsRow() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
@@ -303,33 +280,37 @@ class ArtistCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Column 1: Rating
+          // Column 1: Distance
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.star,
-                      size: 15,
-                      color: Color(0xFFEEC200),
-                    ),
-                    const SizedBox(width: 3),
-                    Text(
-                      artist.rating.toStringAsFixed(1),
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFFF9FAFA),
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.location_on_outlined,
+                        size: 14,
+                        color: Color(0xFF919696),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 3),
+                      Text(
+                        artist.distance,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFFF9FAFA),
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'RATING',
+                  'DISTANCE',
                   style: GoogleFonts.plusJakartaSans(
                     color: const Color(0xFF919696),
                     fontSize: 10,

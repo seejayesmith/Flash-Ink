@@ -19,6 +19,7 @@ import 'package:flash_ink/screens/artist_onboarding/artist_identity_tags_screen.
 import 'package:flash_ink/screens/artist_onboarding/artist_choose_style_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_share_link_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_dashboard_screen.dart';
+import 'package:flash_ink/widgets/social_auth_buttons.dart';
 import 'package:flash_ink/services/auth_service.dart';
 
 class MockUser extends Fake implements User {
@@ -200,8 +201,10 @@ void main() {
       expect(find.text('Phone Number'), findsOneWidget);
       expect(find.text('Password'), findsOneWidget);
       expect(find.text('CREATE ACCOUNT'), findsOneWidget);
-      expect(find.text('Google'), findsOneWidget);
-      expect(find.text('Apple'), findsOneWidget);
+      expect(find.byType(CircularGoogleSignInButton), findsOneWidget);
+      expect(find.byType(CircularAppleSignInButton), findsOneWidget);
+      expect(find.byKey(const Key('google_sign_in_button')), findsOneWidget);
+      expect(find.byKey(const Key('apple_sign_in_button')), findsOneWidget);
       expect(find.byType(TattooBackgroundWrapper), findsOneWidget);
       expect(find.byType(AdaptiveGlassContainer), findsWidgets);
       expect(find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().contains('Already have an account')), findsOneWidget);

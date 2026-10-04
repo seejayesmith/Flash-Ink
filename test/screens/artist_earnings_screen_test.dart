@@ -86,25 +86,19 @@ void main() {
       expect(find.byKey(const Key('earnings_tattoo_logo')), findsOneWidget);
       expect(find.byKey(const Key('earnings_avatar_button')), findsOneWidget);
 
-      // 2. Next Payout card
-      expect(find.byKey(const Key('next_payout_card')), findsOneWidget);
-      expect(find.text('Next Payout'), findsOneWidget);
+      // 2. Available Funds card
+      expect(find.byKey(const Key('available_funds_card')), findsOneWidget);
+      expect(find.text('Available Funds'), findsOneWidget);
       expect(find.text('\$1,256'), findsOneWidget);
       expect(find.text('.09'), findsOneWidget);
-      expect(find.text('Friday August 14th'), findsOneWidget);
+      expect(find.text('Transfer to Bank'), findsOneWidget);
+      expect(find.byKey(const Key('instant_transfer_button')), findsOneWidget);
 
-      // 3. Earnings section header
-      expect(find.text('Earnings'), findsOneWidget);
-
-      // 4. MTD and YTD metric cards
-      expect(find.byKey(const Key('metric_card_mtd')), findsOneWidget);
-      expect(find.byKey(const Key('metric_card_ytd')), findsOneWidget);
-      expect(find.text('MTD'), findsOneWidget);
-      expect(find.text('AUGUST'), findsOneWidget);
-      expect(find.text('\$3,467'), findsOneWidget);
-      expect(find.text('YTD'), findsOneWidget);
-      expect(find.text('2026'), findsOneWidget);
+      // 3. Embedded YTD Earnings card inside Hero Container
+      expect(find.byKey(const Key('hero_ytd_earnings')), findsOneWidget);
+      expect(find.text('2026 YTD EARNINGS'), findsOneWidget);
       expect(find.text('\$16,987'), findsOneWidget);
+      expect(find.textContaining('MTD: \$3,467'), findsOneWidget);
 
       // 5. Past Bookings section
       expect(find.text('Past Bookings'), findsOneWidget);
@@ -160,6 +154,9 @@ void main() {
       await tester.pumpWidget(buildTestWidget());
       await tester.pumpAndSettle();
 
+      await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+
       await tester.tap(find.byKey(const Key('action_tax_docs')));
       await tester.pumpAndSettle();
 
@@ -172,6 +169,9 @@ void main() {
     testWidgets('Tapping Bank Info opens banking and payout details modal',
         (tester) async {
       await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -300));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('action_bank_info')));
@@ -193,6 +193,28 @@ void main() {
 
       expect(find.text('View Public Profile'), findsOneWidget);
       expect(find.byKey(const Key('modal_sign_out')), findsOneWidget);
+    });
+
+    testWidgets('Tapping Instant Transfer opens Stripe modal and initiates transfer',
+        (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('instant_transfer_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Instant Stripe Transfer'), findsOneWidget);
+      expect(find.text('Direct deposit via Stripe Connect'), findsOneWidget);
+      expect(find.text('Destination: Chase Bank •••• 4821'), findsOneWidget);
+      expect(find.byKey(const Key('confirm_instant_transfer_button')),
+          findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('confirm_instant_transfer_button')));
+      await tester.pumpAndSettle();
+
+      expect(
+          find.textContaining('Transfer of \$1237.25 initiated via Stripe Direct Deposit.'),
+          findsOneWidget);
     });
   });
 }

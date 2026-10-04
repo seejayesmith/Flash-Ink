@@ -16,6 +16,7 @@ class DashboardAppointment {
   final bool isConsultation;
   final Color dotColor;
   final DateTime? scheduledDate;
+  final String? visitType;
 
   const DashboardAppointment({
     required this.id,
@@ -32,9 +33,42 @@ class DashboardAppointment {
     this.isConsultation = false,
     this.dotColor = const Color(0xFF22C55E),
     this.scheduledDate,
+    this.visitType,
   });
 
   int get balanceDue => fullPrice - depositPaid;
+
+  String get effectiveVisitType {
+    if (visitType != null && visitType!.trim().isNotEmpty) {
+      return visitType!.trim();
+    }
+    if (isConsultation) {
+      return 'Consultation';
+    }
+    final lower = serviceType.toLowerCase();
+    if (lower.contains('cover-up') || lower.contains('cover up')) {
+      return 'Cover-up';
+    }
+    if (lower.contains('touch-up') || lower.contains('touch up')) {
+      return 'Touch-up';
+    }
+    if (lower.contains('flash')) {
+      return 'Flash Tattoo';
+    }
+    if (lower.contains('custom')) {
+      return 'Custom Tattoo';
+    }
+    if (lower.contains('fine line') || lower.contains('fineline')) {
+      return 'Fine Line';
+    }
+    if (lower.contains('traditional')) {
+      return 'Traditional';
+    }
+    if (lower.contains('session')) {
+      return 'Session Inking';
+    }
+    return 'Tattoo Session';
+  }
 }
 
 /// Represents an incoming booking / custom request waiting for artist review.
@@ -107,6 +141,7 @@ class PastBookingEarningsItem {
 /// Earnings metrics and payout information for the artist.
 class ArtistEarningsData {
   final double nextPayoutAmount;
+  double get availableFundsAmount => nextPayoutAmount;
   final String payoutDepositDate;
   final int mtdAmount;
   final String mtdMonth;
@@ -479,7 +514,9 @@ class ArtistDashboardRepository {
       notes: 'Initial sizing and custom script lettering discussion.',
       depositPaid: 0,
       fullPrice: 50,
+      artworkImageUrl: 'assets/images/flash_traditional_dagger.jpg',
       isConsultation: true,
+      visitType: 'Consultation',
       dotColor: Color(0xFF919696),
     ),
     DashboardAppointment(
@@ -494,7 +531,9 @@ class ArtistDashboardRepository {
       notes: 'Design review and stencil placement check.',
       depositPaid: 0,
       fullPrice: 50,
+      artworkImageUrl: 'assets/images/flash_traditional_dagger.jpg',
       isConsultation: true,
+      visitType: 'Consultation',
       dotColor: const Color(0xFF919696),
     ),
     DashboardAppointment(
@@ -511,6 +550,7 @@ class ArtistDashboardRepository {
       fullPrice: 420,
       artworkImageUrl: 'assets/images/flash_japanese_oni.jpg',
       isConsultation: false,
+      visitType: 'Cover-up',
       dotColor: const Color(0xFF22C55E),
     ),
     DashboardAppointment(
@@ -527,6 +567,7 @@ class ArtistDashboardRepository {
       fullPrice: 150,
       artworkImageUrl: 'assets/images/flash_fineline_flora.jpg',
       isConsultation: true,
+      visitType: 'Consultation',
       dotColor: const Color(0xFF22C55E),
     ),
     DashboardAppointment(
@@ -543,6 +584,7 @@ class ArtistDashboardRepository {
       fullPrice: 150,
       artworkImageUrl: 'assets/images/flash_fineline_flora.jpg',
       isConsultation: true,
+      visitType: 'Flash Tattoo',
       dotColor: const Color(0xFF22C55E),
     ),
 
@@ -560,6 +602,7 @@ class ArtistDashboardRepository {
       depositPaid: 100,
       fullPrice: 400,
       artworkImageUrl: 'assets/images/flash_tiger_tattoo.jpg',
+      visitType: 'Custom Tattoo',
       dotColor: const Color(0xFF22C55E),
     ),
     DashboardAppointment(
@@ -575,6 +618,7 @@ class ArtistDashboardRepository {
       depositPaid: 60,
       fullPrice: 280,
       artworkImageUrl: 'assets/images/flash_anchor.jpg',
+      visitType: 'Flash Tattoo',
       dotColor: const Color(0xFF22C55E),
     ),
     DashboardAppointment(
@@ -589,7 +633,9 @@ class ArtistDashboardRepository {
       notes: 'Mapping out dragon flow across back and ribs.',
       depositPaid: 0,
       fullPrice: 75,
+      artworkImageUrl: 'assets/images/flash_dragon_snake.jpg',
       isConsultation: true,
+      visitType: 'Consultation',
       dotColor: const Color(0xFF919696),
     ),
     DashboardAppointment(
@@ -605,6 +651,7 @@ class ArtistDashboardRepository {
       depositPaid: 150,
       fullPrice: 500,
       artworkImageUrl: 'assets/images/flash_blackwork_skull.jpg',
+      visitType: 'Custom Tattoo',
       dotColor: const Color(0xFF22C55E),
     ),
     DashboardAppointment(
@@ -620,6 +667,7 @@ class ArtistDashboardRepository {
       depositPaid: 120,
       fullPrice: 450,
       artworkImageUrl: 'assets/images/flash_american_eagle.jpg',
+      visitType: 'Flash Tattoo',
       dotColor: const Color(0xFF22C55E),
     ),
     DashboardAppointment(
@@ -635,6 +683,7 @@ class ArtistDashboardRepository {
       depositPaid: 140,
       fullPrice: 480,
       artworkImageUrl: 'assets/images/flash_clipper_ship.jpg',
+      visitType: 'Custom Tattoo',
       dotColor: const Color(0xFF22C55E),
     ),
     DashboardAppointment(
@@ -650,6 +699,7 @@ class ArtistDashboardRepository {
       depositPaid: 100,
       fullPrice: 360,
       artworkImageUrl: 'assets/images/flash_japanese_koi.jpg',
+      visitType: 'Custom Tattoo',
       dotColor: const Color(0xFF22C55E),
     ),
     DashboardAppointment(
@@ -664,6 +714,8 @@ class ArtistDashboardRepository {
       notes: 'Primary lines and black shading.',
       depositPaid: 100,
       fullPrice: 450,
+      artworkImageUrl: 'assets/images/flash_traditional_panther.jpg',
+      visitType: 'Session Inking',
       dotColor: const Color(0xFF22C55E),
     ),
     DashboardAppointment(
@@ -679,6 +731,7 @@ class ArtistDashboardRepository {
       depositPaid: 80,
       fullPrice: 300,
       artworkImageUrl: 'assets/images/flash_fineline_flora.jpg',
+      visitType: 'Fine Line',
       dotColor: const Color(0xFF22C55E),
     ),
   ];

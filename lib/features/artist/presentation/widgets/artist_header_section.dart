@@ -195,49 +195,23 @@ class ArtistHeaderSection extends StatelessWidget {
                           ),
                           const SizedBox(height: AppSpacing.spaceXxs + 2),
 
-                          // Location and Studio Type Row
-                          Wrap(
-                            spacing: AppSpacing.spaceSm,
-                            runSpacing: AppSpacing.spaceXxs,
-                            crossAxisAlignment: WrapCrossAlignment.center,
+                          // Studio Name Row
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.location_on_outlined,
-                                    color: AppTheme.navInactive,
-                                    size: 14,
-                                  ),
-                                  const SizedBox(width: AppSpacing.spaceXxs - 1),
-                                  Text(
-                                    artist.location,
-                                    style: AppTypography.label.copyWith(
-                                      color: AppTheme.navInactive,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
+                              const Icon(
+                                Icons.storefront_outlined,
+                                color: AppTheme.navInactive,
+                                size: 14,
                               ),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.storefront_outlined,
-                                    color: AppTheme.navInactive,
-                                    size: 14,
-                                  ),
-                                  const SizedBox(width: AppSpacing.spaceXxs - 1),
-                                  Text(
-                                    artist.studioType,
-                                    style: AppTypography.label.copyWith(
-                                      color: AppTheme.navInactive,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
+                              const SizedBox(width: AppSpacing.spaceXxs - 1),
+                              Text(
+                                artist.studioType,
+                                style: AppTypography.label.copyWith(
+                                  color: AppTheme.navInactive,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ],
                           ),

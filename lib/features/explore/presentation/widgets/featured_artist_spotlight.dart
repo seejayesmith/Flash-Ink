@@ -179,7 +179,7 @@ class FeaturedArtistSpotlight extends StatelessWidget {
                       ),
                     );
                   },
-                  text: 'VIEW ARTIST & DESIGNS',
+                  text: 'VIEW ARTIST',
                   backgroundColor: AppTheme.gold,
                   foregroundColor: AppTheme.onyxBackground,
                 ),
