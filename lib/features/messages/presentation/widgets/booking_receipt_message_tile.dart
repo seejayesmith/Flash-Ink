@@ -4,7 +4,6 @@ import 'package:add_2_calendar/add_2_calendar.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../theme/app_theme.dart';
-import '../../../../theme/app_typography.dart';
 import '../../../../widgets/flash_image.dart';
 import '../../domain/models/message_thread.dart';
 

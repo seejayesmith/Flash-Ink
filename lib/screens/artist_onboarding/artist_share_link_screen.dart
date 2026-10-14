@@ -8,6 +8,7 @@ import '../../services/auth_service.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/artist_stepper_header.dart';
 import '../../widgets/tattoo_background_wrapper.dart';
+import '../../widgets/skip_pill_button.dart';
 import '../artist_dashboard/artist_dashboard_screen.dart';
 
 class ArtistShareLinkScreen extends StatelessWidget {
@@ -178,11 +179,29 @@ class ArtistShareLinkScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF121414),
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        automaticallyImplyLeading: false,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: Center(
+              child: SkipPillButton(
+                key: const Key('skip_share_link_button'),
+                onPressed: () => _completeOnboarding(context),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: TattooBackgroundWrapper(
         child: SafeArea(
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

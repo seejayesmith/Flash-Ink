@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'waitlist_entry.dart';
 
 /// Represents a scheduled appointment for an artist.
 class DashboardAppointment {
@@ -251,6 +252,9 @@ class ArtistEarningsData {
 /// Represents the configuration for an artist's booking schedule ("Books").
 class ArtistBooksSchedule {
   final bool isBooksOpen;
+  final bool isEarlyAccessOnly;
+  final DateTime? earlyAccessEndsAt;
+  final int earlyAccessHours;
   final DateTime bookingWindowStart;
   final DateTime bookingWindowEnd;
   final Set<int> workingDays; // 1 = Mon, 7 = Sun (DateTime weekday constants)
@@ -266,6 +270,9 @@ class ArtistBooksSchedule {
 
   const ArtistBooksSchedule({
     this.isBooksOpen = true,
+    this.isEarlyAccessOnly = false,
+    this.earlyAccessEndsAt,
+    this.earlyAccessHours = 24,
     required this.bookingWindowStart,
     required this.bookingWindowEnd,
     this.workingDays = const {2, 3, 4, 5, 6}, // Tue - Sat
@@ -280,8 +287,36 @@ class ArtistBooksSchedule {
     this.locationNote = 'OddMaree Studio • Portland, OR',
   });
 
+  bool get isEffectiveBooksOpen {
+    if (!isBooksOpen) return false;
+    if (isEarlyAccessOnly) {
+      if (earlyAccessEndsAt != null && DateTime.now().isAfter(earlyAccessEndsAt!)) {
+        return true; // Auto-transitioned to public open!
+      }
+      return false; // Still exclusive early access
+    }
+    return true;
+  }
+
+  bool get isEarlyAccessActive {
+    if (!isBooksOpen || !isEarlyAccessOnly) return false;
+    if (earlyAccessEndsAt != null && DateTime.now().isAfter(earlyAccessEndsAt!)) {
+      return false; // Expired
+    }
+    return true;
+  }
+
+  Duration? get earlyAccessTimeRemaining {
+    if (!isEarlyAccessActive || earlyAccessEndsAt == null) return null;
+    final diff = earlyAccessEndsAt!.difference(DateTime.now());
+    return diff.isNegative ? Duration.zero : diff;
+  }
+
   ArtistBooksSchedule copyWith({
     bool? isBooksOpen,
+    bool? isEarlyAccessOnly,
+    DateTime? earlyAccessEndsAt,
+    int? earlyAccessHours,
     DateTime? bookingWindowStart,
     DateTime? bookingWindowEnd,
     Set<int>? workingDays,
@@ -297,6 +332,9 @@ class ArtistBooksSchedule {
   }) {
     return ArtistBooksSchedule(
       isBooksOpen: isBooksOpen ?? this.isBooksOpen,
+      isEarlyAccessOnly: isEarlyAccessOnly ?? this.isEarlyAccessOnly,
+      earlyAccessEndsAt: earlyAccessEndsAt ?? this.earlyAccessEndsAt,
+      earlyAccessHours: earlyAccessHours ?? this.earlyAccessHours,
       bookingWindowStart: bookingWindowStart ?? this.bookingWindowStart,
       bookingWindowEnd: bookingWindowEnd ?? this.bookingWindowEnd,
       workingDays: workingDays ?? this.workingDays,
@@ -315,6 +353,9 @@ class ArtistBooksSchedule {
   Map<String, dynamic> toMap() {
     return {
       'isBooksOpen': isBooksOpen,
+      'isEarlyAccessOnly': isEarlyAccessOnly,
+      'earlyAccessEndsAt': earlyAccessEndsAt?.toIso8601String(),
+      'earlyAccessHours': earlyAccessHours,
       'bookingWindowStart': bookingWindowStart.toIso8601String(),
       'bookingWindowEnd': bookingWindowEnd.toIso8601String(),
       'workingDays': workingDays.toList(),
@@ -335,6 +376,11 @@ class ArtistBooksSchedule {
   factory ArtistBooksSchedule.fromMap(Map<String, dynamic> map) {
     return ArtistBooksSchedule(
       isBooksOpen: map['isBooksOpen'] as bool? ?? true,
+      isEarlyAccessOnly: map['isEarlyAccessOnly'] as bool? ?? false,
+      earlyAccessEndsAt: map['earlyAccessEndsAt'] != null
+          ? DateTime.tryParse(map['earlyAccessEndsAt'] as String)
+          : null,
+      earlyAccessHours: (map['earlyAccessHours'] as num?)?.toInt() ?? 24,
       bookingWindowStart: map['bookingWindowStart'] != null
           ? DateTime.tryParse(map['bookingWindowStart'] as String) ?? DateTime(2026, 10, 1)
           : DateTime(2026, 10, 1),
@@ -367,6 +413,7 @@ class ArtistBooksSchedule {
 class ArtistDashboardRepository {
   static ArtistBooksSchedule booksSchedule = ArtistBooksSchedule(
     isBooksOpen: true,
+    isEarlyAccessOnly: false,
     bookingWindowStart: DateTime(2026, 10, 1),
     bookingWindowEnd: DateTime(2026, 12, 31),
     workingDays: const {2, 3, 4, 5, 6},
@@ -384,6 +431,67 @@ class ArtistDashboardRepository {
   static void updateBooksSchedule(ArtistBooksSchedule updated) {
     booksSchedule = updated;
   }
+
+  /// In-memory VIP waitlist entries
+  static List<WaitlistEntry> waitlistEntries = List.from(WaitlistEntry.mockWaitlistEntries);
+
+  static void addWaitlistEntry(WaitlistEntry entry) {
+    waitlistEntries = [entry, ...waitlistEntries];
+  }
+
+  static void updateWaitlistEntry(WaitlistEntry entry) {
+    final idx = waitlistEntries.indexWhere((e) => e.id == entry.id);
+    if (idx != -1) {
+      final updated = List<WaitlistEntry>.from(waitlistEntries);
+      updated[idx] = entry;
+      waitlistEntries = updated;
+    }
+  }
+
+  static void removeWaitlistEntry(String id) {
+    waitlistEntries = waitlistEntries.where((e) => e.id != id).toList();
+  }
+
+  /// Triggers exclusive early access to all waiting contacts on the waitlist
+  static void sendEarlyAccessToWaitlist({int hours = 24}) {
+    final endsAt = DateTime.now().add(Duration(hours: hours));
+    booksSchedule = booksSchedule.copyWith(
+      isBooksOpen: true,
+      isEarlyAccessOnly: true,
+      earlyAccessEndsAt: endsAt,
+      earlyAccessHours: hours,
+    );
+
+    // Update entries that are waiting -> earlyAccessSent
+    waitlistEntries = waitlistEntries.map((e) {
+      if (e.status == WaitlistStatus.waiting) {
+        return e.copyWith(
+          status: WaitlistStatus.earlyAccessSent,
+          invitedAt: DateTime.now(),
+        );
+      }
+      return e;
+    }).toList();
+  }
+
+  /// Transitions books to completely open to the general public
+  static void openBooksPublicly() {
+    booksSchedule = booksSchedule.copyWith(
+      isBooksOpen: true,
+      isEarlyAccessOnly: false,
+      earlyAccessEndsAt: null,
+    );
+  }
+
+  /// Closes books
+  static void closeBooks() {
+    booksSchedule = booksSchedule.copyWith(
+      isBooksOpen: false,
+      isEarlyAccessOnly: false,
+      earlyAccessEndsAt: null,
+    );
+  }
+
 
   static const ArtistEarningsData earningsData = ArtistEarningsData();
   static const DashboardAppointment nextAppointment = DashboardAppointment(
@@ -576,7 +684,7 @@ class ArtistDashboardRepository {
       serviceType: 'Consultation',
       duration: '1 hr',
       time: '6:30 PM',
-      scheduledDate: DateTime(2026, 9, 9),
+      scheduledDate: null,
       date: 'Sep 9, 2026',
       placement: 'Collarbone Session',
       notes: 'Consultation follow-up and appointment finalization.',

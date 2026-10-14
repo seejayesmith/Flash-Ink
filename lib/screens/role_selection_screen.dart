@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_spacing.dart';
-import '../config/dev_config.dart';
 import '../theme/app_buttons.dart';
 import '../widgets/adaptive_glass_container.dart';
+import '../widgets/skip_pill_button.dart';
 import '../services/auth_service.dart';
 import 'account_creation_screen.dart';
-import 'artist_dashboard/artist_dashboard_screen.dart';
-import 'artist_onboarding/artist_sign_up_screen.dart';
-import 'main_feed_screen.dart';
+import 'aesthetics_selection_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
   final AuthService? authService;
@@ -22,27 +20,29 @@ class RoleSelectionScreen extends StatefulWidget {
 class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   String? _selectedRole; // Must be explicitly selected by the user
 
+  void _handleSkip() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const AestheticsSelectionScreen(
+          isGuest: true,
+        ),
+      ),
+    );
+  }
+
   void _handleContinue() {
     if (_selectedRole == null) return;
 
-    if (_selectedRole == 'artist') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ArtistSignUpScreen(authService: widget.authService),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AccountCreationScreen(
+          role: _selectedRole!,
+          authService: widget.authService,
         ),
-      );
-    } else {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => AccountCreationScreen(
-            role: _selectedRole!,
-            authService: widget.authService,
-          ),
-        ),
-      );
-    }
+      ),
+    );
   }
 
   Widget _buildRoleCard({
@@ -128,6 +128,24 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
       canPop: false, // Prevent popping back to splash
       child: Scaffold(
         backgroundColor: const Color(0xFF121414),
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          automaticallyImplyLeading: false,
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: Center(
+                child: SkipPillButton(
+                  key: const Key('skip_role_selection_button'),
+                  onPressed: _handleSkip,
+                ),
+              ),
+            ),
+          ],
+        ),
         body: Stack(
           children: [
             // Background tattoo setup texture - clear and vibrant
@@ -176,59 +194,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (kEnableDevBypass && _selectedRole != null) ...[
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    const Spacer(),
-                                    ElevatedButton.icon(
-                                      key: const Key('dev_skip_role_button'),
-                                      onPressed: () {
-                                        final isArtist = _selectedRole == 'artist';
-                                        final mockAuthService = AuthService(
-                                          mockUser: DevMockUser(
-                                            uid: isArtist ? 'dev_tester_artist' : 'dev_tester_client',
-                                            displayName: 'Dev Tester',
-                                            email: isArtist ? 'dev_artist@flash.ink' : 'dev_client@flash.ink',
-                                          ),
-                                        );
-                                        if (isArtist) {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) => ArtistDashboardScreen(authService: mockAuthService),
-                                            ),
-                                          );
-                                        } else {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) => MainFeedScreen(authService: mockAuthService),
-                                            ),
-                                          );
-                                        }
-                                      },
-                                      icon: const Icon(Icons.fast_forward, size: 16, color: Color(0xFF121414)),
-                                      label: Text(
-                                        'Skip (Dev)',
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          color: const Color(0xFF121414),
-                                        ),
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFFEEC200),
-                                        foregroundColor: const Color(0xFF121414),
-                                        elevation: 2,
-                                        shape: const StadiumBorder(),
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                              ],
+
                               FittedBox(
                                 fit: BoxFit.scaleDown,
                                 alignment: Alignment.centerLeft,

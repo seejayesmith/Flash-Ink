@@ -33,7 +33,8 @@ class FakeBooksAuthService extends AuthService {
 }
 
 void main() {
-  setupFirebaseAuthMocks();
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setupFirebaseCoreMocks();
 
   setUpAll(() async {
     await Firebase.initializeApp();
@@ -43,18 +44,22 @@ void main() {
     late FakeBooksAuthService fakeAuth;
 
     setUp(() {
+      final binding = TestWidgetsFlutterBinding.ensureInitialized();
+      binding.platformDispatcher.views.first.physicalSize = const Size(1080, 2400);
+      binding.platformDispatcher.views.first.devicePixelRatio = 1.0;
+
       fakeAuth = FakeBooksAuthService(
         MockBooksUser(uid: 'test_artist', displayName: 'OddMaree', email: 'artist@flash.ink'),
       );
       // Reset default schedule
       ArtistDashboardRepository.updateBooksSchedule(
-        const ArtistBooksSchedule(
+        ArtistBooksSchedule(
           isBooksOpen: true,
           bookingWindowStart: DateTime(2026, 10, 1),
           bookingWindowEnd: DateTime(2026, 12, 31),
-          workingDays: {2, 3, 4, 5, 6},
-          startTime: TimeOfDay(hour: 11, minute: 0),
-          endTime: TimeOfDay(hour: 19, minute: 0),
+          workingDays: const {2, 3, 4, 5, 6},
+          startTime: const TimeOfDay(hour: 11, minute: 0),
+          endTime: const TimeOfDay(hour: 19, minute: 0),
           slotDurationMinutes: 120,
           bufferDurationMinutes: 30,
           defaultDepositAmount: 80,
@@ -64,6 +69,12 @@ void main() {
           locationNote: 'OddMaree Studio • Portland, OR',
         ),
       );
+    });
+
+    tearDown(() {
+      final binding = TestWidgetsFlutterBinding.ensureInitialized();
+      binding.platformDispatcher.views.first.resetPhysicalSize();
+      binding.platformDispatcher.views.first.resetDevicePixelRatio();
     });
 
     Widget buildTestWidget({bool isEmbedded = true, Artist? artist}) {

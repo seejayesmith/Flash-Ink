@@ -66,6 +66,18 @@ void main() {
     await Firebase.initializeApp();
   });
 
+  setUp(() {
+    final binding = TestWidgetsFlutterBinding.ensureInitialized();
+    binding.platformDispatcher.views.first.physicalSize = const Size(1080, 2400);
+    binding.platformDispatcher.views.first.devicePixelRatio = 1.0;
+  });
+
+  tearDown(() {
+    final binding = TestWidgetsFlutterBinding.ensureInitialized();
+    binding.platformDispatcher.views.first.resetPhysicalSize();
+    binding.platformDispatcher.views.first.resetDevicePixelRatio();
+  });
+
   Widget buildTestWidget({
     Artist? artist,
     AuthService? authService,
@@ -89,14 +101,22 @@ void main() {
       expect(find.byKey(const Key('artist_account_edit_button')), findsOneWidget);
     });
 
-    testWidgets('Renders Profile Hero card with avatar, name, handle, and Edit Profile button', (tester) async {
+    testWidgets('Renders Profile Hero card with avatar, name, handle, and location', (tester) async {
       await tester.pumpWidget(buildTestWidget());
       await tester.pumpAndSettle();
 
       expect(find.text('OddMaree'), findsWidgets);
       expect(find.text('@oddmaree'), findsWidgets);
       expect(find.byKey(const Key('artist_account_avatar_edit')), findsOneWidget);
-      expect(find.byKey(const Key('artist_account_edit_profile_hero_button')), findsOneWidget);
+    });
+
+    testWidgets('Renders About & Studio section with Artist Bio and Studio & Location', (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      expect(find.text('ABOUT & STUDIO'), findsOneWidget);
+      expect(find.text('Artist Bio'), findsOneWidget);
+      expect(find.text('Studio & Location'), findsOneWidget);
     });
 
     testWidgets('Renders Personal Information section with details', (tester) async {
@@ -106,8 +126,6 @@ void main() {
       expect(find.text('PERSONAL INFORMATION'), findsOneWidget);
       expect(find.text('Display Name'), findsOneWidget);
       expect(find.text('Username'), findsOneWidget);
-      expect(find.text('Artist Bio'), findsOneWidget);
-      expect(find.text('Studio & Location'), findsOneWidget);
       expect(find.text('Email Address'), findsOneWidget);
       expect(find.text('Phone Number'), findsOneWidget);
       expect(find.text('VERIFIED'), findsOneWidget);
@@ -145,7 +163,7 @@ void main() {
       await tester.pumpWidget(buildTestWidget());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('artist_account_edit_profile_hero_button')));
+      await tester.tap(find.byKey(const Key('artist_account_edit_button')));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('edit_profile_sheet_title')), findsOneWidget);
@@ -156,8 +174,32 @@ void main() {
       await tester.enterText(find.byKey(const Key('edit_profile_name_field')), 'OddMaree Studio');
       await tester.tap(find.byKey(const Key('save_profile_button')));
       await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 700));
 
       expect(find.text('OddMaree Studio'), findsWidgets);
+    });
+
+    testWidgets('Renders Support & Legal section and footer', (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.text('SUPPORT & LEGAL'),
+        200,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('SUPPORT & LEGAL'), findsOneWidget);
+      expect(find.text('Help Center & FAQ'), findsOneWidget);
+      expect(find.text('Terms of Service'), findsOneWidget);
+      expect(find.text('Privacy Policy'), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+        find.text('Flash.Ink v1.0.0 (Build 42) • Premium Flash Collective'),
+        200,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Flash.Ink v1.0.0 (Build 42) • Premium Flash Collective'), findsOneWidget);
     });
 
     testWidgets('Tapping view public profile eye icon navigates to ArtistProfileScreen', (tester) async {
@@ -197,7 +239,8 @@ void main() {
       expect(find.byKey(const Key('delete_account_confirm_button')), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('delete_account_confirm_button')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump();
 
       expect(fakeAuth.deleteCallCount, 1);
       expect(find.byType(SplashScreen), findsOneWidget);
@@ -222,7 +265,8 @@ void main() {
 
       // Confirm sign out in the AlertDialog
       await tester.tap(find.widgetWithText(ElevatedButton, 'Sign Out'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump();
 
       expect(fakeAuth.signOutCallCount, 1);
       expect(find.byType(SplashScreen), findsOneWidget);

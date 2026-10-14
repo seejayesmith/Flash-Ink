@@ -17,8 +17,17 @@ class MockTestUser extends Fake implements User {
   final String uid;
   @override
   final String? displayName;
+  @override
+  final String? email;
+  @override
+  final String? photoURL;
 
-  MockTestUser({required this.uid, this.displayName});
+  MockTestUser({
+    required this.uid,
+    this.displayName,
+    this.email = 'oddmaree@example.com',
+    this.photoURL = 'https://example.com/avatar.jpg',
+  });
 }
 
 class FakeDashboardAuthService extends AuthService {
@@ -79,7 +88,9 @@ void main() {
       // Title
       expect(find.text('Calendar'), findsOneWidget);
 
-      // Month & Year dropdowns
+      // Month & Year dropdowns and month toggles
+      expect(find.byKey(const Key('calendar_prev_month_button')), findsOneWidget);
+      expect(find.byKey(const Key('calendar_next_month_button')), findsOneWidget);
       expect(find.byKey(const Key('calendar_month_dropdown')), findsOneWidget);
       expect(find.byKey(const Key('calendar_year_dropdown')), findsOneWidget);
       expect(find.text('September'), findsOneWidget);
@@ -95,8 +106,10 @@ void main() {
 
       // Schedule header
       expect(find.text("Today's Schedule"), findsOneWidget);
-      expect(find.byKey(const Key('calendar_view_all_button')), findsOneWidget);
-      expect(find.text('VIEW ALL'), findsOneWidget);
+      expect(find.byKey(const Key('calendar_session_count_badge')), findsOneWidget);
+      expect(find.text('3 sessions'), findsOneWidget);
+      expect(find.byKey(const Key('calendar_view_all_button')), findsNothing);
+      expect(find.text('VIEW ALL'), findsNothing);
 
       // Initial appointments for Sep 9
       expect(find.text('Marcus Cole'), findsWidgets);
@@ -157,6 +170,36 @@ void main() {
       expect(find.byKey(const ValueKey('month_picker_grid')), findsNothing);
     });
 
+    testWidgets('Tapping left/right month toggles navigates to previous and next month', (tester) async {
+      await tester.pumpWidget(buildCalendarTestWidget());
+      await tester.pumpAndSettle();
+
+      // Starts at September 2026
+      expect(find.text('September'), findsOneWidget);
+      expect(find.text('2026'), findsOneWidget);
+
+      // Tap previous month toggle (<)
+      final prevBtn = find.byKey(const Key('calendar_prev_month_button'));
+      expect(prevBtn, findsOneWidget);
+      await tester.tap(prevBtn);
+      await tester.pumpAndSettle();
+
+      // Navigated to August 2026
+      expect(find.text('August'), findsOneWidget);
+      expect(find.text('September'), findsNothing);
+
+      // Tap next month toggle (>) twice: August -> September -> October
+      final nextBtn = find.byKey(const Key('calendar_next_month_button'));
+      expect(nextBtn, findsOneWidget);
+      await tester.tap(nextBtn);
+      await tester.pumpAndSettle();
+      expect(find.text('September'), findsOneWidget);
+
+      await tester.tap(nextBtn);
+      await tester.pumpAndSettle();
+      expect(find.text('October'), findsOneWidget);
+    });
+
     testWidgets('Tapping View Details button navigates to AppointmentDetailScreen', (tester) async {
       await tester.pumpWidget(buildCalendarTestWidget());
       await tester.pumpAndSettle();
@@ -172,16 +215,14 @@ void main() {
       expect(find.text('Appointment Details'), findsOneWidget);
     });
 
-    testWidgets('Tapping VIEW ALL opens all appointments bottom sheet', (tester) async {
+    testWidgets('Schedule header displays session count badge and no VIEW ALL button', (tester) async {
       await tester.pumpWidget(buildCalendarTestWidget());
       await tester.pumpAndSettle();
 
-      final viewAllBtn = find.byKey(const Key('calendar_view_all_button'));
-      await tester.tap(viewAllBtn);
-      await tester.pumpAndSettle();
-
-      expect(find.text('All Scheduled Sessions'), findsOneWidget);
-      expect(find.byKey(const Key('all_appointments_sheet_item_cal_apt_marcus_2')), findsOneWidget);
+      expect(find.byKey(const Key('calendar_session_count_badge')), findsOneWidget);
+      expect(find.text('3 sessions'), findsOneWidget);
+      expect(find.byKey(const Key('calendar_view_all_button')), findsNothing);
+      expect(find.text('VIEW ALL'), findsNothing);
     });
 
     testWidgets('Tapping avatar opens ArtistAccountScreen', (tester) async {

@@ -6,8 +6,7 @@ import '../../theme/app_buttons.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_switch.dart';
-import '../../features/messages/domain/models/message_thread.dart';
-import '../../features/messages/presentation/screens/chat_conversation_screen.dart';
+import '../../services/stripe_service.dart';
 
 
 /// Full-flow booking screen for claiming a flash artwork piece.
@@ -90,6 +89,10 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
 
     final codeNum = (10000 + (_selectedDate.millisecondsSinceEpoch % 89999)).toString();
     _confirmationCode = 'INK-$codeNum';
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ScaffoldMessenger.maybeOf(context)?.clearSnackBars();
+    });
   }
 
   @override
@@ -138,7 +141,14 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       _isProcessingPayment = true;
     });
 
-    await Future.delayed(const Duration(milliseconds: 900));
+    final stripeService = StripeService();
+    final paymentResult = await stripeService.presentDepositPaymentSheet(
+      amountInDollars: widget.flash.deposit.toDouble(),
+      flashTitle: widget.flash.title,
+      customerEmail: _emailController.text.trim(),
+      customerName: _nameController.text.trim(),
+      artistStripeAccountId: widget.artist?.id,
+    );
 
     if (!mounted) return;
 
@@ -146,17 +156,22 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       _isProcessingPayment = false;
     });
 
-    final bookingThread = MessageThread.mockThreads.firstWhere(
-      (t) => t.id == 'thread_new_booking',
-      orElse: () => MessageThread.mockThreads.first,
-    );
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ChatConversationScreen(thread: bookingThread),
-      ),
-    );
+    if (paymentResult.isSuccess) {
+      setState(() {
+        _currentStep = 3;
+      });
+    } else if (!paymentResult.isCanceled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            paymentResult.errorMessage ?? 'Payment failed. Please try again.',
+            style: GoogleFonts.plusJakartaSans(color: Colors.white),
+          ),
+          backgroundColor: const Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
 

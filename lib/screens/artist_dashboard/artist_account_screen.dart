@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../../models/artist.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_spacing.dart';
-import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_switch.dart';
 import '../../widgets/flash_image.dart';
+import '../../widgets/photo_source_bottom_sheet.dart';
+import 'artist_edit_profile_screen.dart';
+import 'artist_account_settings_screen.dart';
+import '../app_info_screen.dart';
 import '../splash_screen.dart';
 import '../artist_profile_screen.dart';
 
@@ -35,8 +39,9 @@ class ArtistAccountScreen extends StatefulWidget {
 class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
   late final AuthService _authService = widget.authService ?? AuthService();
 
-  bool _isLoading = false;
+  final bool _isLoading = false;
   bool _isDeleting = false;
+  bool _isUploadingPhoto = false;
 
   // Profile fields
   late String _displayName;
@@ -46,7 +51,7 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
   String _email = 'artist@flash.ink';
   String _phoneNumber = '+1 (555) 345-6789';
   bool _phoneVerified = true;
-  late String _photoUrl;
+  String? _photoUrl;
 
   // Notification preferences
   bool _bookingAlerts = true;
@@ -72,9 +77,7 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
     _location = effective.location.isNotEmpty
         ? effective.location
         : 'Portland, OR • Flash & Custom';
-    _photoUrl = effective.avatarUrl.isNotEmpty
-        ? effective.avatarUrl
-        : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
+    _photoUrl = effective.avatarUrl.isNotEmpty ? effective.avatarUrl : null;
   }
 
   Artist _getEffectiveArtist() {
@@ -94,13 +97,12 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
         setState(() {
           if (user.displayName != null && user.displayName!.isNotEmpty) {
             _displayName = user.displayName!;
-            _username = user.displayName!.toLowerCase().replaceAll(' ', '_');
           }
           if (user.email != null && user.email!.isNotEmpty) {
             _email = user.email!;
           }
           if (user.photoURL != null && user.photoURL!.isNotEmpty) {
-            _photoUrl = user.photoURL!;
+            _photoUrl = user.photoURL;
           }
         });
       }
@@ -184,246 +186,149 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
     }
   }
 
-  void _showEditProfileDialog() {
-    final nameController = TextEditingController(text: _displayName);
-    final usernameController = TextEditingController(text: _username);
-    final bioController = TextEditingController(text: _bio);
-    final locationController = TextEditingController(text: _location);
-
-    showModalBottomSheet(
+  Future<void> _handleEditPhoto() async {
+    final result = await PhotoSourceBottomSheet.show(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF1E2020),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF383C3C),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Edit Profile',
-                  key: const Key('edit_profile_sheet_title'),
-                  style: GoogleFonts.plusJakartaSans(
-                    color: AppTheme.textPrimary,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Display Name',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFF919696),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                TextField(
-                  key: const Key('edit_profile_name_field'),
-                  controller: nameController,
-                  style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 15),
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: const Color(0xFF141616),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.darkBorder),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.darkBorder),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.gold),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'Username / Handle',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFF919696),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                TextField(
-                  key: const Key('edit_profile_username_field'),
-                  controller: usernameController,
-                  style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 15),
-                  decoration: InputDecoration(
-                    prefixText: '@ ',
-                    prefixStyle: GoogleFonts.plusJakartaSans(color: AppTheme.gold),
-                    filled: true,
-                    fillColor: const Color(0xFF141616),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.darkBorder),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.darkBorder),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.gold),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'Bio',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFF919696),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                TextField(
-                  key: const Key('edit_profile_bio_field'),
-                  controller: bioController,
-                  maxLines: 3,
-                  style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 14),
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: const Color(0xFF141616),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.darkBorder),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.darkBorder),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.gold),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'Studio & Location',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFF919696),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                TextField(
-                  key: const Key('edit_profile_location_field'),
-                  controller: locationController,
-                  style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 15),
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: const Color(0xFF141616),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.darkBorder),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.darkBorder),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.gold),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    key: const Key('save_profile_button'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.gold,
-                      foregroundColor: AppTheme.onyxBackground,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    onPressed: () {
-                      final newName = nameController.text.trim();
-                      final newUsername = usernameController.text.trim();
-                      final newBio = bioController.text.trim();
-                      final newLocation = locationController.text.trim();
-
-                      if (newName.isNotEmpty) {
-                        setState(() {
-                          _displayName = newName;
-                          if (newUsername.isNotEmpty) _username = newUsername;
-                          if (newBio.isNotEmpty) _bio = newBio;
-                          if (newLocation.isNotEmpty) _location = newLocation;
-                        });
-
-                        _updateProfileInFirestore(
-                          name: _displayName,
-                          username: _username,
-                          bio: _bio,
-                          location: _location,
-                        );
-
-                        Navigator.of(sheetContext).pop();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Profile updated successfully',
-                              style: GoogleFonts.plusJakartaSans(color: Colors.white),
-                            ),
-                            backgroundColor: const Color(0xFF1E2020),
-                            behavior: SnackBarBehavior.floating,
-                            duration: const Duration(seconds: 2),
-                          ),
-                        );
-                      }
-                    },
-                    child: Text(
-                      'Save Changes',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      hasExistingPhoto: _photoUrl != null && _photoUrl!.isNotEmpty,
     );
+
+    if (result == null || !mounted) return;
+
+    final user = _authService.currentUser ?? FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    if (result.isRemoved) {
+      setState(() => _isUploadingPhoto = true);
+      try {
+        try {
+          await FirebaseStorage.instance.ref().child('artist_profiles/${user.uid}.png').delete();
+        } catch (_) {}
+        try {
+          await FirebaseStorage.instance.ref().child('artist_profiles/${user.uid}.jpg').delete();
+        } catch (_) {}
+
+        await user.updatePhotoURL(null);
+        try {
+          await FirebaseFirestore.instance.collection('artists').doc(user.uid).set({
+            'avatarUrl': null,
+          }, SetOptions(merge: true));
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+            'photoURL': null,
+          }, SetOptions(merge: true));
+        } catch (_) {}
+
+        if (mounted) {
+          setState(() {
+            _photoUrl = null;
+            _isUploadingPhoto = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Artist profile photo removed')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isUploadingPhoto = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to remove photo: $e')),
+          );
+        }
+      }
+      return;
+    }
+
+    if (result.croppedBytes != null) {
+      setState(() => _isUploadingPhoto = true);
+      try {
+        final storageRef = FirebaseStorage.instance
+            .ref()
+            .child('artist_profiles')
+            .child('${user.uid}.png');
+
+        await storageRef.putData(
+          result.croppedBytes!,
+          SettableMetadata(contentType: 'image/png'),
+        );
+        final downloadUrl = await storageRef.getDownloadURL();
+
+        await user.updatePhotoURL(downloadUrl);
+        try {
+          await FirebaseFirestore.instance.collection('artists').doc(user.uid).set({
+            'avatarUrl': downloadUrl,
+          }, SetOptions(merge: true));
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+            'photoURL': downloadUrl,
+          }, SetOptions(merge: true));
+        } catch (_) {}
+
+        if (mounted) {
+          setState(() {
+            _photoUrl = downloadUrl;
+            _isUploadingPhoto = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Artist profile photo updated successfully')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isUploadingPhoto = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to update photo: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _showEditProfileDialog() async {
+    final result = await Navigator.push<Map<String, String>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ArtistEditProfileScreen(
+          initialDisplayName: _displayName,
+          initialUsername: _username,
+          initialBio: _bio,
+          initialLocation: _location,
+          onSave: (newName, newUsername, newBio, newLocation) async {
+            setState(() {
+              _displayName = newName;
+              _username = newUsername;
+              _bio = newBio;
+              _location = newLocation;
+            });
+
+            await _updateProfileInFirestore(
+              name: newName,
+              username: newUsername,
+              bio: newBio,
+              location: newLocation,
+            );
+          },
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        _displayName = result['name'] ?? _displayName;
+        _username = result['username'] ?? _username;
+        _bio = result['bio'] ?? _bio;
+        _location = result['location'] ?? _location;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Profile updated successfully',
+            style: GoogleFonts.plusJakartaSans(color: Colors.white),
+          ),
+          backgroundColor: const Color(0xFF1E2020),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   void _navigateToPublicProfile() {
@@ -437,182 +342,26 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
   }
 
   void _showInfoModal(String title, String content) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF1E2020),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AppInfoScreen(
+          title: title,
+          content: content,
+        ),
       ),
-      builder: (sheetContext) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF383C3C),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                style: GoogleFonts.plusJakartaSans(
-                  color: AppTheme.textPrimary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                content,
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF919696),
-                  fontSize: 14,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.gold,
-                    foregroundColor: AppTheme.onyxBackground,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  onPressed: () => Navigator.of(sheetContext).pop(),
-                  child: Text(
-                    'Got It',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 
   void _showAccountSettingsModal() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF1E2020),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ArtistAccountSettingsScreen(
+          email: _email,
+          onDeleteAccount: _handleDeleteAccount,
+        ),
       ),
-      builder: (sheetContext) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF383C3C),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Account Settings',
-                key: const Key('account_settings_modal_title'),
-                style: GoogleFonts.plusJakartaSans(
-                  color: AppTheme.textPrimary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Manage security credentials, primary email, and irreversible account actions.',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF919696),
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 20),
-              _buildSettingsContainer([
-                _buildSettingsTile(
-                  icon: Icons.alternate_email,
-                  title: 'Primary Account Email',
-                  subtitle: _email,
-                  trailing: const Icon(Icons.lock_outline, color: Color(0xFF6B7280), size: 16),
-                ),
-                const Divider(color: AppTheme.darkBorder, height: 1),
-                _buildSettingsTile(
-                  icon: Icons.shield_outlined,
-                  title: 'Artist Verification Status',
-                  subtitle: 'Verified Resident Tattooer',
-                  trailing: const Icon(Icons.check_circle, color: Color(0xFF22C55E), size: 18),
-                ),
-              ]),
-              const SizedBox(height: 28),
-              Text(
-                'DANGER ZONE',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFEF4444),
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1212),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFEF4444).withAlpha(100), width: 1),
-                ),
-                child: ListTile(
-                  key: const Key('delete_account_button'),
-                  leading: const Icon(Icons.delete_forever_outlined, color: Color(0xFFEF4444)),
-                  title: Text(
-                    'Delete Account',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFEF4444),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Permanently delete your artist portfolio, bookings, and profile data',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFB06060),
-                      fontSize: 12,
-                    ),
-                  ),
-                  trailing: const Icon(Icons.chevron_right, color: Color(0xFFEF4444), size: 20),
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _handleDeleteAccount();
-                  },
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
-          ),
-        );
-      },
     );
   }
 
@@ -681,6 +430,7 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
+        bool dialogDismissed = false;
         return AlertDialog(
           key: const Key('delete_account_dialog'),
           backgroundColor: const Color(0xFF1E2020),
@@ -712,7 +462,11 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
           actions: [
             TextButton(
               key: const Key('delete_account_cancel_button'),
-              onPressed: () => Navigator.of(dialogContext).pop(false),
+              onPressed: () {
+                if (dialogDismissed) return;
+                dialogDismissed = true;
+                Navigator.of(dialogContext).pop(false);
+              },
               child: Text(
                 'Cancel',
                 style: GoogleFonts.plusJakartaSans(
@@ -731,7 +485,11 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              onPressed: () => Navigator.of(dialogContext).pop(true),
+              onPressed: () {
+                if (dialogDismissed) return;
+                dialogDismissed = true;
+                Navigator.of(dialogContext).pop(true);
+              },
               child: Text(
                 'Delete Account',
                 style: GoogleFonts.plusJakartaSans(
@@ -853,6 +611,29 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
             // Profile Hero Card
             _buildProfileHeroCard(),
 
+            const SizedBox(height: 24),
+
+            // About & Studio Section
+            _buildSectionHeader('ABOUT & STUDIO'),
+            const SizedBox(height: 10),
+            _buildSettingsContainer([
+              _buildSettingsTile(
+                icon: Icons.article_outlined,
+                title: 'Artist Bio',
+                subtitle: _bio,
+                trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
+                onTap: _showEditProfileDialog,
+              ),
+              const Divider(color: AppTheme.darkBorder, height: 1),
+              _buildSettingsTile(
+                icon: Icons.storefront_outlined,
+                title: 'Studio & Location',
+                subtitle: _location,
+                trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
+                onTap: _showEditProfileDialog,
+              ),
+            ]),
+
             const SizedBox(height: 28),
 
             // Section 1: Personal Details
@@ -871,22 +652,6 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
                 icon: Icons.alternate_email,
                 title: 'Username',
                 subtitle: '@$_username',
-                trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
-                onTap: _showEditProfileDialog,
-              ),
-              const Divider(color: AppTheme.darkBorder, height: 1),
-              _buildSettingsTile(
-                icon: Icons.article_outlined,
-                title: 'Artist Bio',
-                subtitle: _bio,
-                trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
-                onTap: _showEditProfileDialog,
-              ),
-              const Divider(color: AppTheme.darkBorder, height: 1),
-              _buildSettingsTile(
-                icon: Icons.storefront_outlined,
-                title: 'Studio & Location',
-                subtitle: _location,
                 trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
                 onTap: _showEditProfileDialog,
               ),
@@ -983,20 +748,60 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
               ),
               const Divider(color: AppTheme.darkBorder, height: 1),
               _buildSettingsTile(
-                icon: Icons.description_outlined,
-                title: 'Terms of Service & Privacy',
-                subtitle: 'Platform agreements, licensing, and artist confidentiality terms',
+                icon: Icons.healing_outlined,
+                title: 'Tattoo Aftercare Guide',
+                subtitle: 'Standardized healing instructions and recommended balms',
                 trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
                 onTap: () => _showInfoModal(
-                  'Terms & Privacy',
-                  'By using Flash.Ink as a verified artist, you retain copyright of your original flash artworks and grant Flash.Ink a license to display portfolio images. Client contact information must remain confidential and handled in compliance with privacy laws.',
+                  'Aftercare Instructions',
+                  'Leave second-skin barrier on for 3-5 days unless leaking. Wash gently with antibacterial soap and warm water. Apply a thin layer of unscented moisturizer twice daily.',
                 ),
               ),
             ]),
 
             const SizedBox(height: 28),
 
-            // Section 4: Account Settings & Security
+            // Section 4: Support & Legal
+            _buildSectionHeader('SUPPORT & LEGAL'),
+            const SizedBox(height: 10),
+            _buildSettingsContainer([
+              _buildSettingsTile(
+                icon: Icons.help_outline,
+                title: 'Help Center & FAQ',
+                subtitle: 'Answers to frequently asked questions for artists',
+                trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
+                onTap: () => _showInfoModal(
+                  'Help Center',
+                  'Need assistance with artist tools, booking settings, or payout transfers? Reach our artist support desk at artist-support@flash.ink or through our concierge.',
+                ),
+              ),
+              const Divider(color: AppTheme.darkBorder, height: 1),
+              _buildSettingsTile(
+                icon: Icons.description_outlined,
+                title: 'Terms of Service',
+                subtitle: 'Artist terms, licensing, and platform agreements',
+                trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
+                onTap: () => _showInfoModal(
+                  'Terms of Service',
+                  'By using Flash.Ink as a verified artist, you retain copyright of your original flash artworks and grant Flash.Ink a license to display portfolio images. Client contact information must remain confidential and handled in compliance with privacy laws.',
+                ),
+              ),
+              const Divider(color: AppTheme.darkBorder, height: 1),
+              _buildSettingsTile(
+                icon: Icons.privacy_tip_outlined,
+                title: 'Privacy Policy',
+                subtitle: 'Artist confidentiality and data encryption',
+                trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
+                onTap: () => _showInfoModal(
+                  'Privacy Policy',
+                  'Artist banking information, client consultation notes, and contact details are strictly encrypted with TLS and AES-256 standards.',
+                ),
+              ),
+            ]),
+
+            const SizedBox(height: 28),
+
+            // Section 5: Account Security & Settings
             _buildSectionHeader('ACCOUNT SECURITY & SETTINGS'),
             const SizedBox(height: 10),
             _buildSettingsContainer([
@@ -1012,33 +817,23 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
 
             const SizedBox(height: 32),
 
-            // Sign Out Button
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                key: const Key('artist_account_sign_out_button'),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFF383C3C), width: 1.2),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: _handleSignOut,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.logout, color: Color(0xFFEF4444), size: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Sign Out',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFFEF4444),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ],
+            // Account Actions: Sign Out & Delete Account
+            _buildSignOutButton(),
+
+            const SizedBox(height: 12),
+
+            _buildDeleteAccountButton(),
+
+            const SizedBox(height: 24),
+
+            // App Version Footer
+            Center(
+              child: Text(
+                'Flash.Ink v1.0.0 (Build 42) • Premium Flash Collective',
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFF4D5353),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
@@ -1057,47 +852,80 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
       decoration: BoxDecoration(
         color: AppTheme.cardBackground,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.darkBorder, width: 1),
+        border: Border.all(color: AppTheme.goldBorder, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(60),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Column(
+      child: Row(
         children: [
+          // Avatar with Gold Border, Silhouette fallback, and Edit Badge
           Stack(
             children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: AppTheme.gold,
-                    width: 2.0,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.gold.withAlpha(50),
-                      blurRadius: 8,
-                      spreadRadius: 1,
+              GestureDetector(
+                key: const Key('artist_avatar_image_button'),
+                onTap: _handleEditPhoto,
+                child: Container(
+                  width: 76,
+                  height: 76,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: AppTheme.gold,
+                      width: 2.0,
                     ),
-                  ],
-                ),
-                child: ClipOval(
-                  child: FlashImage(
-                    urlOrPath: _photoUrl,
-                    width: 80,
-                    height: 80,
-                    fit: BoxFit.cover,
-                    errorWidget: Container(
-                      color: const Color(0xFF262929),
-                      alignment: Alignment.center,
-                      child: Text(
-                        _displayName.isNotEmpty ? _displayName[0] : 'O',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: AppTheme.gold,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 32,
-                        ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.gold.withAlpha(50),
+                        blurRadius: 8,
+                        spreadRadius: 1,
                       ),
-                    ),
+                    ],
+                  ),
+                  child: ClipOval(
+                    child: _isUploadingPhoto
+                        ? Container(
+                            color: const Color(0xFF262929),
+                            child: const Center(
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  valueColor: AlwaysStoppedAnimation<Color>(AppTheme.gold),
+                                ),
+                              ),
+                            ),
+                          )
+                        : (_photoUrl != null && _photoUrl!.isNotEmpty)
+                            ? FlashImage(
+                                urlOrPath: _photoUrl!,
+                                width: 76,
+                                height: 76,
+                                fit: BoxFit.cover,
+                                errorWidget: Container(
+                                  color: const Color(0xFF262929),
+                                  alignment: Alignment.center,
+                                  child: const Icon(
+                                    Icons.person_outline,
+                                    color: AppTheme.gold,
+                                    size: 40,
+                                  ),
+                                ),
+                              )
+                            : Container(
+                                color: const Color(0xFF262929),
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  Icons.person_outline,
+                                  color: AppTheme.gold,
+                                  size: 40,
+                                ),
+                              ),
                   ),
                 ),
               ),
@@ -1106,9 +934,9 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
                 right: 0,
                 child: GestureDetector(
                   key: const Key('artist_account_avatar_edit'),
-                  onTap: _showEditProfileDialog,
+                  onTap: _handleEditPhoto,
                   child: Container(
-                    padding: const EdgeInsets.all(6),
+                    padding: const EdgeInsets.all(5),
                     decoration: BoxDecoration(
                       color: AppTheme.gold,
                       shape: BoxShape.circle,
@@ -1116,7 +944,7 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
                     ),
                     child: const Icon(
                       Icons.camera_alt_outlined,
-                      size: 14,
+                      size: 13,
                       color: AppTheme.onyxBackground,
                     ),
                   ),
@@ -1124,61 +952,59 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            _displayName,
-            style: GoogleFonts.plusJakartaSans(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '@$_username',
-            style: GoogleFonts.plusJakartaSans(
-              color: AppTheme.gold,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.location_on_outlined, color: Color(0xFF919696), size: 14),
-              const SizedBox(width: 4),
-              Text(
-                _location,
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF919696),
-                  fontSize: 13,
+          const SizedBox(width: 16),
+
+          // Name, Username, Email, and Location
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _displayName,
+                  key: const Key('account_display_name'),
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppTheme.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              key: const Key('artist_account_edit_profile_hero_button'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.gold,
-                foregroundColor: AppTheme.onyxBackground,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                const SizedBox(height: 2),
+                Text(
+                  '@$_username',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppTheme.gold,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-              icon: const Icon(Icons.edit_outlined, size: 18),
-              label: Text(
-                'Edit Profile',
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
+                const SizedBox(height: 6),
+                Text(
+                  _email,
+                  key: const Key('account_email'),
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFF919696),
+                    fontSize: 12,
+                  ),
                 ),
-              ),
-              onPressed: _showEditProfileDialog,
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on_outlined, color: Color(0xFF919696), size: 13),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        _location,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFF919696),
+                          fontSize: 12,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
@@ -1187,30 +1013,26 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
   }
 
   Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4),
-      child: Text(
-        title,
-        style: GoogleFonts.plusJakartaSans(
-          color: const Color(0xFF919696),
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-        ),
+    return Text(
+      title,
+      style: GoogleFonts.plusJakartaSans(
+        color: const Color(0xFF919696),
+        fontSize: 11,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 1.2,
       ),
     );
   }
 
   Widget _buildSettingsContainer(List<Widget> children) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.cardBackground,
+    return Material(
+      color: AppTheme.cardBackground,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.darkBorder, width: 1),
+        side: const BorderSide(color: AppTheme.darkBorder, width: 1),
       ),
-      child: Column(
-        children: children,
-      ),
+      child: Column(children: children),
     );
   }
 
@@ -1218,58 +1040,35 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
     Key? key,
     required IconData icon,
     required String title,
-    required String subtitle,
+    String? subtitle,
     Widget? trailing,
     VoidCallback? onTap,
   }) {
-    return InkWell(
-      key: key,
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF262929),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: AppTheme.gold, size: 20),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.plusJakartaSans(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFF919696),
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (trailing != null) ...[
-              const SizedBox(width: 8),
-              trailing,
-            ],
-          ],
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        key: key,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+        leading: Icon(icon, color: AppTheme.gold, size: 20),
+        title: Text(
+          title,
+          style: GoogleFonts.plusJakartaSans(
+            color: AppTheme.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
         ),
+        subtitle: subtitle != null
+            ? Text(
+                subtitle,
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFF919696),
+                  fontSize: 12,
+                ),
+              )
+            : null,
+        trailing: trailing,
+        onTap: onTap,
       ),
     );
   }
@@ -1281,48 +1080,102 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF262929),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: AppTheme.gold, size: 20),
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+        leading: Icon(icon, color: AppTheme.gold, size: 20),
+        title: Text(
+          title,
+          style: GoogleFonts.plusJakartaSans(
+            color: AppTheme.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: GoogleFonts.plusJakartaSans(
+            color: const Color(0xFF919696),
+            fontSize: 12,
+          ),
+        ),
+        trailing: FlashSwitch(
+          value: value,
+          onChanged: onChanged,
+        ),
+        onTap: () => onChanged(!value),
+      ),
+    );
+  }
+
+  Widget _buildSignOutButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        key: const Key('artist_account_sign_out_button'),
+        onPressed: _handleSignOut,
+        icon: const Icon(
+          Icons.logout,
+          color: AppTheme.gold,
+          size: 18,
+        ),
+        label: Text(
+          'Sign Out',
+          style: GoogleFonts.plusJakartaSans(
+            color: AppTheme.gold,
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          backgroundColor: AppTheme.onyxContainer,
+          side: const BorderSide(color: AppTheme.goldBorder, width: 1.2),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeleteAccountButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        key: const Key('artist_account_delete_account_button'),
+        onPressed: _isDeleting ? null : _handleDeleteAccount,
+        icon: const Icon(
+          Icons.delete_outline,
+          color: Color(0xFFEF4444),
+          size: 18,
+        ),
+        label: _isDeleting
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFEF4444)),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFF919696),
-                    fontSize: 12,
-                  ),
+              )
+            : Text(
+                'Delete Account',
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFFEF4444),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
                 ),
-              ],
-            ),
+              ),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          backgroundColor: const Color(0x11EF4444),
+          side: const BorderSide(color: Color(0x55EF4444), width: 1.0),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
           ),
-          const SizedBox(width: 12),
-          FlashSwitch(
-            value: value,
-            onChanged: onChanged,
-          ),
-        ],
+        ),
       ),
     );
   }

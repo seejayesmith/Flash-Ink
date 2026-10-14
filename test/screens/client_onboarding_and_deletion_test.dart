@@ -95,7 +95,7 @@ void main() {
     // Tier 1: Skip Photo Routing
     // =========================================================================
     testWidgets(
-      'Tier 1: Tapping "SKIP" on ProfileSetupScreen bypasses photo and routes to AestheticsSelectionScreen, and FINISH routes to MainFeedScreen',
+      'Tier 1: Tapping "Skip" on ProfileSetupScreen bypasses photo and routes to AestheticsSelectionScreen, and FINISH routes to MainFeedScreen',
       (WidgetTester tester) async {
         await tester.pumpWidget(
           const MaterialApp(
@@ -114,12 +114,12 @@ void main() {
         await tester.tap(find.text('CONTINUE'));
         await tester.pumpAndSettle();
 
-        // 3. Verify Photo Step is reached and "SKIP" button is visible
+        // 3. Verify Photo Step is reached and "Skip" button is visible
         expect(find.text('Upload a profile photo'), findsOneWidget);
-        final skipButtonFinder = find.text('SKIP');
+        final skipButtonFinder = find.text('Skip');
         expect(skipButtonFinder, findsOneWidget);
 
-        // 4. Tap "SKIP" without picking an image
+        // 4. Tap "Skip" without picking an image
         await tester.tap(skipButtonFinder);
         await tester.pumpAndSettle();
 
@@ -128,7 +128,12 @@ void main() {
         expect(find.byType(AestheticsSelectionScreen), findsOneWidget);
         expect(find.text('Choose your aesthetics'), findsOneWidget);
 
-        // 6. Complete aesthetics by tapping FINISH
+        // 6. Select at least one aesthetic (required to proceed) and complete by tapping FINISH
+        final traditionalCardFinder = find.text('TRADITIONAL');
+        expect(traditionalCardFinder, findsOneWidget);
+        await tester.tap(traditionalCardFinder);
+        await tester.pumpAndSettle();
+
         final finishButtonFinder = find.text('FINISH');
         await tester.ensureVisible(finishButtonFinder);
         await tester.tap(finishButtonFinder);

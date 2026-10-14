@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../screens/custom_request_screen.dart';
 import '../../../../screens/flash_details_screen.dart';
+import '../../../../widgets/guest_auth_prompt_bottom_sheet.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
@@ -27,10 +28,12 @@ enum ArtistShowcaseTab {
 /// and strict design token adherence.
 class ArtistProfileScreen extends StatefulWidget {
   final ArtistProfile artist;
+  final bool isVipEarlyAccess;
 
   const ArtistProfileScreen({
     super.key,
     required this.artist,
+    this.isVipEarlyAccess = false,
   });
 
   @override
@@ -49,7 +52,13 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
     _isFavorited = widget.artist.isFavorited;
   }
 
-  void _toggleFavorite() {
+  Future<void> _toggleFavorite() async {
+    final authenticated = await GuestAuthPromptBottomSheet.ensureAuthenticated(
+      context,
+      actionType: AuthActionPromptType.favoriteArtist,
+    );
+    if (!authenticated || !mounted) return;
+
     setState(() {
       _isFavorited = !_isFavorited;
     });
@@ -173,6 +182,61 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
           const SliverToBoxAdapter(
             child: SizedBox(height: AppSpacing.spaceLg - 4),
           ),
+
+          if (widget.isVipEarlyAccess) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF262214),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusMd),
+                    border: Border.all(color: AppTheme.gold, width: 1.2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.gold.withAlpha(25),
+                        blurRadius: 12,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.stars_rounded, color: AppTheme.gold, size: 22),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Priority VIP Early Access Active',
+                              style: AppTypography.bodySmallBold.copyWith(
+                                color: AppTheme.gold,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'You have exclusive priority access to book flash or submit requests before general public opening.',
+                              style: AppTypography.label.copyWith(
+                                color: AppTheme.textPrimary,
+                                fontSize: 11,
+                                height: 1.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SliverToBoxAdapter(
+              child: SizedBox(height: AppSpacing.spaceMd),
+            ),
+          ],
 
           // 2. Key Metrics Row (Rating, Avail Pieces, Min Deposit)
           SliverToBoxAdapter(

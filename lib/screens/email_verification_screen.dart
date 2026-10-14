@@ -6,12 +6,20 @@ import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_buttons.dart';
 import '../widgets/adaptive_glass_container.dart';
+import '../widgets/skip_pill_button.dart';
+import 'artist_onboarding/artist_info_screen.dart';
+import 'auth_routing.dart';
 import 'profile_setup_screen.dart';
 
 class EmailVerificationScreen extends StatefulWidget {
   final AuthService? authService;
+  final String? role;
 
-  const EmailVerificationScreen({super.key, this.authService});
+  const EmailVerificationScreen({
+    super.key, 
+    this.authService,
+    this.role,
+  });
 
   @override
   State<EmailVerificationScreen> createState() => _EmailVerificationScreenState();
@@ -28,11 +36,14 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         await user.reload(); // Refresh the user's properties from Firebase
-        if (FirebaseAuth.instance.currentUser?.emailVerified ?? false) {
+        final refreshedUser = FirebaseAuth.instance.currentUser;
+        if (refreshedUser?.emailVerified ?? false) {
           if (mounted) {
-            Navigator.pushReplacement(
+            await AuthRouting.routeUserAfterAuth(
               context,
-              MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+              refreshedUser!,
+              defaultRole: widget.role ?? 'client',
+              authService: _authService,
             );
           }
         } else {
@@ -94,6 +105,38 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     }
   }
 
+  Future<void> _skipEmailVerification() async {
+    final user = FirebaseAuth.instance.currentUser ?? _authService.currentUser;
+    if (user != null) {
+      await AuthRouting.routeUserAfterAuth(
+        context,
+        user,
+        defaultRole: widget.role ?? 'client',
+        authService: _authService,
+        bypassEmailVerification: true,
+      );
+    } else {
+      if (!mounted) return;
+      if (widget.role == 'artist') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ArtistInfoScreen(
+              authService: _authService,
+            ),
+          ),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const ProfileSetupScreen(),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -112,6 +155,16 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
             }
           },
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: Center(
+              child: SkipPillButton(
+                onPressed: _skipEmailVerification,
+              ),
+            ),
+          ),
+        ],
       ),
       extendBodyBehindAppBar: true,
       body: Stack(

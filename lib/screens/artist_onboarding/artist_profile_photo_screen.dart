@@ -6,12 +6,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../config/dev_config.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_radius.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/artist_stepper_header.dart';
 import '../../widgets/tattoo_background_wrapper.dart';
+import '../../widgets/photo_crop_screen.dart';
+import '../../widgets/photo_source_bottom_sheet.dart';
+import '../../widgets/skip_pill_button.dart';
 import 'artist_instagram_screen.dart';
 
 class ArtistProfilePhotoScreen extends StatefulWidget {
@@ -52,9 +54,29 @@ class _ArtistProfilePhotoScreenState extends State<ArtistProfilePhotoScreen> {
     );
   }
 
+  Future<void> _handlePhotoSelect() async {
+    final result = await PhotoSourceBottomSheet.show(
+      context: context,
+      hasExistingPhoto: _imageBytes != null,
+      picker: _picker,
+    );
+
+    if (result != null && mounted) {
+      if (result.isRemoved) {
+        setState(() {
+          _imageBytes = null;
+        });
+      } else if (result.croppedBytes != null) {
+        setState(() {
+          _imageBytes = result.croppedBytes;
+        });
+      }
+    }
+  }
+
   Future<void> _pickImage([ImageSource? source]) async {
     if (source == null) {
-      _showImageSourceModal();
+      await _handlePhotoSelect();
       return;
     }
 
@@ -66,11 +88,19 @@ class _ArtistProfilePhotoScreenState extends State<ArtistProfilePhotoScreen> {
         maxHeight: 1024,
       );
 
-      if (pickedFile != null) {
+      if (pickedFile != null && mounted) {
         final bytes = await pickedFile.readAsBytes();
-        setState(() {
-          _imageBytes = bytes;
-        });
+        final croppedBytes = await Navigator.push<Uint8List?>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PhotoCropScreen(imageBytes: bytes),
+          ),
+        );
+        if (croppedBytes != null && mounted) {
+          setState(() {
+            _imageBytes = croppedBytes;
+          });
+        }
       }
     } catch (e) {
       _showErrorSnackBar('Failed to select image: $e');
@@ -81,104 +111,32 @@ class _ArtistProfilePhotoScreenState extends State<ArtistProfilePhotoScreen> {
     try {
       final byteData = await rootBundle.load('assets/images/flash_traditional_moth.jpg');
       final bytes = byteData.buffer.asUint8List();
-      setState(() {
-        _imageBytes = bytes;
-      });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Loaded sample photo for testing.'),
-            backgroundColor: Color(0xFF22C55E),
-            duration: Duration(seconds: 2),
+        final croppedBytes = await Navigator.push<Uint8List?>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PhotoCropScreen(
+              imageBytes: bytes,
+              title: 'CROP SAMPLE FLASH',
+            ),
           ),
         );
+        if (croppedBytes != null && mounted) {
+          setState(() {
+            _imageBytes = croppedBytes;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Loaded sample photo for testing.'),
+              backgroundColor: Color(0xFF22C55E),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
       }
     } catch (e) {
       _showErrorSnackBar('Failed to load sample photo: $e');
     }
-  }
-
-  void _showImageSourceModal() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E2020),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (bottomSheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF4D5252),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  'Select Profile Photo',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFFF9FAFA),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                ListTile(
-                  leading: const Icon(Icons.photo_library, color: Color(0xFFEEC200)),
-                  title: Text(
-                    'Choose from Gallery',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFF9FAFA),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(bottomSheetContext);
-                    _pickImage(ImageSource.gallery);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.camera_alt, color: Color(0xFFEEC200)),
-                  title: Text(
-                    'Take a Photo',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFF9FAFA),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(bottomSheetContext);
-                    _pickImage(ImageSource.camera);
-                  },
-                ),
-                if (kEnableDevBypass)
-                  ListTile(
-                    leading: const Icon(Icons.developer_mode, color: Color(0xFFEEC200)),
-                    title: Text(
-                      'Use Sample Photo (Dev)',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFFEEC200),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    onTap: () {
-                      Navigator.pop(bottomSheetContext);
-                      _useSamplePhoto();
-                    },
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
   }
 
   Future<void> _handleContinue() async {
@@ -244,19 +202,27 @@ class _ArtistProfilePhotoScreenState extends State<ArtistProfilePhotoScreen> {
     return Stack(
       alignment: Alignment.center,
       children: [
-        // Outer yellow ring container
+        // Outer yellow ring container with modern dark silhouette avatar
         Container(
           width: 230,
           height: 230,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(color: const Color(0xFFEEC200), width: 3),
-            color: const Color(0xFFCCCCCC),
+            color: const Color(0xFF262929),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFEEC200).withAlpha(40),
+                blurRadius: 16,
+                spreadRadius: 2,
+              ),
+            ],
           ),
-          child: ClipOval(
-            child: CustomPaint(
-              size: const Size(230, 230),
-              painter: _SilhouettePainter(),
+          child: const Center(
+            child: Icon(
+              Icons.person_outline,
+              size: 110,
+              color: Color(0xFFEEC200),
             ),
           ),
         ),
@@ -313,17 +279,51 @@ class _ArtistProfilePhotoScreenState extends State<ArtistProfilePhotoScreen> {
     );
   }
 
+  void _skipProfilePhoto() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ArtistInstagramScreen(
+          artistName: widget.artistName,
+          photoBytes: null,
+          photoUrl: null,
+          authService: _authService,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool hasImage = _imageBytes != null;
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       backgroundColor: const Color(0xFF121414),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFFF9FAFA)),
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: Center(
+              child: SkipPillButton(
+                onPressed: _skipProfilePhoto,
+              ),
+            ),
+          ),
+        ],
+      ),
       body: TattooBackgroundWrapper(
         child: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

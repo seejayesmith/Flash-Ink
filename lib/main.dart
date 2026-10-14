@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 
 import 'theme/app_typography.dart';
 
@@ -16,6 +17,18 @@ void main() async {
   } catch (_) {
     // If .env is missing in certain environments, continue gracefully
   }
+
+  // Initialize Stripe SDK if configured
+  final stripePublishableKey = dotenv.env['STRIPE_PUBLISHABLE_KEY'];
+  if (stripePublishableKey != null && stripePublishableKey.isNotEmpty) {
+    Stripe.publishableKey = stripePublishableKey;
+    Stripe.merchantIdentifier = dotenv.env['STRIPE_MERCHANT_IDENTIFIER'] ?? 'merchant.com.seejaye.flash_ink';
+    try {
+      await Stripe.instance.applySettings();
+    } catch (_) {
+      // In tests or unsupported environments, continue gracefully
+    }
+  }
   
   // Initialize Firebase
   await Firebase.initializeApp(
@@ -30,7 +43,12 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final Duration splashDelay;
+
+  const MyApp({
+    super.key,
+    this.splashDelay = const Duration(seconds: 2),
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +69,7 @@ class MyApp extends StatelessWidget {
           surfaceTintColor: Colors.transparent,
         ),
       ),
-      home: const SplashScreen(),
+      home: SplashScreen(delay: splashDelay),
     );
   }
 }

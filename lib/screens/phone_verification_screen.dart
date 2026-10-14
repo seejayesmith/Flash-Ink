@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../config/dev_config.dart';
 import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_buttons.dart';
 import '../widgets/adaptive_glass_container.dart';
-import 'main_feed_screen.dart';
+import '../widgets/skip_pill_button.dart';
 import 'profile_setup_screen.dart';
 import 'role_selection_screen.dart';
 
@@ -98,38 +97,6 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
     }
   }
 
-  Future<void> _skipVerification() async {
-    setState(() => _isLoading = true);
-    try {
-      final uid = _authService.currentUser?.uid;
-      if (uid != null) {
-        await _authService.updatePhoneVerificationStatus(
-          uid: uid,
-          phoneNumber: widget.phoneNumber,
-        );
-      }
-    } catch (_) {
-      // Dev bypass allows local testing without remote backend connectivity
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        final mockAuth = _authService.currentUser != null
-            ? _authService
-            : AuthService(
-                mockUser: DevMockUser(
-                  uid: 'dev_tester_client',
-                  displayName: 'Dev Tester',
-                  email: 'dev_client@flash.ink',
-                ),
-              );
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => MainFeedScreen(authService: mockAuth)),
-        );
-      }
-    }
-  }
-
   Future<void> _resendCode() async {
     setState(() => _isLoading = true);
     try {
@@ -199,10 +166,33 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
     }
   }
 
+  Future<void> _handleSkip() async {
+    setState(() => _isLoading = true);
+    try {
+      final uid = _authService.currentUser?.uid;
+      if (uid != null) {
+        await _authService.updatePhoneVerificationStatus(
+          uid: uid,
+          phoneNumber: widget.phoneNumber,
+        );
+      }
+    } catch (_) {
+      // Allow skip even if status update fails
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false, // Prevent skipping SMS verification
+      canPop: false, // Prevent skipping SMS verification via back swipe
       child: Scaffold(
         backgroundColor: const Color(0xFF121414),
         extendBodyBehindAppBar: true,
@@ -228,29 +218,14 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
           ),
           centerTitle: true,
           actions: [
-            if (kEnableDevBypass)
-              Padding(
-                padding: const EdgeInsets.only(right: 12.0),
-                child: ElevatedButton.icon(
-                  onPressed: _skipVerification,
-                  icon: const Icon(Icons.fast_forward, size: 16, color: Color(0xFF121414)),
-                  label: Text(
-                    'Skip',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF121414),
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEEC200),
-                    foregroundColor: const Color(0xFF121414),
-                    elevation: 2,
-                    shape: const StadiumBorder(),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                  ),
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: Center(
+                child: SkipPillButton(
+                  onPressed: _handleSkip,
                 ),
               ),
+            ),
           ],
         ),
         body: Stack(
@@ -317,24 +292,6 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                                           size: 38,
                                         ),
                                       ),
-                                      if (kEnableDevBypass)
-                                        TextButton(
-                                          onPressed: _isLoading ? null : _skipVerification,
-                                          style: TextButton.styleFrom(
-                                            foregroundColor: const Color(0xFFEEC200),
-                                            backgroundColor: const Color(0xFF252929),
-                                            shape: const StadiumBorder(),
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                          ),
-                                          child: Text(
-                                            'Skip (Dev)',
-                                            style: GoogleFonts.plusJakartaSans(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
-                                              color: const Color(0xFFEEC200),
-                                            ),
-                                          ),
-                                        ),
                                     ],
                                   ),
                                   AppGaps.gapMd,
@@ -403,29 +360,6 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                           onPressed: _verifyCode,
                           text: 'VERIFY',
                         ),
-                        if (kEnableDevBypass) ...[
-                          AppGaps.gapSm,
-                          SizedBox(
-                            width: double.infinity,
-                            height: 42,
-                            child: OutlinedButton(
-                              onPressed: _isLoading ? null : _skipVerification,
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Color(0xFFEEC200), width: 1.2),
-                                foregroundColor: const Color(0xFFEEC200),
-                                shape: const StadiumBorder(),
-                              ),
-                              child: Text(
-                                'Skip Verification (Dev)',
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  letterSpacing: 1.0,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
                         AppGaps.gapLg,
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,

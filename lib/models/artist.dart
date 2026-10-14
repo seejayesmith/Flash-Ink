@@ -310,7 +310,7 @@ class Artist {
           imageUrl: 'assets/images/flash_traditional_heart.jpg',
           price: 190,
           deposit: 50,
-          status: FlashStatus.claimed,
+          status: FlashStatus.available,
           dimensions: '4" x 6"',
           estimatedTime: '2.0 hrs',
           location: 'Upper Arm / Chest',

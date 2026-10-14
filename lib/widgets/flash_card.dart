@@ -6,6 +6,7 @@ import '../theme/app_buttons.dart';
 import '../theme/app_spacing.dart';
 import 'flash_image.dart';
 import 'animated_favorite_button.dart';
+import 'guest_auth_prompt_bottom_sheet.dart';
 
 /// A card component dedicated to displaying a purchasable tattoo flash design.
 ///
@@ -54,11 +55,18 @@ class FlashCard extends StatelessWidget {
     return flash.location;
   }
 
-  void _handleDefaultClaim(BuildContext context) {
+  void _handleDefaultClaim(BuildContext context) async {
     if (onClaim != null) {
       onClaim!();
       return;
     }
+
+    final authenticated = await GuestAuthPromptBottomSheet.ensureAuthenticated(
+      context,
+      actionType: AuthActionPromptType.bookFlash,
+    );
+    if (!authenticated || !context.mounted) return;
+
     showFlashBookingSheet(context, flash, artist: artist);
   }
 
@@ -280,7 +288,16 @@ class FlashCard extends StatelessWidget {
               right: 10,
               child: AnimatedFavoriteButton(
                 isFavorited: isFavorited,
-                onToggle: onToggleFavorite,
+                onToggle: onToggleFavorite != null
+                    ? () async {
+                        final authenticated = await GuestAuthPromptBottomSheet.ensureAuthenticated(
+                          context,
+                          actionType: AuthActionPromptType.favoriteArtwork,
+                        );
+                        if (!authenticated) return;
+                        onToggleFavorite!();
+                      }
+                    : null,
                 size: 36,
                 iconSize: 18,
                 backgroundColor: const Color(0xFF171A1A).withAlpha(200),
@@ -669,6 +686,13 @@ void showFlashBookingSheet(
                   // Confirm Claim Button
                   AppButtons.primaryCTA(
                     onPressed: () async {
+                      final authenticated = await GuestAuthPromptBottomSheet.ensureAuthenticated(
+                        context,
+                        actionType: AuthActionPromptType.bookFlash,
+                      );
+                      if (!authenticated) return;
+                      if (!modalContext.mounted) return;
+
                       Navigator.pop(modalContext);
                       final booked = await Navigator.push<bool>(
                         context,

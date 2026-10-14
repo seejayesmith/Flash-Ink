@@ -11,6 +11,7 @@ import 'package:flash_ink/features/messages/presentation/widgets/message_thread_
 import 'package:flash_ink/models/nav_destination_item.dart';
 import 'package:flash_ink/screens/main_feed_screen.dart';
 import 'package:flash_ink/screens/browse_artists_screen.dart';
+import 'package:flash_ink/theme/app_spacing.dart';
 
 void main() {
   group('Navigation Shell & 4 Primary Root Screens Tests', () {
@@ -181,6 +182,49 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Sounds good! See you then.'), findsOneWidget);
+    });
+
+    testWidgets('Header text at top-left is aligned on the left with screen content margin (AppSpacing.spaceLg)',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      // 1. AppointmentsScreen header alignment
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AppointmentsScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final appointmentsTitleOffset = tester.getTopLeft(find.text('Appointments'));
+      expect(appointmentsTitleOffset.dx, equals(AppSpacing.spaceLg));
+
+      // 2. MessagesScreen header alignment
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: MessagesScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final messagesTitleOffset = tester.getTopLeft(find.text('Messages'));
+      expect(messagesTitleOffset.dx, equals(AppSpacing.spaceLg));
+
+      // 3. ExploreScreen header alignment
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: ExploreScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final exploreTitleOffset = tester.getTopLeft(find.text('Explore'));
+      expect(exploreTitleOffset.dx, equals(AppSpacing.spaceLg));
     });
   });
 }

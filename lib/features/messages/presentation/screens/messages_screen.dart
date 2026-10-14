@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../models/artist_dashboard_data.dart';
+import '../../../../models/waitlist_entry.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
 import '../../domain/models/message_thread.dart';
 import '../widgets/message_thread_tile.dart';
+import '../widgets/vip_waitlist_invitation_card.dart';
 
 /// MessagesScreen:
 /// Main inbox view displaying direct message threads with tattoo artists.
@@ -60,6 +63,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
         backgroundColor: AppTheme.onyxBackground,
         elevation: 0,
         scrolledUnderElevation: 0,
+        titleSpacing: AppSpacing.spaceLg,
         title: Row(
           children: [
             Text(
@@ -131,6 +135,20 @@ class _MessagesScreenState extends State<MessagesScreen> {
               ),
             ),
             const SizedBox(height: 14),
+
+            // Exclusive VIP Waitlist Early Access Invitation Card
+            Builder(
+              builder: (context) {
+                final schedule = ArtistDashboardRepository.booksSchedule;
+                final invites = ArtistDashboardRepository.waitlistEntries
+                    .where((e) => e.status == WaitlistStatus.earlyAccessSent)
+                    .toList();
+                if (schedule.isEarlyAccessActive && invites.isNotEmpty) {
+                  return VipWaitlistInvitationCard(entry: invites.first);
+                }
+                return const SizedBox.shrink();
+              },
+            ),
 
             // Threads List
             Expanded(

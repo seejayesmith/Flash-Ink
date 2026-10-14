@@ -273,6 +273,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               statusBarColor: Colors.transparent,
               statusBarIconBrightness: Brightness.light,
             ),
+            titleSpacing: AppSpacing.spaceLg,
             title: Row(
               children: [
                 Text(
@@ -361,7 +362,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: AppSpacing.spaceLg),
             ],
           ),
 

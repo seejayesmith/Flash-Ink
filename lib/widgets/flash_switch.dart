@@ -35,8 +35,8 @@ class FlashSwitch extends StatelessWidget {
     return CupertinoSwitch(
       value: value,
       onChanged: onChanged,
-      activeColor: activeColor ?? AppTheme.switchActive,
-      trackColor: trackColor ?? AppTheme.switchInactive,
+      activeTrackColor: activeColor ?? AppTheme.switchActive,
+      inactiveTrackColor: trackColor ?? AppTheme.switchInactive,
       dragStartBehavior: dragStartBehavior,
     );
   }

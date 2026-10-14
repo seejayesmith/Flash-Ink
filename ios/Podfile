@@ -39,6 +39,19 @@ end
 post_install do |installer|
   installer.pods_project.root_object.attributes['LastUpgradeCheck'] = '2700'
   installer.pods_project.root_object.attributes['LastSwiftUpdateCheck'] = '2700'
+
+  # Xcode "Update to recommended settings" (project-level) for Pods.xcodeproj.
+  # Pods.xcodeproj is regenerated on every `pod install`, so apply them here.
+  installer.pods_project.build_configurations.each do |config|
+    config.build_settings['DEAD_CODE_STRIPPING'] = 'YES'
+    config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'YES'
+    config.build_settings['ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS'] = 'YES'
+    config.build_settings['LOCALIZATION_PREFERS_STRING_CATALOGS'] = 'YES'
+    config.build_settings['STRING_CATALOG_GENERATE_SYMBOLS'] = 'YES'
+    config.build_settings['SWIFT_EMIT_LOC_STRINGS'] = 'YES'
+    config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+  end
+
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|

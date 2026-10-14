@@ -5,8 +5,6 @@ import '../../models/artist_dashboard_data.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/tattoo_machine_icon.dart';
-import '../artist_profile_screen.dart';
-import '../splash_screen.dart';
 import 'appointment_detail_screen.dart';
 import 'artist_account_screen.dart';
 
@@ -106,6 +104,7 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
       final daysInMonth = DateTime(prevYear, prevMonth + 1, 0).day;
       final newDay = _selectedDate.day.clamp(1, daysInMonth);
       _selectedDate = DateTime(prevYear, prevMonth, newDay);
+      _isPickingMonth = false;
     });
   }
 
@@ -117,6 +116,7 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
       final daysInMonth = DateTime(nextYear, nextMonth + 1, 0).day;
       final newDay = _selectedDate.day.clamp(1, daysInMonth);
       _selectedDate = DateTime(nextYear, nextMonth, newDay);
+      _isPickingMonth = false;
     });
   }
 
@@ -205,7 +205,7 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
               if (canGoBack) Navigator.pop(context);
             },
             child: const TattooMachineIcon(
-              size: 28,
+              size: 43,
               color: Color(0xFFEEC200),
             ),
           ),
@@ -337,122 +337,182 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
     );
   }
 
-  /// Month & Year dropdown pills in header of calendar card
+  /// Month & Year dropdown pills in header of calendar card with left/right month toggles
   Widget _buildMonthYearSelectors() {
     final currentMonthFull = _monthNames[_activeMonth.month - 1];
     final currentYear = _activeMonth.year;
 
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Month Selector Pill
-        GestureDetector(
-          key: const Key('calendar_month_dropdown'),
-          onTap: () {
-            setState(() {
-              _isPickingMonth = !_isPickingMonth;
-            });
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        // Previous Month Toggle Button
+        _buildNavButton(
+          key: const Key('calendar_prev_month_button'),
+          icon: Icons.chevron_left,
+          tooltip: 'Previous month',
+          onTap: _prevMonth,
+        ),
+
+        // Month & Year Selector Pills
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Month Selector Pill
+            GestureDetector(
+              key: const Key('calendar_month_dropdown'),
+              onTap: () {
+                setState(() {
+                  _isPickingMonth = !_isPickingMonth;
+                });
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF121414),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: _isPickingMonth
+                        ? const Color(0xFFEEC200)
+                        : const Color(0xFF282B2B),
+                    width: 1.0,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      currentMonthFull,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: _isPickingMonth ? const Color(0xFFEEC200) : Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    AnimatedRotation(
+                      turns: _isPickingMonth ? 0.5 : 0.0,
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeInOutCubic,
+                      child: Icon(
+                        Icons.keyboard_arrow_down,
+                        color: _isPickingMonth
+                            ? const Color(0xFFEEC200)
+                            : const Color(0xFF8C9191),
+                        size: 18,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // Year Selector Pill
+            PopupMenuButton<int>(
+              key: const Key('calendar_year_dropdown'),
+              color: const Color(0xFF202323),
+              elevation: 8,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: const BorderSide(color: Color(0xFF333737)),
+              ),
+              initialValue: currentYear,
+              onSelected: _selectYear,
+              itemBuilder: (context) {
+                const years = [2024, 2025, 2026, 2027, 2028];
+                return years.map((year) {
+                  final isSelected = year == currentYear;
+                  return PopupMenuItem<int>(
+                    value: year,
+                    child: Text(
+                      '$year',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: isSelected ? const Color(0xFFEEC200) : Colors.white,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        fontSize: 14,
+                      ),
+                    ),
+                  );
+                }).toList();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF121414),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF282B2B)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '$currentYear',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.keyboard_arrow_down,
+                      color: Color(0xFF8C9191),
+                      size: 18,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        // Next Month Toggle Button
+        _buildNavButton(
+          key: const Key('calendar_next_month_button'),
+          icon: Icons.chevron_right,
+          tooltip: 'Next month',
+          onTap: _nextMonth,
+        ),
+      ],
+    );
+  }
+
+  /// Circular navigation toggle button (chevron left/right) for the calendar
+  Widget _buildNavButton({
+    required Key key,
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: key,
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Container(
+            width: 34,
+            height: 34,
             decoration: BoxDecoration(
               color: const Color(0xFF121414),
-              borderRadius: BorderRadius.circular(20),
+              shape: BoxShape.circle,
               border: Border.all(
-                color: _isPickingMonth
-                    ? const Color(0xFFEEC200)
-                    : const Color(0xFF282B2B),
+                color: const Color(0xFF282B2B),
                 width: 1.0,
               ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  currentMonthFull,
-                  style: GoogleFonts.plusJakartaSans(
-                    color: _isPickingMonth ? const Color(0xFFEEC200) : Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                AnimatedRotation(
-                  turns: _isPickingMonth ? 0.5 : 0.0,
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeInOutCubic,
-                  child: Icon(
-                    Icons.keyboard_arrow_down,
-                    color: _isPickingMonth
-                        ? const Color(0xFFEEC200)
-                        : const Color(0xFF8C9191),
-                    size: 18,
-                  ),
-                ),
-              ],
+            alignment: Alignment.center,
+            child: Icon(
+              icon,
+              color: Colors.white,
+              size: 20,
             ),
           ),
         ),
-        const SizedBox(width: 10),
-
-        // Year Selector Pill
-        PopupMenuButton<int>(
-          key: const Key('calendar_year_dropdown'),
-          color: const Color(0xFF202323),
-          elevation: 8,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: Color(0xFF333737)),
-          ),
-          initialValue: currentYear,
-          onSelected: _selectYear,
-          itemBuilder: (context) {
-            const years = [2024, 2025, 2026, 2027, 2028];
-            return years.map((year) {
-              final isSelected = year == currentYear;
-              return PopupMenuItem<int>(
-                value: year,
-                child: Text(
-                  '$year',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: isSelected ? const Color(0xFFEEC200) : Colors.white,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    fontSize: 14,
-                  ),
-                ),
-              );
-            }).toList();
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFF121414),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF282B2B)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '$currentYear',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                const Icon(
-                  Icons.keyboard_arrow_down,
-                  color: Color(0xFF8C9191),
-                  size: 18,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -678,8 +738,9 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
     );
   }
 
-  /// Header row for the schedule section: "Today's Schedule" + "VIEW ALL"
+  /// Header row for the schedule section: "Today's Schedule" + session count badge
   Widget _buildScheduleHeader() {
+    final sessionCount = _currentAppointments.length;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -691,19 +752,24 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        GestureDetector(
-          key: const Key('calendar_view_all_button'),
-          onTap: _showAllAppointmentsSheet,
-          child: Text(
-            'VIEW ALL',
-            style: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFFEEC200),
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.5,
+        if (sessionCount > 0)
+          Container(
+            key: const Key('calendar_session_count_badge'),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E2121),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF282C2C)),
+            ),
+            child: Text(
+              '$sessionCount ${sessionCount == 1 ? 'session' : 'sessions'}',
+              style: GoogleFonts.plusJakartaSans(
+                color: const Color(0xFFEEC200),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -907,10 +973,15 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
+            const SizedBox(height: 12),
+            const Divider(
+              color: Color(0xFF252828),
+              height: 1,
+              thickness: 1,
+            ),
+            const SizedBox(height: 4),
+            Center(
+              child: TextButton(
                 key: Key('calendar_view_details_btn_${item.id}'),
                 onPressed: () {
                   Navigator.push(
@@ -920,18 +991,16 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
                     ),
                   );
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFEEC200),
-                  foregroundColor: const Color(0xFF121414),
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFEEC200),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  minimumSize: const Size(0, 36),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 child: Text(
                   'View Details',
                   style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFFEEC200),
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.2,

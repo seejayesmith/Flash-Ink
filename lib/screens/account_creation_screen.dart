@@ -1,20 +1,21 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../widgets/flash_logo.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../config/dev_config.dart';
 import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_buttons.dart';
-import 'email_verification_screen.dart';
+import 'email_auth_screen.dart';
+import 'phone_entry_screen.dart';
 import 'aesthetics_selection_screen.dart';
-import 'artist_dashboard/artist_dashboard_screen.dart';
-import 'main_feed_screen.dart';
-import 'profile_setup_screen.dart';
 import '../widgets/adaptive_glass_container.dart';
 import '../widgets/social_auth_buttons.dart';
+import '../widgets/skip_pill_button.dart';
+import 'auth_routing.dart';
+import 'profile_setup_screen.dart';
+import 'artist_onboarding/artist_info_screen.dart';
 
 class AccountCreationScreen extends StatefulWidget {
   final String role;
@@ -36,37 +37,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
   bool _isGoogleLoading = false;
   bool _isAppleLoading = false;
 
-  void _bypassEntireAccountCreation([BuildContext? modalContext]) {
-    if (modalContext != null) {
-      Navigator.of(modalContext).pop();
-    }
-    final isArtist = widget.role == 'artist';
-    final mockAuth = _authService.currentUser != null
-        ? _authService
-        : AuthService(
-            mockUser: DevMockUser(
-              uid: isArtist ? 'dev_tester_artist' : 'dev_tester_client',
-              displayName: 'Dev Tester',
-              email: isArtist ? 'dev_artist@flash.ink' : 'dev_client@flash.ink',
-            ),
-          );
 
-    if (isArtist) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ArtistDashboardScreen(authService: mockAuth),
-        ),
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => MainFeedScreen(authService: mockAuth),
-        ),
-      );
-    }
-  }
 
   void _showErrorSnackBar(String message) {
     if (!mounted) return;
@@ -96,18 +67,12 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
     try {
       final credential = await signInMethod();
       if (credential != null && credential.user != null) {
-        // Save selected role to Firestore
-        try {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(credential.user!.uid)
-              .set({'role': widget.role}, SetOptions(merge: true));
-        } catch (_) {}
-
         if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+          await AuthRouting.routeUserAfterAuth(
+            context, 
+            credential.user!, 
+            defaultRole: widget.role,
+            authService: _authService,
           );
         }
       }
@@ -234,240 +199,55 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
     }
   }
 
-  void _showEmailAuthModal() {
-    final emailController = TextEditingController();
-    final passwordController = TextEditingController();
-    bool isSignUp = true;
-    bool isModalLoading = false;
-    final formKey = GlobalKey<FormState>();
+  void _navigateToEmailAuth({bool isSignUp = true}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EmailAuthScreen(
+          role: widget.role,
+          authService: _authService,
+          initialIsSignUp: isSignUp,
+        ),
+      ),
+    );
+  }
 
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (modalContext) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(modalContext).viewInsets.bottom,
-              ),
-              child: SafeArea(
-                top: false,
-                child: AdaptiveGlassContainer(
-                  customBorderRadius: const BorderRadius.vertical(top: Radius.circular(24.0)),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.spaceLg,
-                      vertical: AppSpacing.spaceLg,
-                    ),
-                    child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 44,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF4D5252),
-                          borderRadius: BorderRadius.circular(3), // Small pill
-                        ),
-                      ),
-                    ),
-                    AppGaps.gapLg,
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Text(
-                          isSignUp ? 'Create with Email' : 'Sign in with Email',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: const Color(0xFFF9FAFA),
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        if (kEnableDevBypass)
-                          TextButton.icon(
-                            onPressed: () => _bypassEntireAccountCreation(modalContext),
-                            icon: const Icon(Icons.fast_forward, size: 14, color: Color(0xFFEEC200)),
-                            label: const Text(
-                              'Skip (Dev)',
-                              style: TextStyle(
-                                color: Color(0xFFEEC200),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    AppGaps.gapLg,
-                    Text(
-                      'Email Address',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFFF9FAFA),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    AppGaps.gapXs,
-                    TextFormField(
-                      controller: emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      style: const TextStyle(color: Color(0xFFF9FAFA)),
-                      validator: (v) =>
-                          (v == null || !v.contains('@')) ? 'Enter a valid email' : null,
-                      decoration: InputDecoration(
-                        hintText: 'you@example.com',
-                        hintStyle: const TextStyle(color: Color(0xFF4D5252)),
-                        filled: true,
-                        fillColor: const Color(0xFF121414),
-                        border: OutlineInputBorder(
-                          borderRadius: AppBorderRadius.md,
-                          borderSide: const BorderSide(color: Color(0xFF262929)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: AppBorderRadius.md,
-                          borderSide: const BorderSide(color: Color(0xFFEEC200)),
-                        ),
-                      ),
-                    ),
-                    AppGaps.gapMd,
-                    Text(
-                      'Password',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFFF9FAFA),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    AppGaps.gapXs,
-                    TextFormField(
-                      controller: passwordController,
-                      obscureText: true,
-                      style: const TextStyle(color: Color(0xFFF9FAFA)),
-                      validator: (v) =>
-                          (v == null || v.length < 6) ? 'Password must be at least 6 characters' : null,
-                      decoration: InputDecoration(
-                        hintText: '••••••••',
-                        hintStyle: const TextStyle(color: Color(0xFF4D5252)),
-                        filled: true,
-                        fillColor: const Color(0xFF121414),
-                        border: OutlineInputBorder(
-                          borderRadius: AppBorderRadius.md,
-                          borderSide: const BorderSide(color: Color(0xFF262929)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: AppBorderRadius.md,
-                          borderSide: const BorderSide(color: Color(0xFFEEC200)),
-                        ),
-                      ),
-                    ),
-                    AppGaps.gapLg,
-                    AppButtons.primaryCTA(
-                      isLoading: isModalLoading,
-                      onPressed: () async {
-                        if (!formKey.currentState!.validate()) return;
-                        setModalState(() => isModalLoading = true);
-                        final modalNavigator = Navigator.of(modalContext);
-                        try {
-                          UserCredential credential;
-                          if (isSignUp) {
-                            credential = await _authService.signUpWithEmailAndPassword(
-                              emailController.text,
-                              passwordController.text,
-                            );
-                          } else {
-                            credential = await _authService.signInWithEmailAndPassword(
-                              emailController.text,
-                              passwordController.text,
-                            );
-                          }
+  void _navigateToPhoneAuth({String? initialPhone}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PhoneEntryScreen(
+          role: widget.role,
+          authService: _authService,
+          initialPhone: initialPhone,
+        ),
+      ),
+    );
+  }
 
-                          if (credential.user != null) {
-                            try {
-                              await FirebaseFirestore.instance
-                                  .collection('users')
-                                  .doc(credential.user!.uid)
-                                  .set({'role': widget.role}, SetOptions(merge: true));
-                            } catch (_) {}
-                          }
+  void _showEmailAuthModal() => _navigateToEmailAuth();
+  void _showPhoneEntryModal({String? initialPhone}) =>
+      _navigateToPhoneAuth(initialPhone: initialPhone);
 
-                          modalNavigator.pop();
-                          if (context.mounted) {
-                            if (credential.user != null && !credential.user!.emailVerified) {
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(builder: (_) => const EmailVerificationScreen()),
-                              );
-                            } else {
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
-                              );
-                            }
-                          }
-                        } catch (e) {
-                          setModalState(() => isModalLoading = false);
-                          _showErrorSnackBar(e.toString());
-                        }
-                      },
-                      text: isSignUp ? 'CREATE ACCOUNT' : 'SIGN IN',
-                    ),
-                    if (kEnableDevBypass) ...[
-                      AppGaps.gapSm,
-                      SizedBox(
-                        width: double.infinity,
-                        height: 44,
-                        child: OutlinedButton(
-                          onPressed: () => _bypassEntireAccountCreation(modalContext),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Color(0xFFEEC200), width: 1.2),
-                            foregroundColor: const Color(0xFFEEC200),
-                            shape: const StadiumBorder(),
-                          ),
-                          child: Text(
-                            'Skip Email / Password (Dev)',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                    AppGaps.gapSm,
-                    Center(
-                      child: TextButton(
-                        onPressed: () {
-                          setModalState(() => isSignUp = !isSignUp);
-                        },
-                        child: Text(
-                          isSignUp
-                              ? 'Already have an account? Sign In'
-                              : "Don't have an account? Create One",
-                          style: const TextStyle(color: Color(0xFF919696), fontSize: 13),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+  void _handleSkip() {
+    if (widget.role == 'artist') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ArtistInfoScreen(
+            authService: _authService,
           ),
         ),
       );
-    },
-  );
-},
-);
-}
-
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const ProfileSetupScreen(),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -482,30 +262,15 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          if (kEnableDevBypass)
-            Padding(
-              padding: const EdgeInsets.only(right: 16.0),
-              child: ElevatedButton.icon(
-                key: const Key('dev_skip_account_creation_button'),
-                onPressed: _bypassEntireAccountCreation,
-                icon: const Icon(Icons.fast_forward, size: 16, color: Color(0xFF121414)),
-                label: Text(
-                  'Skip',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF121414),
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFEEC200),
-                  foregroundColor: const Color(0xFF121414),
-                  elevation: 2,
-                  shape: const StadiumBorder(),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                ),
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: Center(
+              child: SkipPillButton(
+                key: const Key('skip_account_creation_button'),
+                onPressed: _isLoading ? null : _handleSkip,
               ),
             ),
+          ),
         ],
       ),
       body: Stack(
@@ -553,31 +318,14 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Transform.rotate(
-                              angle: -15 * (math.pi / 180),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'Flash',
-                                    style: GoogleFonts.kaushanScript(
-                                      fontSize: 64,
-                                      color: const Color(0xFFEEC200),
-                                    ),
-                                  ),
-                                  AppGaps.gapXs,
-                                  const Icon(
-                                    Icons.electric_bolt,
-                                    color: Color(0xFFEEC200),
-                                    size: 34,
-                                  ),
-                                ],
-                              ),
+                            const FlashLogo(
+                              fontSize: 64,
                             ),
                             AppGaps.gapMd,
                             Text(
-                              'Create an account or continue as guest to start exploring exclusive flash designs.',
+                              widget.role == 'artist'
+                                  ? 'Create an account to showcase your flash designs, manage bookings, and grow your studio.'
+                                  : 'Create an account or continue as guest to start exploring exclusive flash designs.',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.plusJakartaSans(
                                 color: const Color(0xFF919696),
@@ -586,75 +334,29 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                               ),
                             ),
                              AppGaps.gapLg,
-                              if (kEnableDevBypass) ...[
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFEEC200).withAlpha(25),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: const Color(0xFFEEC200).withAlpha(140)),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.flash_on, color: Color(0xFFEEC200), size: 20),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'LOCAL DEV TESTING',
-                                              style: GoogleFonts.plusJakartaSans(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w800,
-                                                letterSpacing: 1.0,
-                                                color: const Color(0xFFEEC200),
-                                              ),
-                                            ),
-                                            Text(
-                                              'Skip account creation & proceed',
-                                              style: GoogleFonts.plusJakartaSans(
-                                                fontSize: 12,
-                                                color: const Color(0xFFD8DDDD),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      ElevatedButton.icon(
-                                        key: const Key('dev_skip_banner_button'),
-                                        onPressed: _bypassEntireAccountCreation,
-                                        icon: const Icon(Icons.arrow_forward, size: 14),
-                                        label: const Text('Skip'),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: const Color(0xFFEEC200),
-                                          foregroundColor: const Color(0xFF121414),
-                                          textStyle: GoogleFonts.plusJakartaSans(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                          shape: const StadiumBorder(),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                AppGaps.gapMd,
-                              ],
                              // Primary Account Creation Options within Liquid Glass Container
                             AdaptiveGlassContainer(
+                              useGradient: false,
                               borderRadius: 20.0,
                               padding: const EdgeInsets.all(AppSpacing.spaceMd),
-                              child: AppButtons.primaryCTA(
-                                icon: Icons.mail_outline,
-                                text: 'Continue with Email',
-                                onPressed: _isLoading ? null : _showEmailAuthModal,
-                                backgroundColor: const Color(0xFF262929),
-                                foregroundColor: const Color(0xFFF9FAFA),
+                              child: Column(
+                                children: [
+                                  AppButtons.primaryCTA(
+                                    icon: Icons.mail_outline,
+                                    text: 'Continue with Email',
+                                    onPressed: _isLoading ? null : _showEmailAuthModal,
+                                    backgroundColor: const Color(0xFF262929),
+                                    foregroundColor: const Color(0xFFF9FAFA),
+                                  ),
+                                  AppGaps.gapSm,
+                                  AppButtons.primaryCTA(
+                                    icon: Icons.phone_iphone,
+                                    text: 'Continue with Phone',
+                                    onPressed: _isLoading ? null : () => _showPhoneEntryModal(),
+                                    backgroundColor: const Color(0xFF262929),
+                                    foregroundColor: const Color(0xFFF9FAFA),
+                                  ),
+                                ],
                               ),
                             ),
                             AppGaps.gapLg,
@@ -675,22 +377,24 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                               isGoogleLoading: _isGoogleLoading,
                               isAppleLoading: _isAppleLoading,
                             ),
-                            AppGaps.gapLg,
-                            // Guest Mode Action
-                            TextButton(
-                              onPressed: _isLoading ? null : _handleGuestMode,
-                              child: Text(
-                                'Continue as Guest',
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: const Color(0xFFEEC200),
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.5,
-                                  decoration: TextDecoration.underline,
-                                  decorationColor: const Color(0xFFEEC200),
+                            if (widget.role != 'artist') ...[
+                              AppGaps.gapLg,
+                              // Guest Mode Action
+                              TextButton(
+                                onPressed: _isLoading ? null : _handleGuestMode,
+                                child: Text(
+                                  'Continue as Guest',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: const Color(0xFFEEC200),
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                    decoration: TextDecoration.underline,
+                                    decorationColor: const Color(0xFFEEC200),
+                                  ),
                                 ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                       ),

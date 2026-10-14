@@ -1,12 +1,12 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../config/dev_config.dart';
 import '../../models/artist.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/artist_stepper_header.dart';
 import '../../widgets/tattoo_background_wrapper.dart';
+import '../../widgets/skip_pill_button.dart';
 import 'artist_choose_style_screen.dart';
 
 class ArtistIdentityTagsScreen extends StatefulWidget {
@@ -90,7 +90,8 @@ class _ArtistIdentityTagsScreenState extends State<ArtistIdentityTagsScreen> {
     });
   }
 
-  void _proceedToChooseStyle() {
+  void _proceedToChooseStyle([List<String>? tagsOverride]) {
+    final tags = tagsOverride ?? _selectedTags.toList();
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -101,7 +102,7 @@ class _ArtistIdentityTagsScreenState extends State<ArtistIdentityTagsScreen> {
           instagramHandle: widget.instagramHandle,
           minDeposit: widget.minDeposit,
           flashArtworks: widget.flashArtworks,
-          identityTags: _selectedTags.toList(),
+          identityTags: tags,
           authService: widget.authService,
         ),
       ),
@@ -111,35 +112,33 @@ class _ArtistIdentityTagsScreenState extends State<ArtistIdentityTagsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
       backgroundColor: const Color(0xFF121414),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          if (kEnableDevBypass)
-            TextButton(
-              key: const Key('dev_skip_identity'),
-              onPressed: _proceedToChooseStyle,
-              child: Text(
-                'Skip (Dev)',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFEEC200),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: Center(
+              child: SkipPillButton(
+                key: const Key('skip_identity_tags_button'),
+                onPressed: () => _proceedToChooseStyle(const []),
               ),
             ),
+          ),
         ],
       ),
       body: TattooBackgroundWrapper(
         child: SafeArea(
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

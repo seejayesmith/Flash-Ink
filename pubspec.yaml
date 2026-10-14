@@ -46,7 +46,9 @@ dependencies:
   cached_network_image: ^4.0.1
   add_2_calendar: ^3.1.1
   intl: ^0.20.2
-
+  flutter_svg: ^2.3.0
+  flutter_stripe: ^14.1.0
+  http: ^1.6.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -64,6 +66,7 @@ dev_dependencies:
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
+  firebase_core_platform_interface: any
 flutter:
 
   # The following line ensures that the Material Icons font is
@@ -75,6 +78,7 @@ flutter:
   assets:
     - .env
     - assets/images/
+    - assets/images/tattoo_gun.svg
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 

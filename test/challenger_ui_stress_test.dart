@@ -98,10 +98,10 @@ void main() {
 
   group('Challenger Stress & Adversarial Test Suite', () {
     // =========================================================================
-    // 1. Rapid Tapping on "SKIP" Button (Loading & Idempotency)
+    // 1. Rapid Tapping on "Skip" Button (Loading & Idempotency)
     // =========================================================================
     testWidgets(
-      'Adversarial 1: Rapid multi-tapping on "SKIP" button is idempotent and transitions cleanly without duplicate navigation',
+      'Adversarial 1: Rapid multi-tapping on "Skip" button is idempotent and transitions cleanly without duplicate navigation',
       (WidgetTester tester) async {
         await tester.pumpWidget(
           const MaterialApp(
@@ -118,7 +118,7 @@ void main() {
 
         // Verify we are on Photo step
         expect(find.text('Upload a profile photo'), findsOneWidget);
-        final skipFinder = find.text('SKIP');
+        final skipFinder = find.text('Skip');
         expect(skipFinder, findsOneWidget);
 
         // Rapid tapping: simulate 5 rapid tap events in quick succession
@@ -479,7 +479,7 @@ void main() {
     );
 
     testWidgets(
-      'Adversarial 5b: Onboarding flow removes ProfileSetupScreen on SKIP and clears stack on FINISH',
+      'Adversarial 5b: Onboarding flow removes ProfileSetupScreen on Skip and clears stack on FINISH',
       (WidgetTester tester) async {
         final navKey = GlobalKey<NavigatorState>();
         await tester.pumpWidget(
@@ -496,13 +496,19 @@ void main() {
         await tester.tap(find.text('CONTINUE'));
         await tester.pumpAndSettle();
 
-        // Tap SKIP
-        await tester.tap(find.text('SKIP'));
+        // Tap Skip
+        await tester.tap(find.text('Skip'));
         await tester.pumpAndSettle();
 
         // AestheticsSelectionScreen is now visible; ProfileSetupScreen replaced
         expect(find.byType(AestheticsSelectionScreen), findsOneWidget);
         expect(find.byType(ProfileSetupScreen), findsNothing);
+
+        // Select at least one aesthetic (required to enable FINISH)
+        final traditionalCardFinder = find.text('TRADITIONAL');
+        expect(traditionalCardFinder, findsOneWidget);
+        await tester.tap(traditionalCardFinder);
+        await tester.pumpAndSettle();
 
         // Tap FINISH on AestheticsSelectionScreen
         final finishFinder = find.text('FINISH');

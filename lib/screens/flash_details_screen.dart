@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/artist.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/flash_image.dart';
+import '../widgets/guest_auth_prompt_bottom_sheet.dart';
 import 'booking/flash_booking_screen.dart';
 
 class FlashDetailsScreen extends StatefulWidget {
@@ -31,6 +32,34 @@ class _FlashDetailsScreenState extends State<FlashDetailsScreen> {
   }
 
   void _claimFlash() async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: const Color(0xFF1E2020),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: const BorderSide(color: Color(0xFFEEC200), width: 1),
+        ),
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_outline, color: Color(0xFFEEC200), size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Reserved "${widget.flash.title}"! Deposit \$${widget.flash.deposit} confirmed.',
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFFF9FAFA),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+
     final booked = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
@@ -76,6 +105,7 @@ class _FlashDetailsScreenState extends State<FlashDetailsScreen> {
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
     final flash = widget.flash;
@@ -111,7 +141,13 @@ class _FlashDetailsScreenState extends State<FlashDetailsScreen> {
               _isFavorited ? Icons.favorite : Icons.favorite_border,
               color: _isFavorited ? const Color(0xFFEF4444) : const Color(0xFFF9FAFA),
             ),
-            onPressed: () {
+            onPressed: () async {
+              final authenticated = await GuestAuthPromptBottomSheet.ensureAuthenticated(
+                context,
+                actionType: AuthActionPromptType.favoriteArtwork,
+              );
+              if (!authenticated || !mounted) return;
+
               setState(() {
                 _isFavorited = !_isFavorited;
               });
@@ -261,10 +297,28 @@ class _FlashDetailsScreenState extends State<FlashDetailsScreen> {
                           ),
                           child: Row(
                             children: [
-                              CircleAvatar(
-                                radius: 20,
-                                backgroundImage: NetworkImage(artist.avatarUrl),
-                                backgroundColor: const Color(0xFF262929),
+                              ClipOval(
+                                child: SizedBox(
+                                  width: 40,
+                                  height: 40,
+                                  child: artist.avatarUrl.startsWith('http')
+                                      ? Image.network(
+                                          artist.avatarUrl,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, _, _) => Container(
+                                            color: const Color(0xFF262929),
+                                            child: const Icon(Icons.person, color: Color(0xFFEEC200), size: 20),
+                                          ),
+                                        )
+                                      : Image.asset(
+                                          artist.avatarUrl,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, _, _) => Container(
+                                            color: const Color(0xFF262929),
+                                            child: const Icon(Icons.person, color: Color(0xFFEEC200), size: 20),
+                                          ),
+                                        ),
+                                ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(

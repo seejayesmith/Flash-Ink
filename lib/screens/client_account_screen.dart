@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_spacing.dart';
-import '../widgets/adaptive_glass_container.dart';
 import '../widgets/flash_switch.dart';
 import '../widgets/tattoo_machine_icon.dart';
+import '../widgets/photo_source_bottom_sheet.dart';
+import 'client_edit_profile_screen.dart';
+import 'client_aesthetics_screen.dart';
+import 'app_info_screen.dart';
 import 'splash_screen.dart';
 
 /// Client Account Screen
@@ -31,8 +34,9 @@ class ClientAccountScreen extends StatefulWidget {
 class _ClientAccountScreenState extends State<ClientAccountScreen> {
   late final AuthService _authService = widget.authService ?? AuthService();
 
-  bool _isLoading = false;
+  final bool _isLoading = false;
   bool _isDeleting = false;
+  bool _isUploadingPhoto = false;
 
   // Profile fields
   String _displayName = 'Flash Client';
@@ -40,8 +44,7 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
   String _email = 'client@flash.ink';
   String _phoneNumber = '+1 (555) 234-5678';
   bool _phoneVerified = true;
-  String _photoUrl =
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
+  String? _photoUrl;
   List<String> _aesthetics = ['traditional', 'fineline', 'blackwork'];
 
   // Notification preferences
@@ -62,13 +65,12 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
         setState(() {
           if (user.displayName != null && user.displayName!.isNotEmpty) {
             _displayName = user.displayName!;
-            _username = user.displayName!.toLowerCase().replaceAll(' ', '_');
           }
           if (user.email != null && user.email!.isNotEmpty) {
             _email = user.email!;
           }
           if (user.photoURL != null && user.photoURL!.isNotEmpty) {
-            _photoUrl = user.photoURL!;
+            _photoUrl = user.photoURL;
           }
         });
       }
@@ -113,6 +115,91 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
         }
       } catch (_) {
         // Keep default/auth info if Firestore read fails or offline
+      }
+    }
+  }
+
+  Future<void> _handleEditPhoto() async {
+    final result = await PhotoSourceBottomSheet.show(
+      context: context,
+      hasExistingPhoto: _photoUrl != null && _photoUrl!.isNotEmpty,
+    );
+
+    if (result == null || !mounted) return;
+
+    final user = _authService.currentUser ?? FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    if (result.isRemoved) {
+      setState(() => _isUploadingPhoto = true);
+      try {
+        try {
+          await FirebaseStorage.instance.ref().child('user_profiles/${user.uid}.png').delete();
+        } catch (_) {}
+        try {
+          await FirebaseStorage.instance.ref().child('user_profiles/${user.uid}.jpg').delete();
+        } catch (_) {}
+
+        await user.updatePhotoURL(null);
+        await _updateFirestoreUser(user.uid, {
+          'photoURL': null,
+        });
+
+        if (mounted) {
+          setState(() {
+            _photoUrl = null;
+            _isUploadingPhoto = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile photo removed')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isUploadingPhoto = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to remove photo: $e')),
+          );
+        }
+      }
+      return;
+    }
+
+    if (result.croppedBytes != null) {
+      setState(() => _isUploadingPhoto = true);
+      try {
+        final storageRef = FirebaseStorage.instance
+            .ref()
+            .child('user_profiles')
+            .child('${user.uid}.png');
+
+        await storageRef.putData(
+          result.croppedBytes!,
+          SettableMetadata(contentType: 'image/png'),
+        );
+        final downloadUrl = await storageRef.getDownloadURL();
+
+        await user.updatePhotoURL(downloadUrl);
+        await _updateFirestoreUser(user.uid, {
+          'photoURL': downloadUrl,
+        });
+
+        if (mounted) {
+          setState(() {
+            _photoUrl = downloadUrl;
+            _isUploadingPhoto = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile photo updated successfully')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isUploadingPhoto = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to update photo: $e')),
+          );
+        }
       }
     }
   }
@@ -304,384 +391,87 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
     }
   }
 
-  void _showEditProfileDialog() {
-    final nameController = TextEditingController(text: _displayName);
-    final usernameController = TextEditingController(text: _username);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF1E2020),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+  Future<void> _showEditProfileDialog() async {
+    final result = await Navigator.push<Map<String, String>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ClientEditProfileScreen(
+          initialDisplayName: _displayName,
+          initialUsername: _username,
+          onSave: (newName, newUsername) async {
+            setState(() {
+              _displayName = newName;
+              _username = newUsername;
+            });
+            final user = _authService.currentUser;
+            if (user != null) {
+              await _updateFirestoreUser(user.uid, {
+                'displayName': newName,
+                'username': newUsername,
+              });
+            }
+          },
+        ),
       ),
-      builder: (sheetContext) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF383C3C),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Edit Profile',
-                key: const Key('edit_profile_sheet_title'),
-                style: GoogleFonts.plusJakartaSans(
-                  color: AppTheme.textPrimary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Display Name',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF919696),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 6),
-              TextField(
-                key: const Key('account_edit_name_input'),
-                controller: nameController,
-                style: GoogleFonts.plusJakartaSans(color: AppTheme.textPrimary),
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: const Color(0xFF141616),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppTheme.darkBorder),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppTheme.gold),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Username (@handle)',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF919696),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 6),
-              TextField(
-                key: const Key('account_edit_username_input'),
-                controller: usernameController,
-                style: GoogleFonts.plusJakartaSans(color: AppTheme.textPrimary),
-                decoration: InputDecoration(
-                  prefixText: '@',
-                  prefixStyle: GoogleFonts.plusJakartaSans(color: AppTheme.gold),
-                  filled: true,
-                  fillColor: const Color(0xFF141616),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppTheme.darkBorder),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppTheme.gold),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  key: const Key('account_save_profile_button'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.gold,
-                    foregroundColor: AppTheme.onyxBackground,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: () async {
-                    final newName = nameController.text.trim();
-                    final newUsername = usernameController.text.trim().replaceAll('@', '');
-                    if (newName.isNotEmpty) {
-                      setState(() {
-                        _displayName = newName;
-                        _username = newUsername.isNotEmpty ? newUsername : _username;
-                      });
-
-                      final user = _authService.currentUser;
-                      if (user != null) {
-                        await _updateFirestoreUser(user.uid, {
-                          'displayName': newName,
-                          'username': newUsername,
-                        });
-                      }
-                    }
-                    if (mounted) {
-                      Navigator.pop(sheetContext);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Profile updated successfully'),
-                          backgroundColor: Color(0xFF22C55E),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    }
-                  },
-                  child: Text(
-                    'Save Changes',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
+
+    if (result != null && mounted) {
+      setState(() {
+        _displayName = result['displayName'] ?? _displayName;
+        _username = result['username'] ?? _username;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile updated successfully'),
+          backgroundColor: Color(0xFF22C55E),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
-  void _showAestheticsSelectorModal() {
-    final availableStyles = [
-      {'id': 'traditional', 'label': 'Traditional', 'icon': Icons.anchor},
-      {'id': 'fineline', 'label': 'Fine Line', 'icon': Icons.gesture},
-      {'id': 'japanese', 'label': 'Japanese', 'icon': Icons.water},
-      {'id': 'blackwork', 'label': 'Blackwork', 'icon': Icons.contrast},
-      {'id': 'watercolor', 'label': 'Watercolor', 'icon': Icons.palette_outlined},
-      {'id': 'realism', 'label': 'Realism', 'icon': Icons.visibility_outlined},
-      {'id': 'neotraditional', 'label': 'Neo-Traditional', 'icon': Icons.auto_awesome_outlined},
-    ];
-
-    final tempSelected = List<String>.from(_aesthetics);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF1E2020),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (ctx, setModalState) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF383C3C),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Select Your Aesthetics',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: AppTheme.textPrimary,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Tailors your flash recommendations and artist matching.',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFF919696),
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: availableStyles.map((style) {
-                      final id = style['id'] as String;
-                      final isSelected = tempSelected.contains(id);
-                      return ChoiceChip(
-                        label: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              style['icon'] as IconData,
-                              size: 14,
-                              color: isSelected ? AppTheme.onyxBackground : AppTheme.gold,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(style['label'] as String),
-                          ],
-                        ),
-                        selected: isSelected,
-                        selectedColor: AppTheme.gold,
-                        backgroundColor: const Color(0xFF141616),
-                        labelStyle: GoogleFonts.plusJakartaSans(
-                          color: isSelected ? AppTheme.onyxBackground : AppTheme.textPrimary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                        side: BorderSide(
-                          color: isSelected ? AppTheme.gold : AppTheme.darkBorder,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        onSelected: (selected) {
-                          setModalState(() {
-                            if (selected) {
-                              tempSelected.add(id);
-                            } else {
-                              if (tempSelected.length > 1) {
-                                tempSelected.remove(id);
-                              }
-                            }
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 28),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      key: const Key('account_save_aesthetics_button'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.gold,
-                        foregroundColor: AppTheme.onyxBackground,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () async {
-                        setState(() {
-                          _aesthetics = tempSelected;
-                        });
-
-                        final user = _authService.currentUser;
-                        if (user != null) {
-                          await _updateFirestoreUser(user.uid, {'aesthetics': tempSelected});
-                        }
-
-                        if (mounted) {
-                          Navigator.pop(sheetContext);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Aesthetic preferences updated'),
-                              backgroundColor: Color(0xFF22C55E),
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        }
-                      },
-                      child: Text(
-                        'Save Aesthetics',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
+  Future<void> _showAestheticsSelectorModal() async {
+    final result = await Navigator.push<List<String>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ClientAestheticsScreen(
+          initialAesthetics: _aesthetics,
+          onSave: (newAesthetics) async {
+            setState(() {
+              _aesthetics = newAesthetics;
+            });
+            final user = _authService.currentUser;
+            if (user != null) {
+              await _updateFirestoreUser(user.uid, {'aesthetics': newAesthetics});
+            }
           },
-        );
-      },
+        ),
+      ),
     );
+
+    if (result != null && mounted) {
+      setState(() {
+        _aesthetics = result;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Aesthetic preferences updated'),
+          backgroundColor: Color(0xFF22C55E),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   void _showInfoModal(String title, String content) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E2020),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AppInfoScreen(
+          title: title,
+          content: content,
+        ),
       ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF383C3C),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  title,
-                  style: GoogleFonts.plusJakartaSans(
-                    color: AppTheme.textPrimary,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  content,
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFF919696),
-                    fontSize: 14,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.gold,
-                      foregroundColor: AppTheme.onyxBackground,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    onPressed: () => Navigator.pop(ctx),
-                    child: Text(
-                      'Close',
-                      style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 
@@ -963,40 +753,71 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
         children: [
           Row(
             children: [
-              // Avatar with Gold Border and Edit Badge
+              // Avatar with Gold Border, Silhouette fallback, and Edit Badge
               Stack(
                 children: [
-                  Container(
-                    width: 76,
-                    height: 76,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppTheme.gold,
-                        width: 2.0,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.gold.withAlpha(50),
-                          blurRadius: 8,
-                          spreadRadius: 1,
+                  GestureDetector(
+                    key: const Key('client_avatar_image_button'),
+                    onTap: _handleEditPhoto,
+                    child: Container(
+                      width: 76,
+                      height: 76,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppTheme.gold,
+                          width: 2.0,
                         ),
-                      ],
-                    ),
-                    child: ClipOval(
-                      child: Image.network(
-                        _photoUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: const Color(0xFF262929),
-                            child: const Icon(
-                              Icons.person,
-                              color: AppTheme.gold,
-                              size: 40,
-                            ),
-                          );
-                        },
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.gold.withAlpha(50),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: _isUploadingPhoto
+                            ? Container(
+                                color: const Color(0xFF262929),
+                                child: const Center(
+                                  child: SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      valueColor: AlwaysStoppedAnimation<Color>(AppTheme.gold),
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : (_photoUrl != null && _photoUrl!.isNotEmpty)
+                                ? Image.network(
+                                    _photoUrl!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        color: const Color(0xFF262929),
+                                        child: const Center(
+                                          child: Icon(
+                                            Icons.person_outline,
+                                            color: AppTheme.gold,
+                                            size: 40,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  )
+                                : Container(
+                                    color: const Color(0xFF262929),
+                                    child: const Center(
+                                      child: Icon(
+                                        Icons.person_outline,
+                                        color: AppTheme.gold,
+                                        size: 40,
+                                      ),
+                                    ),
+                                  ),
                       ),
                     ),
                   ),
@@ -1004,7 +825,8 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
                     bottom: 0,
                     right: 0,
                     child: GestureDetector(
-                      onTap: _showEditProfileDialog,
+                      key: const Key('client_account_avatar_edit'),
+                      onTap: _handleEditPhoto,
                       child: Container(
                         padding: const EdgeInsets.all(5),
                         decoration: BoxDecoration(

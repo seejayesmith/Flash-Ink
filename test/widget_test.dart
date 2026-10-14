@@ -7,6 +7,8 @@ import 'package:flash_ink/screens/splash_screen.dart';
 import 'package:flash_ink/screens/phone_verification_screen.dart';
 import 'package:flash_ink/screens/account_creation_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
+import 'package:flash_ink/widgets/flash_logo.dart';
+import 'package:flash_ink/widgets/tattoo_machine_icon.dart';
 
 class FakeUserCredential implements UserCredential {
   @override
@@ -66,12 +68,13 @@ class FakeAuthService extends AuthService {
 void main() {
   testWidgets('SplashScreen renders branding and progress indicator cleanly', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(splashDelay: Duration.zero));
 
     // Verify SplashScreen and branding elements are displayed
     expect(find.byType(SplashScreen), findsOneWidget);
+    expect(find.byType(FlashLogo), findsOneWidget);
     expect(find.text('Flash'), findsOneWidget);
-    expect(find.byIcon(Icons.electric_bolt), findsOneWidget);
+    expect(find.byType(TattooMachineIcon), findsOneWidget);
     expect(find.text('TATTOO DISCOVERY & BOOKING'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });

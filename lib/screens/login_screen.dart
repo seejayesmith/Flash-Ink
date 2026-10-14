@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
-import '../theme/app_buttons.dart';
 import '../widgets/social_auth_buttons.dart';
+import '../widgets/flash_logo.dart';
+import 'auth_routing.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -29,7 +29,12 @@ class _LoginScreenState extends State<LoginScreen> {
       if (isApple) _isAppleLoading = true;
     });
     try {
-      await signInMethod();
+      final credential = await signInMethod();
+      if (credential != null && credential.user != null) {
+        if (mounted) {
+          await AuthRouting.routeUserAfterAuth(context, credential.user!);
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -71,12 +76,8 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Spacer(flex: 2),
-                Text(
-                  'Flash',
-                  style: GoogleFonts.kaushanScript(
-                    fontSize: 72,
-                    color: const Color(0xFFEEC200), // Yellow/gold from frame 376
-                  ),
+                const FlashLogo(
+                  fontSize: 72,
                 ),
                 const Spacer(flex: 1),
                 Padding(

@@ -199,11 +199,15 @@ void main() {
       await tester.tap(find.text('Distance: Nearest First'));
       await tester.pumpAndSettle();
 
-      // Modal is dismissed, chip label is updated to dynamic label
-      expect(find.text('Sort: Nearest'), findsOneWidget);
+      // Modal is dismissed, sort button label is updated to dynamic label
+      expect(find.text('Nearest'), findsOneWidget);
     });
 
     testWidgets('Tapping Female, BIPOC, and Silent Appt chips in carousel toggles filters', (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
       await tester.pumpWidget(
         const MaterialApp(
           home: BrowseArtistsScreen(),
@@ -251,9 +255,10 @@ void main() {
     const itemHeight = 500.0;
     const physics = SnappingScrollPhysics(itemHeight: itemHeight);
 
-    test('Spring has tuned stiffness and mass for snappy feedback', () {
-      expect(physics.spring.stiffness, 300.0);
+    test('Spring has tuned stiffness and mass for organic bounce feedback', () {
+      expect(physics.spring.stiffness, 200.0);
       expect(physics.spring.mass, 0.5);
+      expect(physics.spring.damping, closeTo(13.0, 0.01));
     });
 
     test('Snaps to next card on positive velocity (flick forward)', () {

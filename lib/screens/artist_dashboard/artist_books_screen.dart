@@ -4,13 +4,17 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/widgets/flash_bottom_nav_bar.dart';
 import '../../models/artist.dart';
 import '../../models/artist_dashboard_data.dart';
+import '../../models/waitlist_entry.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_switch.dart';
 import '../../widgets/tattoo_machine_icon.dart';
-import '../artist_profile_screen.dart';
+import 'add_waitlist_entry_sheet.dart';
 import 'artist_account_screen.dart';
+import 'artist_waitlist_screen.dart';
+import 'books_open_options_modal.dart';
+import 'early_access_outreach_sheet.dart';
 
 /// Screen allowing tattoo artists to manage and create their "Books" schedule.
 ///
@@ -202,7 +206,7 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
             .set({
           'isBooksOpen': _isBooksOpen,
           'booksSchedule': updated.toMap(),
-        }, SetOptions(merge: true));
+        }, SetOptions(merge: true)).timeout(const Duration(milliseconds: 600));
       }
     } catch (_) {
       // Offline / mock fallback without breaking UI flow
@@ -261,6 +265,8 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
             _buildBookingTypesCard(),
             const SizedBox(height: 24),
             _buildLocationCard(),
+            const SizedBox(height: 24),
+            _buildWaitlistSectionCard(),
             const SizedBox(height: 32),
             _buildSaveButton(),
           ],
@@ -315,7 +321,7 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
         else
           const TattooMachineIcon(
             key: Key('tattoo_machine_logo'),
-            size: 28,
+            size: 43,
             color: Color(0xFFEEC200),
           ),
         GestureDetector(
@@ -397,8 +403,15 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
 
   /// Hero card displaying current Books Open / Closed status with live toggle
   Widget _buildStatusHeroCard() {
-    final activeColor = _isBooksOpen ? const Color(0xFF22C55E) : const Color(0xFF919696);
-    final borderColor = _isBooksOpen ? const Color(0xFFEEC200) : const Color(0xFF282C2C);
+    final schedule = ArtistDashboardRepository.booksSchedule;
+    final isEarlyAccess = schedule.isEarlyAccessActive;
+
+    final activeColor = isEarlyAccess
+        ? const Color(0xFFEEC200)
+        : (_isBooksOpen ? const Color(0xFF22C55E) : const Color(0xFF919696));
+    final borderColor = isEarlyAccess
+        ? const Color(0xFFEEC200)
+        : (_isBooksOpen ? const Color(0xFF22C55E) : const Color(0xFF282C2C));
 
     return Container(
       key: const Key('books_status_card'),
@@ -406,11 +419,11 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFF1A1C1C),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: borderColor, width: _isBooksOpen ? 1.5 : 1.0),
+        border: Border.all(color: borderColor, width: (_isBooksOpen || isEarlyAccess) ? 1.5 : 1.0),
         boxShadow: [
-          if (_isBooksOpen)
+          if (_isBooksOpen || isEarlyAccess)
             BoxShadow(
-              color: const Color(0xFFEEC200).withAlpha(20),
+              color: (isEarlyAccess ? const Color(0xFFEEC200) : const Color(0xFF22C55E)).withAlpha(20),
               blurRadius: 18,
               offset: const Offset(0, 4),
             ),
@@ -440,7 +453,9 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    _isBooksOpen ? 'BOOKS OPEN' : 'BOOKS CLOSED',
+                    isEarlyAccess
+                        ? 'VIP EARLY ACCESS ACTIVE'
+                        : (_isBooksOpen ? 'BOOKS OPEN' : 'BOOKS CLOSED'),
                     style: GoogleFonts.plusJakartaSans(
                       color: activeColor,
                       fontSize: 12,
@@ -455,15 +470,41 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
                 value: _isBooksOpen,
                 onChanged: (val) {
                   setState(() => _isBooksOpen = val);
+                  if (!val) {
+                    ArtistDashboardRepository.closeBooks();
+                  } else {
+                    final waitingCount = ArtistDashboardRepository.waitlistEntries
+                        .where((e) => e.status.name == 'waiting')
+                        .length;
+                    if (waitingCount > 0) {
+                      BooksOpenOptionsModal.show(
+                        context: context,
+                        onEarlyAccessSelected: () {
+                          setState(() {
+                            _isBooksOpen = true;
+                          });
+                          EarlyAccessOutreachSheet.show(
+                            context: context,
+                            onBooksUpdated: () => setState(() {}),
+                          );
+                        },
+                        onPublicOpenSelected: () {
+                          setState(() {
+                            _isBooksOpen = true;
+                          });
+                        },
+                      );
+                    }
+                  }
                 },
               ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
-            _isBooksOpen
-              ? 'Accepting New Appointments'
-              : 'Currently Closed to Inquiries',
+            isEarlyAccess
+                ? 'VIP Waitlist Early Access Live'
+                : (_isBooksOpen ? 'Accepting New Appointments' : 'Currently Closed to Inquiries'),
             style: GoogleFonts.plusJakartaSans(
               color: Colors.white,
               fontSize: 20,
@@ -472,19 +513,317 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            _isBooksOpen
-              ? 'Clients can view your available calendar slots and request bookings directly.'
-              : 'Clients can browse your flash portfolio and profile, but booking submissions are paused.',
+            isEarlyAccess
+                ? 'Your private waitlist members have exclusive access before public release.'
+                : (_isBooksOpen
+                    ? 'Clients can view your available calendar slots and request bookings directly.'
+                    : 'Clients can browse your portfolio, but general booking submissions are paused.'),
             style: GoogleFonts.plusJakartaSans(
               color: const Color(0xFFB0B6B6),
               fontSize: 12.5,
               height: 1.4,
             ),
           ),
+          if (isEarlyAccess) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      EarlyAccessOutreachSheet.show(
+                        context: context,
+                        onBooksUpdated: () => setState(() {}),
+                      );
+                    },
+                    icon: const Icon(Icons.send_rounded, size: 14),
+                    label: const Text('Outreach Checklist'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFEEC200),
+                      side: const BorderSide(color: Color(0xFFEEC200)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      textStyle: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      ArtistDashboardRepository.openBooksPublicly();
+                      setState(() {});
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Books opened to public!'),
+                          backgroundColor: Color(0xFF22C55E),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF262A2A),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      elevation: 0,
+                      textStyle: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    child: const Text('Open Public Now'),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
   }
+
+  /// Dedicated section card for the artist's VIP Waitlist
+  Widget _buildWaitlistSectionCard() {
+    final waitlist = ArtistDashboardRepository.waitlistEntries;
+    final waitingCount = waitlist.where((e) => e.status == WaitlistStatus.waiting).length;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E2121),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF2A2E2E)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEEC200).withAlpha(25),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.people_alt_rounded, color: Color(0xFFEEC200), size: 15),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'VIP WAITLIST & EARLY ACCESS',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFF8C9191),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEC200).withAlpha(24),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  waitingCount > 0 ? '$waitingCount Waiting' : '${waitlist.length} Contacts',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFFEEC200),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Keep track of friends, family, and direct inquiries so you can grant them early booking access before releasing public books.',
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFFB0B6B6),
+              fontSize: 12,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Top contacts preview row
+          if (waitlist.isNotEmpty)
+            Column(
+              children: waitlist.take(3).map((entry) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161818),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF242828)),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 14,
+                        backgroundColor: const Color(0xFF2A2E2E),
+                        child: ClipOval(
+                          child: entry.avatarUrl != null && entry.avatarUrl!.isNotEmpty
+                              ? FlashImage(
+                                  urlOrPath: entry.avatarUrl!,
+                                  width: 28,
+                                  height: 28,
+                                  fit: BoxFit.cover,
+                                  errorWidget: Center(
+                                    child: Text(
+                                      entry.clientName.isNotEmpty ? entry.clientName[0] : '?',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: const Color(0xFFEEC200),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              : Text(
+                                  entry.clientName.isNotEmpty ? entry.clientName[0] : '?',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: const Color(0xFFEEC200),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              entry.clientName,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${entry.relationshipTag} • ${entry.conceptDescription}',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: const Color(0xFF8C9191),
+                                fontSize: 11,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: entry.status.badgeColor.withAlpha(20),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          entry.status.label,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: entry.status.badgeColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+
+          const SizedBox(height: 8),
+
+          // Actions Row
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 38,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ArtistWaitlistScreen(
+                            artist: widget.artist,
+                          ),
+                        ),
+                      ).then((_) => setState(() {}));
+                    },
+                    icon: const Icon(Icons.people_outline_rounded, size: 16),
+                    label: const Text('Manage Waitlist'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEEC200),
+                      foregroundColor: const Color(0xFF121414),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: EdgeInsets.zero,
+                      elevation: 0,
+                      textStyle: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 38,
+                width: 38,
+                child: IconButton(
+                  onPressed: () {
+                    AddWaitlistEntrySheet.show(
+                      context: context,
+                      onSaved: () => setState(() {}),
+                    );
+                  },
+                  tooltip: 'Add Contact',
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.person_add_alt_1_rounded, color: Color(0xFFEEC200), size: 18),
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xFF262A2A),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
 
   /// Booking window date range card
   Widget _buildBookingWindowCard() {

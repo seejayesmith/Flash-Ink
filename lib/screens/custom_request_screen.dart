@@ -4,18 +4,26 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/artist.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/flash_switch.dart';
+import '../widgets/guest_auth_prompt_bottom_sheet.dart';
 
 class CustomRequestScreen extends StatefulWidget {
   final Artist artist;
+  final String? initialDescription;
+  final String? initialPlacement;
 
-  const CustomRequestScreen({super.key, required this.artist});
+  const CustomRequestScreen({
+    super.key,
+    required this.artist,
+    this.initialDescription,
+    this.initialPlacement,
+  });
 
   @override
   State<CustomRequestScreen> createState() => _CustomRequestScreenState();
 }
 
 class _CustomRequestScreenState extends State<CustomRequestScreen> {
-  final _conceptController = TextEditingController();
+  late final TextEditingController _conceptController;
   final _budgetController = TextEditingController();
 
   final List<String> _placementOptions = [
@@ -28,7 +36,7 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
     'Ribs',
     'Other',
   ];
-  String _selectedPlacement = 'Forearm';
+  late String _selectedPlacement;
 
   final List<String> _sizeOptions = [
     'Small (2"-4")',
@@ -43,6 +51,15 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
   bool _isSubmitting = false;
 
   @override
+  void initState() {
+    super.initState();
+    _conceptController = TextEditingController(text: widget.initialDescription ?? '');
+    _selectedPlacement = (widget.initialPlacement != null && _placementOptions.contains(widget.initialPlacement))
+        ? widget.initialPlacement!
+        : 'Forearm';
+  }
+
+  @override
   void dispose() {
     _conceptController.dispose();
     _budgetController.dispose();
@@ -50,6 +67,12 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
   }
 
   void _submitBrief() async {
+    final authenticated = await GuestAuthPromptBottomSheet.ensureAuthenticated(
+      context,
+      actionType: AuthActionPromptType.customRequest,
+    );
+    if (!authenticated || !mounted) return;
+
     if (_conceptController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -426,10 +449,28 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundImage: NetworkImage(widget.artist.avatarUrl),
-            backgroundColor: const Color(0xFF262929),
+          ClipOval(
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: widget.artist.avatarUrl.startsWith('http')
+                  ? Image.network(
+                      widget.artist.avatarUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => Container(
+                        color: const Color(0xFF262929),
+                        child: const Icon(Icons.person, color: Color(0xFFEEC200), size: 22),
+                      ),
+                    )
+                  : Image.asset(
+                      widget.artist.avatarUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => Container(
+                        color: const Color(0xFF262929),
+                        child: const Icon(Icons.person, color: Color(0xFFEEC200), size: 22),
+                      ),
+                    ),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(

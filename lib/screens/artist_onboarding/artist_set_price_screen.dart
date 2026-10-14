@@ -1,11 +1,11 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../config/dev_config.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/artist_stepper_header.dart';
 import '../../widgets/tattoo_background_wrapper.dart';
+import '../../widgets/skip_pill_button.dart';
 import 'artist_flash_upload_screen.dart';
 
 class ArtistSetPriceScreen extends StatefulWidget {
@@ -73,28 +73,26 @@ class _ArtistSetPriceScreenState extends State<ArtistSetPriceScreen> {
     final hasInput = _priceInput.isNotEmpty && _priceInput != '0';
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       backgroundColor: const Color(0xFF121414),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          if (kEnableDevBypass)
-            TextButton(
-              key: const Key('dev_skip_price'),
-              onPressed: () => _proceedToFlashUpload(100),
-              child: Text(
-                'Skip (Dev)',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFEEC200),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: Center(
+              child: SkipPillButton(
+                key: const Key('skip_price_button'),
+                onPressed: () => _proceedToFlashUpload(100),
               ),
             ),
+          ),
         ],
       ),
       body: TattooBackgroundWrapper(
@@ -104,7 +102,7 @@ class _ArtistSetPriceScreenState extends State<ArtistSetPriceScreen> {
               Expanded(
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -165,7 +163,7 @@ class _ArtistSetPriceScreenState extends State<ArtistSetPriceScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Continue and Skip Actions
+                    // Continue Action
                     SizedBox(
                       width: double.infinity,
                       height: 52,
@@ -189,23 +187,7 @@ class _ArtistSetPriceScreenState extends State<ArtistSetPriceScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
 
-                    Center(
-                      child: TextButton(
-                        key: const Key('skip_price_button'),
-                        onPressed: () => _proceedToFlashUpload(100),
-                        child: Text(
-                          'SKIP',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: const Color(0xFFEEC200),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),

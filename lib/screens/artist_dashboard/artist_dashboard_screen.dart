@@ -7,8 +7,6 @@ import '../../models/artist_dashboard_data.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/tattoo_machine_icon.dart';
 import '../../widgets/flash_image.dart';
-import '../artist_profile_screen.dart';
-import '../splash_screen.dart';
 import 'appointment_detail_screen.dart';
 import 'artist_account_screen.dart';
 import 'artist_books_screen.dart';
@@ -204,17 +202,20 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   }
 
   /// Top action bar with tattoo machine icon on the left and artist avatar on the right
-  Widget _buildTopActionBar() {
+  Widget _buildTopActionBar({
+    Key logoKey = const Key('tattoo_machine_logo'),
+    Key avatarKey = const Key('artist_avatar_button'),
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const TattooMachineIcon(
-          key: Key('tattoo_machine_logo'),
-          size: 28,
-          color: Color(0xFFEEC200),
+        TattooMachineIcon(
+          key: logoKey,
+          size: 43,
+          color: const Color(0xFFEEC200),
         ),
         GestureDetector(
-          key: const Key('artist_avatar_button'),
+          key: avatarKey,
           onTap: _showProfileSettingsModal,
           child: Container(
             padding: const EdgeInsets.all(2),
@@ -330,131 +331,111 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
     );
   }
 
+
   /// Large hero Next Appointment card with tattoo artwork background
   Widget _buildHeroNextAppointmentCard() {
-    return Container(
+    return GestureDetector(
       key: const Key('hero_next_appointment_card'),
-      width: double.infinity,
-      height: 240,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        image: DecorationImage(
-          image: _nextAppointment.artworkImageUrl.isNotEmpty &&
-                  _nextAppointment.artworkImageUrl.startsWith('assets/')
-              ? AssetImage(_nextAppointment.artworkImageUrl) as ImageProvider
-              : const AssetImage('assets/images/flash_tiger_tattoo.jpg'),
-          fit: BoxFit.cover,
-          alignment: Alignment.center,
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AppointmentDetailScreen(
+              appointment: _nextAppointment,
+            ),
+          ),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        height: 240,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          image: DecorationImage(
+            image: _nextAppointment.artworkImageUrl.isNotEmpty &&
+                    _nextAppointment.artworkImageUrl.startsWith('assets/')
+                ? AssetImage(_nextAppointment.artworkImageUrl) as ImageProvider
+                : const AssetImage('assets/images/flash_tiger_tattoo.jpg'),
+            fit: BoxFit.cover,
+            alignment: Alignment.center,
+          ),
         ),
-      ),
-      child: Stack(
-        children: [
-          // Gradient scrim overlay for contrast & readability
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: const LinearGradient(
-                begin: Alignment.bottomLeft,
-                end: Alignment.topRight,
-                colors: [
-                  Color(0xF0121414),
-                  Color(0xB3121414),
-                  Color(0x33121414),
-                ],
-                stops: [0.0, 0.55, 1.0],
+        child: Stack(
+          children: [
+            // Gradient scrim overlay for contrast & readability
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: const LinearGradient(
+                  begin: Alignment.bottomLeft,
+                  end: Alignment.topRight,
+                  colors: [
+                    Color(0xF0121414),
+                    Color(0xB3121414),
+                    Color(0x33121414),
+                  ],
+                  stops: [0.0, 0.55, 1.0],
+                ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(
-                  'Next Appointment',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFFEEC200),
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.access_time,
-                      color: Colors.white,
-                      size: 14,
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    'Next Appointment',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFEEC200),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
                     ),
-                    const SizedBox(width: 5),
-                    Text(
-                      _nextAppointment.time,
-                      style: GoogleFonts.plusJakartaSans(
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.access_time,
                         color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
+                        size: 14,
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  _nextAppointment.clientName,
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${_nextAppointment.serviceType} • ${_nextAppointment.duration}',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFFD4D8D8),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                SizedBox(
-                  height: 36,
-                  child: ElevatedButton(
-                    key: const Key('hero_view_details_button'),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => AppointmentDetailScreen(
-                            appointment: _nextAppointment,
-                          ),
+                      const SizedBox(width: 5),
+                      Text(
+                        _nextAppointment.time,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
                         ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEEC200),
-                      foregroundColor: const Color(0xFF121414),
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
                       ),
-                    ),
-                    child: Text(
-                      'View Details',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _nextAppointment.clientName,
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.3,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    '${_nextAppointment.serviceType} • ${_nextAppointment.duration}',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFD4D8D8),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1070,11 +1051,17 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
 
   Widget _buildMessagesPlaceholder() {
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildTopActionBar(
+              logoKey: const Key('messages_tattoo_machine_logo'),
+              avatarKey: const Key('messages_artist_avatar_button'),
+            ),
+            const SizedBox(height: 20),
             Text(
               'Client Messages',
               style: GoogleFonts.plusJakartaSans(

@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../models/user.dart';
@@ -35,25 +36,40 @@ class AuthService {
   AuthService({
     FirebaseAuth? auth,
     FirebaseFirestore? firestore,
-    User? mockUser,
+    this._mockUser,
   })  : _authInstance = auth,
-        _firestoreInstance = firestore,
-        _mockUser = mockUser;
+        _firestoreInstance = firestore;
 
   FirebaseAuth get _auth => _authInstance ?? FirebaseAuth.instance;
   FirebaseFirestore get _firestore => _firestoreInstance ?? FirebaseFirestore.instance;
 
-  User? get currentUser => _mockUser ?? _auth.currentUser;
+  User? get currentUser {
+    if (_mockUser != null) return _mockUser;
+    try {
+      return _auth.currentUser;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool get isGuest {
+    try {
+      final user = currentUser;
+      return user == null || user.isAnonymous;
+    } catch (_) {
+      return true;
+    }
+  }
 
   // Sign up with Email and Password
-  Future<UserCredential> signUpWithEmailAndPassword(String email, String password) async {
+  Future<UserCredential> signUpWithEmailAndPassword(String email, String password, {String? role}) async {
     try {
       final userCredential = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
       if (userCredential.user != null) {
-        await syncUserToFirestore(userCredential.user!);
+        await syncUserToFirestore(userCredential.user!, role: role);
         if (!userCredential.user!.emailVerified) {
           await userCredential.user!.sendEmailVerification();
         }
@@ -201,6 +217,9 @@ class AuthService {
       await _firestore.collection('users').doc(user.uid).set({'isAnonymous': false}, SetOptions(merge: true));
       return userCredential;
     } on FirebaseAuthException catch (e) {
+      if (e.code == 'credential-already-in-use') {
+        return await signInWithGoogle();
+      }
       throw _handleFirebaseAuthException(e);
     } catch (e) {
       throw Exception('Failed to link Google account: ${e.toString()}');
@@ -235,9 +254,44 @@ class AuthService {
       }
       throw Exception('Apple authorization failed: ${e.message}');
     } on FirebaseAuthException catch (e) {
+      if (e.code == 'credential-already-in-use') {
+        return await signInWithApple();
+      }
       throw _handleFirebaseAuthException(e);
     } catch (e) {
       throw Exception('Failed to link Apple account: ${e.toString()}');
+    }
+  }
+
+  // Link or upgrade current anonymous user with Email and Password
+  Future<UserCredential> linkWithEmailAndPassword(String email, String password) async {
+    try {
+      final user = currentUser;
+      if (user == null) {
+        return await signUpWithEmailAndPassword(email, password);
+      }
+      if (!user.isAnonymous) {
+        return await signInWithEmailAndPassword(email, password);
+      }
+
+      final credential = EmailAuthProvider.credential(
+        email: email.trim(),
+        password: password,
+      );
+
+      final userCredential = await user.linkWithCredential(credential);
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .set({'isAnonymous': false, 'email': email.trim()}, SetOptions(merge: true));
+      return userCredential;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'credential-already-in-use' || e.code == 'email-already-in-use') {
+        return await signInWithEmailAndPassword(email, password);
+      }
+      throw _handleFirebaseAuthException(e);
+    } catch (e) {
+      throw Exception('Failed to link email account: ${e.toString()}');
     }
   }
 
@@ -348,7 +402,7 @@ class AuthService {
     } catch (_) {}
   }
 
-  // Delete the currently authenticated user
+  // Delete the currently authenticated user and their data
   Future<void> deleteAccount() async {
     if (_mockUser != null) {
       return;
@@ -356,7 +410,34 @@ class AuthService {
     try {
       final user = _auth.currentUser;
       if (user == null) return;
-      await user.delete();
+      
+      final uid = user.uid;
+
+      // 1. Delete user documents
+      try {
+        await _firestore.collection('users').doc(uid).delete();
+        await _firestore.collection('artists').doc(uid).delete();
+      } catch (_) {}
+
+      // 2. Delete storage files if they exist (ignore errors if missing)
+      try {
+        await FirebaseStorage.instance.ref().child('user_profiles/$uid.jpg').delete();
+      } catch (_) {}
+      try {
+        await FirebaseStorage.instance.ref().child('artist_profiles/$uid.jpg').delete();
+      } catch (_) {}
+
+      // 3. Delete the Auth account
+      try {
+        await user.delete();
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'user-not-found') {
+          // User is already deleted on the backend; clear local session
+          await signOut();
+          return;
+        }
+        rethrow;
+      }
     } on FirebaseAuthException catch (e) {
       throw _handleFirebaseAuthException(e);
     } catch (e) {
@@ -365,7 +446,7 @@ class AuthService {
   }
 
   // Synchronize Firebase Auth user with Firestore users collection
-  Future<void> syncUserToFirestore(User authUser) async {
+  Future<void> syncUserToFirestore(User authUser, {String? role}) async {
     try {
       final userRef = _firestore.collection('users').doc(authUser.uid);
       final docSnapshot = await userRef.get();
@@ -376,10 +457,16 @@ class AuthService {
           email: authUser.email ?? '',
           displayName: authUser.displayName,
           createdAt: DateTime.now(),
+          role: role,
           isAnonymous: authUser.isAnonymous,
         );
 
         await userRef.set(newUser.toJson());
+      } else if (role != null) {
+        final data = docSnapshot.data();
+        if (data == null || data['role'] == null) {
+          await userRef.set({'role': role}, SetOptions(merge: true));
+        }
       }
     } catch (_) {
       // Allow auth flow to proceed even if offline or Firestore rule is syncing

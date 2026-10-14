@@ -102,23 +102,24 @@ class AdaptiveGlassContainer extends StatelessWidget {
               ),
 
               // Layer 2: Light reflection & Splay 44 (-45° specular light highlight)
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: radius,
-                    gradient: LinearGradient(
-                      begin: const Alignment(-1.0, -1.0),
-                      end: const Alignment(0.6, 0.6),
-                      colors: [
-                        Colors.white.withAlpha(isSelected ? 50 : 35), // Liquid specular light reflection
-                        Colors.white.withAlpha(12),
-                        Colors.transparent,
-                      ],
-                      stops: const [0.0, 0.30, 0.75],
+              if (useGradient)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: radius,
+                      gradient: LinearGradient(
+                        begin: const Alignment(-1.0, -1.0),
+                        end: const Alignment(0.6, 0.6),
+                        colors: [
+                          Colors.white.withAlpha(isSelected ? 50 : 35), // Liquid specular light reflection
+                          Colors.white.withAlpha(12),
+                          Colors.transparent,
+                        ],
+                        stops: const [0.0, 0.30, 0.75],
+                      ),
                     ),
                   ),
                 ),
-              ),
 
               // Layer 3: Golden/light bevel border stroke & selection aura
               Container(

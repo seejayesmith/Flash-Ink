@@ -1,12 +1,12 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../config/dev_config.dart';
 import '../../models/artist.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/artist_stepper_header.dart';
 import '../../widgets/tattoo_background_wrapper.dart';
+import '../../widgets/skip_pill_button.dart';
 import 'artist_share_link_screen.dart';
 
 class ArtistChooseStyleScreen extends StatefulWidget {
@@ -153,35 +153,33 @@ class _ArtistChooseStyleScreenState extends State<ArtistChooseStyleScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
       backgroundColor: const Color(0xFF121414),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          if (kEnableDevBypass)
-            TextButton(
-              key: const Key('dev_skip_styles'),
-              onPressed: () => _proceedToShareScreen(),
-              child: Text(
-                'Skip (Dev)',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFEEC200),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: Center(
+              child: SkipPillButton(
+                key: const Key('skip_styles_button'),
+                onPressed: () => _proceedToShareScreen(const []),
               ),
             ),
+          ),
         ],
       ),
       body: TattooBackgroundWrapper(
         child: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -313,24 +311,7 @@ class _ArtistChooseStyleScreenState extends State<ArtistChooseStyleScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
 
-              // SKIP Button
-              Center(
-                child: TextButton(
-                  key: const Key('skip_styles_button'),
-                  onPressed: () => _proceedToShareScreen(const []),
-                  child: Text(
-                    'SKIP',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFEEC200),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                ),
-              ),
               const SizedBox(height: 32),
             ],
           ),

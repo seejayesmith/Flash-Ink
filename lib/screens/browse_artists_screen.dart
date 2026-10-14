@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -13,16 +12,18 @@ import '../widgets/flash_switch.dart';
 import 'artist_profile_screen.dart';
 import 'splash_screen.dart';
 import 'client_account_screen.dart';
+import '../widgets/guest_auth_prompt_bottom_sheet.dart';
 
 enum ArtistSortOption {
-  recommended('Recommended', 'Sort by'),
-  distance('Distance: Nearest First', 'Sort: Nearest'),
-  rating('Rating: Highest Rated', 'Sort: Top Rated'),
-  deposit('Min Deposit: Low to High', 'Sort: Min Deposit');
+  recommended('Recommended', 'Sort by', 'Sort by'),
+  distance('Distance: Nearest First', 'Sort: Nearest', 'Nearest'),
+  rating('Rating: Highest Rated', 'Sort: Top Rated', 'Top Rated'),
+  deposit('Min Deposit: Low to High', 'Sort: Min Deposit', 'Min Deposit');
 
   final String label;
   final String chipLabel;
-  const ArtistSortOption(this.label, this.chipLabel);
+  final String shortLabel;
+  const ArtistSortOption(this.label, this.chipLabel, this.shortLabel);
 }
 
 class BrowseArtistsScreen extends StatefulWidget {
@@ -231,7 +232,14 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
     }
   }
 
-  void _toggleFavorite(Artist targetArtist) {
+  Future<void> _toggleFavorite(Artist targetArtist) async {
+    final authenticated = await GuestAuthPromptBottomSheet.ensureAuthenticated(
+      context,
+      actionType: AuthActionPromptType.favoriteArtist,
+      authService: _authService,
+    );
+    if (!authenticated || !mounted) return;
+
     setState(() {
       final index = _artists.indexWhere((a) => a.id == targetArtist.id);
       if (index != -1) {
@@ -496,45 +504,80 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
     );
   }
 
-  /// Sticky Horizontal Filter Row
+  /// Sticky Horizontal Filter Row with pinned Sort button and scrollable Filter Chips
   Widget _buildFilterRow() {
     final activeCount = _activeFilterCount;
     final filterLabel = activeCount > 0 ? 'Filters ($activeCount)' : 'Filters';
-    final sortLabel = _sortOption == ArtistSortOption.recommended ? 'Sort by' : _sortOption.chipLabel;
+    final sortLabel = _sortOption.shortLabel;
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.spaceLg,
-        vertical: AppSpacing.spaceXs,
-      ),
+    return SizedBox(
+      height: 44,
       child: Row(
         children: [
-          // Outline "Sort by" Chip with Sort Icon
-          _buildOutlineChip(
-            key: const Key('sort_by_chip'),
-            icon: Icons.swap_vert_rounded,
-            label: sortLabel,
-            isActive: _sortOption != ArtistSortOption.recommended,
-            onTap: _showSortModal,
+          // Pinned borderless "Sort" button with up/down arrow and selected sort label
+          Padding(
+            padding: const EdgeInsets.only(left: AppSpacing.spaceLg),
+            child: InkWell(
+              key: const Key('sort_by_chip'),
+              onTap: _showSortModal,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.swap_vert_rounded,
+                      size: 20,
+                      color: Color(0xFFF9FAFA),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      sortLabel,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFFF9FAFA),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          AppGaps.gapSm,
 
-          // Outline "Filters" Chip with Settings/Sliders Icon
-          _buildOutlineChip(
-            key: const Key('filters_chip'),
-            icon: Icons.tune,
-            label: filterLabel,
-            isActive: _hasActiveFilters,
-            onTap: _showFilterModal,
+          // Vertical divider between Sort and scrollable chips
+          Container(
+            height: 20,
+            width: 1,
+            margin: const EdgeInsets.symmetric(horizontal: 10),
+            color: const Color(0xFF383B3B),
           ),
-          AppGaps.gapSm,
 
-          // Filled Yellow "Books Open" Chip
-          _buildFilledChip(
-            key: const Key('filter_chip_books_open'),
-            icon: Icons.menu_book_rounded,
+          // Scrollable Filter Chips
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.only(
+                right: AppSpacing.spaceLg,
+              ),
+              child: Row(
+                children: [
+                  // Outline "Filters" Chip with Settings/Sliders Icon
+                  _buildOutlineChip(
+                    key: const Key('filters_chip'),
+                    icon: Icons.tune,
+                    label: filterLabel,
+                    isActive: _hasActiveFilters,
+                    onTap: _showFilterModal,
+                  ),
+                  AppGaps.gapSm,
+
+                  // Filled Yellow "Books Open" Chip
+                  _buildFilledChip(
+                    key: const Key('filter_chip_books_open'),
+                    icon: Icons.menu_book_rounded,
             label: 'Books Open',
             isActive: _filterBooksOpen,
             onTap: () => setState(() => _filterBooksOpen = !_filterBooksOpen),
@@ -591,7 +634,11 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
           ),
         ],
       ),
-    );
+    ),
+  ),
+  ],
+  ),
+  );
   }
 
   /// Empty state rendered when active filters yield 0 artist matches
@@ -1042,6 +1089,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (modalContext) {
         return Container(
           decoration: const BoxDecoration(
@@ -1057,10 +1105,11 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
             AppSpacing.spaceLg,
             MediaQuery.of(context).padding.bottom + AppSpacing.spaceLg,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
               // Grab Handle
               Center(
                 child: Container(
@@ -1190,6 +1239,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
               }),
             ],
           ),
+        ),
         );
       },
     );
@@ -1416,6 +1466,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
       context: context,
       barrierDismissible: true,
       builder: (BuildContext dialogContext) {
+        bool dialogDismissed = false;
         return AlertDialog(
           backgroundColor: const Color(0xFF1E2020),
           shape: RoundedRectangleBorder(
@@ -1446,7 +1497,11 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
           actions: [
             TextButton(
               key: const Key('delete_account_cancel_button'),
-              onPressed: () => Navigator.of(dialogContext).pop(false),
+              onPressed: () {
+                if (dialogDismissed) return;
+                dialogDismissed = true;
+                Navigator.of(dialogContext).pop(false);
+              },
               child: Text(
                 'Cancel',
                 style: GoogleFonts.plusJakartaSans(
@@ -1465,7 +1520,11 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              onPressed: () => Navigator.of(dialogContext).pop(true),
+              onPressed: () {
+                if (dialogDismissed) return;
+                dialogDismissed = true;
+                Navigator.of(dialogContext).pop(true);
+              },
               child: Text(
                 'Delete Account',
                 style: GoogleFonts.plusJakartaSans(
@@ -1552,13 +1611,13 @@ class SnappingScrollPhysics extends ScrollPhysics {
     );
   }
 
-  /// Snappier spring configuration with a subtle bounce:
-  /// higher stiffness and lower damping ratio (0.75) for a playful snap.
+  /// Organic spring configuration with a cushioned, subtle rebound:
+  /// relaxed stiffness (200.0) and lower damping ratio (0.65) for a natural, organic snap.
   @override
   SpringDescription get spring => SpringDescription.withDampingRatio(
         mass: 0.5,
-        stiffness: 250.0,
-        ratio: 0.75,
+        stiffness: 200.0,
+        ratio: 0.65,
       );
 
   double _getTargetPixels(ScrollMetrics position, Tolerance tolerance, double velocity) {

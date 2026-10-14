@@ -8,9 +8,14 @@ import '../../services/stripe_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/tattoo_machine_icon.dart';
-import '../artist_profile_screen.dart';
-import '../splash_screen.dart';
+import 'appointment_detail_screen.dart';
 import 'artist_account_screen.dart';
+
+/// Enum representing the active view within the Artist Earnings screen.
+enum ArtistEarningsTab {
+  overview,
+  history,
+}
 
 /// The interactive Artist Earnings & Payouts screen matching the Flash.Ink design.
 ///
@@ -44,6 +49,16 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
       widget.earningsData ?? ArtistDashboardRepository.earningsData;
   late final StripeService _stripeService =
       widget.stripeService ?? StripeService(initialData: _earningsData);
+
+  ArtistEarningsTab _selectedTab = ArtistEarningsTab.overview;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   String get _artistDisplayName {
     if (widget.artist != null && widget.artist!.name.isNotEmpty) {
@@ -933,6 +948,451 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
     );
   }
 
+  List<DashboardAppointment> get _allHistoryAppointments {
+    return [
+      ...ArtistDashboardRepository.calendarAppointments,
+      const DashboardAppointment(
+        id: 'hist_alex_m',
+        clientName: 'Alex M.',
+        serviceType: 'Full Sleeve Session',
+        duration: '4 hrs',
+        time: '1:00 PM',
+        date: 'Oct 24, 2023',
+        placement: 'Full Right Arm',
+        notes: 'Japanese dragon sleeve completion session. Shading and background waves finalized.',
+        depositPaid: 150,
+        fullPrice: 800,
+        artworkImageUrl: 'https://images.unsplash.com/photo-1598371839696-5c5bb00bdc28?auto=format&fit=crop&w=400&q=80',
+        visitType: 'Session Inking',
+      ),
+      const DashboardAppointment(
+        id: 'hist_sarah_t',
+        clientName: 'Sarah T.',
+        serviceType: 'Custom Flash',
+        duration: '1.5 hrs',
+        time: '3:30 PM',
+        date: 'Oct 22, 2023',
+        placement: 'Forearm',
+        notes: 'Floral flash with fine line botanicals.',
+        depositPaid: 50,
+        fullPrice: 250,
+        artworkImageUrl: 'https://images.unsplash.com/photo-1562962230-16e4623d36e6?auto=format&fit=crop&w=400&q=80',
+        visitType: 'Flash Tattoo',
+      ),
+      const DashboardAppointment(
+        id: 'hist_marcus_k',
+        clientName: 'Marcus K.',
+        serviceType: 'Fine Line Floral',
+        duration: '2 hrs',
+        time: '11:00 AM',
+        date: 'Oct 15, 2023',
+        placement: 'Ribs',
+        notes: 'Delicate fine line peony.',
+        depositPaid: 60,
+        fullPrice: 320,
+        artworkImageUrl: 'https://images.unsplash.com/photo-1543852786-1cf6624b9987?auto=format&fit=crop&w=400&q=80',
+        visitType: 'Fine Line',
+      ),
+      const DashboardAppointment(
+        id: 'hist_elena_r',
+        clientName: 'Elena R.',
+        serviceType: 'Micro Realism Eye',
+        duration: '2.5 hrs',
+        time: '4:00 PM',
+        date: 'Oct 10, 2023',
+        placement: 'Bicep',
+        notes: 'Realistic eye portrait with geometric framing.',
+        depositPaid: 90,
+        fullPrice: 450,
+        artworkImageUrl: 'https://images.unsplash.com/photo-1568515045052-f9a854d70bfd?auto=format&fit=crop&w=400&q=80',
+        visitType: 'Custom Tattoo',
+      ),
+      const DashboardAppointment(
+        id: 'hist_dave_l',
+        clientName: 'Dave L.',
+        serviceType: 'Traditional Dagger',
+        duration: '2 hrs',
+        time: '2:30 PM',
+        date: 'Sep 29, 2023',
+        placement: 'Calf',
+        notes: 'Classic bold line dagger piercing a black rose.',
+        depositPaid: 60,
+        fullPrice: 300,
+        artworkImageUrl: 'https://images.unsplash.com/photo-1611501275019-9b5cda994e8d?auto=format&fit=crop&w=400&q=80',
+        visitType: 'Traditional',
+      ),
+    ];
+  }
+
+  List<DashboardAppointment> get _filteredHistoryAppointments {
+    final query = _searchQuery.toLowerCase().trim();
+    if (query.isEmpty) {
+      return _allHistoryAppointments;
+    }
+    return _allHistoryAppointments.where((apt) {
+      final matchesClient = apt.clientName.toLowerCase().contains(query);
+      final matchesService = apt.serviceType.toLowerCase().contains(query);
+      final matchesVisitType = apt.effectiveVisitType.toLowerCase().contains(query);
+      final matchesDate = apt.date.toLowerCase().contains(query);
+      final matchesNotes = apt.notes.toLowerCase().contains(query);
+      final matchesId = apt.id.toLowerCase().contains(query);
+      return matchesClient ||
+          matchesService ||
+          matchesVisitType ||
+          matchesDate ||
+          matchesNotes ||
+          matchesId;
+    }).toList();
+  }
+
+  Map<String, List<DashboardAppointment>> _groupAppointmentsByDay(
+    List<DashboardAppointment> appointments,
+  ) {
+    final groups = <String, List<DashboardAppointment>>{};
+    for (final apt in appointments) {
+      final key = apt.date;
+      groups.putIfAbsent(key, () => []).add(apt);
+    }
+    return groups;
+  }
+
+  Widget _buildEarningsTabBar() {
+    return Container(
+      key: const Key('earnings_segmented_tab_bar'),
+      margin: const EdgeInsets.symmetric(vertical: 14),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF191B1B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF262929)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildTabButton(
+              tab: ArtistEarningsTab.overview,
+              label: 'Overview',
+              key: const Key('earnings_tab_overview'),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _buildTabButton(
+              tab: ArtistEarningsTab.history,
+              label: 'History',
+              key: const Key('earnings_tab_history'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabButton({
+    required ArtistEarningsTab tab,
+    required String label,
+    required Key key,
+  }) {
+    final isSelected = _selectedTab == tab;
+    return GestureDetector(
+      key: key,
+      onTap: () {
+        setState(() {
+          _selectedTab = tab;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF252828) : Colors.transparent,
+          borderRadius: BorderRadius.circular(9),
+          border: isSelected
+              ? Border.all(color: const Color(0xFFEEC200).withAlpha(160), width: 1)
+              : Border.all(color: Colors.transparent, width: 1),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF8C9191),
+            fontSize: 14,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistoryView() {
+    final filtered = _filteredHistoryAppointments;
+    final groups = _groupAppointmentsByDay(filtered);
+
+    return Column(
+      key: const Key('earnings_history_view'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildHistorySearchBar(),
+        const SizedBox(height: 18),
+        if (filtered.isEmpty)
+          _buildEmptyHistoryState()
+        else
+          ...groups.entries.map((entry) {
+            final dateLabel = entry.key;
+            final items = entry.value;
+            final dailyTotal = items.fold<int>(0, (sum, i) => sum + i.fullPrice);
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          dateLabel,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E2121),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF282C2C)),
+                          ),
+                          child: Text(
+                            '\$${_formatWithCommas(dailyTotal)}',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFFEEC200),
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  ...items.map((apt) => _buildHistoryAppointmentCard(apt)),
+                ],
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  Widget _buildHistorySearchBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E2121),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF282C2C)),
+      ),
+      child: TextField(
+        key: const Key('history_search_field'),
+        controller: _searchController,
+        style: GoogleFonts.plusJakartaSans(
+          color: Colors.white,
+          fontSize: 14,
+        ),
+        decoration: InputDecoration(
+          hintText: 'Search client, service, or date...',
+          hintStyle: GoogleFonts.plusJakartaSans(
+            color: const Color(0xFF8C9191),
+            fontSize: 14,
+          ),
+          prefixIcon: const Icon(Icons.search, color: Color(0xFF8C9191), size: 20),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  key: const Key('history_search_clear_button'),
+                  icon: const Icon(Icons.clear, color: Color(0xFF8C9191), size: 18),
+                  onPressed: () {
+                    setState(() {
+                      _searchController.clear();
+                      _searchQuery = '';
+                    });
+                  },
+                )
+              : null,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ),
+        onChanged: (val) {
+          setState(() {
+            _searchQuery = val.trim();
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _buildEmptyHistoryState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF191B1B),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF262929)),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.search_off, size: 40, color: Color(0xFF8C9191)),
+          const SizedBox(height: 12),
+          Text(
+            'No sessions found',
+            style: GoogleFonts.plusJakartaSans(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _searchQuery.isNotEmpty
+                ? 'No matches for "$_searchQuery". Try a different search.'
+                : 'No session history found.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFF8C9191),
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryAppointmentCard(DashboardAppointment item) {
+    return Container(
+      key: Key('history_appointment_item_${item.id}'),
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E2121),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF282C2C),
+          width: 1.0,
+        ),
+      ),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AppointmentDetailScreen(appointment: item),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  width: 54,
+                  height: 54,
+                  child: item.artworkImageUrl.isNotEmpty
+                      ? FlashImage(
+                          urlOrPath: item.artworkImageUrl,
+                          width: 54,
+                          height: 54,
+                          fit: BoxFit.cover,
+                          errorWidget: Container(
+                            color: const Color(0xFF252828),
+                            child: const Icon(Icons.brush, color: Color(0xFF8C9191), size: 22),
+                          ),
+                        )
+                      : Container(
+                          color: const Color(0xFF252828),
+                          child: const Icon(Icons.brush, color: Color(0xFF8C9191), size: 22),
+                        ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            item.clientName,
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF262929),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            item.effectiveVisitType.toUpperCase(),
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF8C9191),
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      '${item.date} • ${item.time} • ${item.duration}',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF8C9191),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '\$${item.fullPrice}',
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFFEEC200),
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.chevron_right,
+                color: Color(0xFF8C9191),
+                size: 18,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final content = SafeArea(
@@ -943,12 +1403,15 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildTopActionBar(),
-            const SizedBox(height: 20),
-            _buildHeroAvailableFundsCard(),
-            const SizedBox(height: 28),
-            _buildPastBookingsSection(),
-            const SizedBox(height: 24),
-            _buildUtilityActionsRow(),
+            const SizedBox(height: 12),
+            _buildEarningsTabBar(),
+            if (_selectedTab == ArtistEarningsTab.overview) ...[
+              _buildHeroAvailableFundsCard(),
+              const SizedBox(height: 24),
+              _buildUtilityActionsRow(),
+            ] else ...[
+              _buildHistoryView(),
+            ],
           ],
         ),
       ),
@@ -1001,7 +1464,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
         else
           const TattooMachineIcon(
             key: Key('earnings_tattoo_logo'),
-            size: 28,
+            size: 43,
             color: Color(0xFFEEC200),
           ),
         GestureDetector(

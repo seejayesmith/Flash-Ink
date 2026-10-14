@@ -21,8 +21,12 @@ class MockTestUser extends Fake implements User {
   final String uid;
   @override
   final String? displayName;
+  @override
+  final String? email;
+  @override
+  final String? photoURL;
 
-  MockTestUser({required this.uid, this.displayName});
+  MockTestUser({required this.uid, this.displayName, this.email, this.photoURL});
 }
 
 class FakeDashboardAuthService extends AuthService {
@@ -96,7 +100,7 @@ void main() {
       expect(find.text('10:00 AM'), findsOneWidget);
       expect(find.text('Sarah Jenkins'), findsWidgets);
       expect(find.text('Neo-traditional TIGER • 3 hrs'), findsOneWidget);
-      expect(find.byKey(const Key('hero_view_details_button')), findsOneWidget);
+      expect(find.byKey(const Key('hero_view_details_button')), findsNothing);
 
       // 5. Today's Schedule section
       expect(find.text("Today's Schedule"), findsOneWidget);
@@ -118,13 +122,13 @@ void main() {
       expect(find.text('Earnings'), findsOneWidget);
     });
 
-    testWidgets('Tapping View Details on Next Appointment opens AppointmentDetailScreen', (tester) async {
+    testWidgets('Tapping Next Appointment card opens AppointmentDetailScreen', (tester) async {
       await tester.pumpWidget(buildTestWidget());
       await tester.pumpAndSettle();
 
-      final viewDetailsButton = find.byKey(const Key('hero_view_details_button'));
-      expect(viewDetailsButton, findsOneWidget);
-      await tester.tap(viewDetailsButton);
+      final heroCard = find.byKey(const Key('hero_next_appointment_card'));
+      expect(heroCard, findsOneWidget);
+      await tester.tap(heroCard);
       await tester.pumpAndSettle();
 
       expect(find.byType(AppointmentDetailScreen), findsOneWidget);

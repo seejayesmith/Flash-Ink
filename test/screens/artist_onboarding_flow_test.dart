@@ -9,6 +9,9 @@ import 'package:firebase_core_platform_interface/test.dart';
 import 'package:flash_ink/widgets/artist_stepper_header.dart';
 import 'package:flash_ink/widgets/tattoo_background_wrapper.dart';
 import 'package:flash_ink/widgets/adaptive_glass_container.dart';
+import 'package:flash_ink/widgets/skip_pill_button.dart';
+import 'package:flash_ink/screens/account_creation_screen.dart';
+import 'package:flash_ink/screens/artist_onboarding/artist_info_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_sign_up_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_phone_verification_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_profile_photo_screen.dart';
@@ -59,7 +62,7 @@ class FakeArtistAuthService extends AuthService {
   User? get currentUser => mockUser;
 
   @override
-  Future<UserCredential> signUpWithEmailAndPassword(String email, String password) async {
+  Future<UserCredential> signUpWithEmailAndPassword(String email, String password, {String? role}) async {
     return MockUserCredential(user: mockUser);
   }
 
@@ -186,56 +189,85 @@ void main() {
     });
   });
 
-  group('ArtistSignUpScreen Tests', () {
-    testWidgets('Renders all fields, labels, buttons and social logins', (tester) async {
+  group('Artist Auth & Information Screen Tests', () {
+    testWidgets('AccountCreationScreen for artist mirrors client UI and hides guest option', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: ArtistSignUpScreen(authService: FakeArtistAuthService()),
+          home: AccountCreationScreen(
+            role: 'artist',
+            authService: FakeArtistAuthService(),
+          ),
         ),
       );
 
-      expect(find.text('Create an\naccount'), findsOneWidget);
-      expect(find.text('Join the underground ink community.'), findsOneWidget);
-      expect(find.text('Name'), findsOneWidget);
-      expect(find.text('Email'), findsOneWidget);
-      expect(find.text('Phone Number'), findsOneWidget);
-      expect(find.text('Password'), findsOneWidget);
-      expect(find.text('CREATE ACCOUNT'), findsOneWidget);
+      // Verify email and social auth buttons are present
+      expect(find.text('Continue with Email'), findsOneWidget);
       expect(find.byType(CircularGoogleSignInButton), findsOneWidget);
       expect(find.byType(CircularAppleSignInButton), findsOneWidget);
       expect(find.byKey(const Key('google_sign_in_button')), findsOneWidget);
       expect(find.byKey(const Key('apple_sign_in_button')), findsOneWidget);
-      expect(find.byType(TattooBackgroundWrapper), findsOneWidget);
-      expect(find.byType(AdaptiveGlassContainer), findsWidgets);
-      expect(find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().contains('Already have an account')), findsOneWidget);
+
+      // Verify artist-specific copy
+      expect(find.text('Create an account to showcase your flash designs, manage bookings, and grow your studio.'), findsOneWidget);
+
+      // Verify Guest Mode is NOT present for artist
+      expect(find.text('Continue as Guest'), findsNothing);
     });
 
-    testWidgets('Form validation blocks submit when empty', (tester) async {
+    testWidgets('ArtistInfoScreen renders stepper header, fields, and dev skip banner', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: ArtistSignUpScreen(authService: FakeArtistAuthService()),
+          home: ArtistInfoScreen(authService: FakeArtistAuthService()),
         ),
       );
 
-      await tester.tap(find.text('CREATE ACCOUNT'));
+      expect(find.byType(ArtistStepperHeader), findsOneWidget);
+      expect(find.text('Artist Profile'), findsOneWidget);
+      expect(find.text('Enter your artist name and contact number to get set up.'), findsOneWidget);
+      expect(find.text('Name or Artist Handle'), findsOneWidget);
+      expect(find.text('Phone Number'), findsOneWidget);
+      expect(find.text('I agree to the Terms of Service and Privacy Policy.'), findsOneWidget);
+      expect(find.text('CONTINUE'), findsOneWidget);
+      expect(find.byType(TattooBackgroundWrapper), findsOneWidget);
+      expect(find.byType(AdaptiveGlassContainer), findsWidgets);
+    });
+
+    testWidgets('ArtistInfoScreen form validation blocks submit when empty', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistInfoScreen(
+            authService: FakeArtistAuthService(),
+            initialName: '',
+          ),
+        ),
+      );
+
+      // Clear the text field to ensure it is empty
+      await tester.enterText(find.byType(TextFormField).first, '');
+      await tester.pump();
+
+      // Tap CONTINUE without filling fields
+      await tester.tap(find.text('CONTINUE'));
       await tester.pumpAndSettle();
 
       expect(find.text('Please enter your name or artist handle'), findsOneWidget);
-      expect(find.text('Please enter your email'), findsOneWidget);
+      expect(find.text('Please enter your phone number for SMS verification'), findsOneWidget);
     });
 
-    testWidgets('Skip button bypasses all onboarding directly to ArtistDashboardScreen', (tester) async {
+    testWidgets('ArtistInfoScreen renders top-right Skip button and navigates to ArtistProfilePhotoScreen', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: ArtistSignUpScreen(authService: FakeArtistAuthService()),
+          home: ArtistInfoScreen(authService: FakeArtistAuthService()),
         ),
       );
 
-      expect(find.text('Skip'), findsWidgets);
-      await tester.tap(find.text('Skip').first);
+      expect(find.byType(SkipPillButton), findsOneWidget);
+      expect(find.text('Skip'), findsOneWidget);
+
+      await tester.tap(find.byType(SkipPillButton));
       await tester.pumpAndSettle();
 
-      expect(find.byType(ArtistDashboardScreen), findsOneWidget);
+      expect(find.byType(ArtistProfilePhotoScreen), findsOneWidget);
     });
   });
 
@@ -258,10 +290,10 @@ void main() {
       expect(find.text('VERIFY'), findsOneWidget);
       expect(find.text("Didn't receive code? "), findsOneWidget);
       expect(find.byType(TextField), findsNWidgets(6));
-      expect(find.text('Skip Verification (Dev)'), findsOneWidget);
+      expect(find.text('Skip'), findsOneWidget);
     });
 
-    testWidgets('Tapping Skip Verification (Dev) bypasses verification and navigates to photo screen', (tester) async {
+    testWidgets('Tapping Skip bypasses verification and navigates to photo screen', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: ArtistPhoneVerificationScreen(
@@ -274,7 +306,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('Skip Verification (Dev)'));
+      await tester.tap(find.text('Skip'));
       await tester.pumpAndSettle();
 
       expect(find.text('Upload a profile\nphoto'), findsOneWidget);
@@ -331,6 +363,23 @@ void main() {
       expect(find.text('Keep your\naudience'), findsOneWidget);
       expect(find.text('Add your instagram handle to your artist profile'), findsOneWidget);
     });
+
+    testWidgets('Tapping Skip bypasses photo upload and navigates to ArtistInstagramScreen', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistProfilePhotoScreen(
+            artistName: 'OddMaree',
+            authService: FakeArtistAuthService(),
+          ),
+        ),
+      );
+
+      expect(find.text('Skip'), findsOneWidget);
+      await tester.tap(find.text('Skip'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Keep your\naudience'), findsOneWidget);
+    });
   });
 
   group('ArtistInstagramScreen (Screen 6) Tests', () {
@@ -347,7 +396,7 @@ void main() {
       expect(find.byKey(const Key('instagram_handle_field')), findsOneWidget);
       expect(find.text('CONTINUE'), findsOneWidget);
       expect(find.byKey(const Key('continue_to_price_button')), findsOneWidget);
-      expect(find.text('Skip (Dev)'), findsOneWidget);
+      expect(find.text('Skip'), findsOneWidget);
     });
 
     testWidgets('Tapping CONTINUE navigates to ArtistSetPriceScreen (Screens 7 & 8)', (tester) async {
@@ -384,7 +433,24 @@ void main() {
       expect(find.byKey(const Key('keypad_1')), findsOneWidget);
       expect(find.byKey(const Key('keypad_backspace')), findsOneWidget);
       expect(find.text('CONTINUE'), findsOneWidget);
-      expect(find.text('SKIP'), findsOneWidget);
+      expect(find.byKey(const Key('skip_price_button')), findsOneWidget);
+      expect(find.text('Skip'), findsOneWidget);
+    });
+
+    testWidgets('Tapping Skip navigates to ArtistFlashUploadScreen (Screens 9-12)', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ArtistSetPriceScreen(
+            artistName: 'OddMaree',
+            instagramHandle: '@OddMaree',
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('skip_price_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Showcase your\nwork'), findsOneWidget);
     });
 
     testWidgets('Keypad entry and backspace updates price', (tester) async {
@@ -572,6 +638,25 @@ void main() {
       expect(find.text('Want to go beyond digital?'), findsOneWidget);
       expect(find.byKey(const Key('create_sticker_button')), findsOneWidget);
       expect(find.byKey(const Key('done_share_button')), findsOneWidget);
+      expect(find.byKey(const Key('skip_share_link_button')), findsOneWidget);
+      expect(find.text('Skip'), findsOneWidget);
+    });
+
+    testWidgets('Tapping Skip on ArtistShareLinkScreen navigates to ArtistDashboardScreen', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistShareLinkScreen(
+            artistName: 'OddMaree',
+            instagramHandle: '@OddMaree',
+            authService: FakeArtistAuthService(),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('skip_share_link_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ArtistDashboardScreen), findsOneWidget);
     });
   });
 }

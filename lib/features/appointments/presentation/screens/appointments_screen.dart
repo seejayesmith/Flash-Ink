@@ -47,6 +47,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
         backgroundColor: AppTheme.onyxBackground,
         elevation: 0,
         scrolledUnderElevation: 0,
+        titleSpacing: AppSpacing.spaceLg,
         title: Text(
           'Appointments',
           style: GoogleFonts.plusJakartaSans(

@@ -6,6 +6,9 @@ import '../theme/app_spacing.dart';
 import '../theme/app_buttons.dart';
 import '../widgets/adaptive_glass_container.dart';
 import '../widgets/flash_image.dart';
+import '../widgets/skip_pill_button.dart';
+import 'account_creation_screen.dart';
+import 'profile_setup_screen.dart';
 import 'main_feed_screen.dart';
 
 class AestheticsSelectionScreen extends StatefulWidget {
@@ -18,7 +21,7 @@ class AestheticsSelectionScreen extends StatefulWidget {
 }
 
 class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
-  final List<String> _selectedAesthetics = ['traditional'];
+  final List<String> _selectedAesthetics = [];
   bool _isLoading = false;
 
   final List<Map<String, dynamic>> _aestheticsOptions = [
@@ -66,7 +69,26 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
     },
   ];
 
+  void _handleBack() {
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    } else {
+      if (widget.isGuest) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const AccountCreationScreen(role: 'client')),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+        );
+      }
+    }
+  }
+
   Future<void> _saveAesthetics() async {
+    if (_selectedAesthetics.isEmpty) return;
     setState(() => _isLoading = true);
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -103,6 +125,42 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
     }
   }
 
+  Future<void> _skipAesthetics() async {
+    setState(() => _isLoading = true);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        try {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .set({'aesthetics': <String>[]}, SetOptions(merge: true));
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const MainFeedScreen()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to skip aesthetics: $e'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   void _toggleAesthetic(String id) {
     setState(() {
       if (_selectedAesthetics.contains(id)) {
@@ -116,9 +174,36 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false, // Prevent bypassing flow
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          _handleBack();
+        }
+      },
       child: Scaffold(
-        backgroundColor: const Color(0xFF121414),
+        backgroundColor: Colors.black,
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          leading: IconButton(
+            key: const Key('aesthetics_back_button'),
+            tooltip: 'Back',
+            icon: const Icon(Icons.arrow_back, color: Color(0xFFF9FAFA)),
+            onPressed: _handleBack,
+          ),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: Center(
+                child: SkipPillButton(
+                  onPressed: _isLoading ? null : _skipAesthetics,
+                ),
+              ),
+            ),
+          ],
+        ),
         body: Stack(
           children: [
             // Background subtle tattoo texture extending edge to edge
@@ -146,11 +231,16 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
               ),
             ),
             SafeArea(
+              top: false,
               child: CustomScrollView(
                 physics: const BouncingScrollPhysics(),
                 slivers: [
                   SliverPadding(
-                    padding: AppPadding.screenHorizontal.add(const EdgeInsets.only(top: AppSpacing.spaceMd)),
+                    padding: AppPadding.screenHorizontal.add(
+                      EdgeInsets.only(
+                        top: MediaQuery.paddingOf(context).top + kToolbarHeight + AppSpacing.spaceSm,
+                      ),
+                    ),
                     sliver: SliverToBoxAdapter(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -279,10 +369,14 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
                         children: [
                           AppButtons.primaryCTA(
                             isLoading: _isLoading,
-                            onPressed: _saveAesthetics,
+                            onPressed: _selectedAesthetics.isEmpty ? null : _saveAesthetics,
                             text: widget.isGuest ? 'DONE' : 'FINISH',
-                            backgroundColor: const Color(0xFFEEC200),
-                            foregroundColor: const Color(0xFF121414),
+                            backgroundColor: _selectedAesthetics.isEmpty
+                                ? const Color(0xFF4D5252)
+                                : const Color(0xFFEEC200),
+                            foregroundColor: _selectedAesthetics.isEmpty
+                                ? const Color(0xFF919696)
+                                : const Color(0xFF121414),
                           ),
                         ],
                       ),

@@ -284,7 +284,8 @@ void main() {
 
         // Release the in-flight deletion
         completer.complete();
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump();
 
         // Modal must dismiss and deleteAccount must only be called once
         expect(fakeAuth.deleteAccountCallCount, 1);
@@ -327,7 +328,7 @@ void main() {
     // Scenario 5: Offline resilience of _saveProfile() when Firestore write fails
     // =========================================================================
     testWidgets(
-      'Scenario 5: ProfileSetupScreen "SKIP" button navigates to AestheticsSelectionScreen even when Firestore write fails',
+      'Scenario 5: ProfileSetupScreen "Skip" button navigates to AestheticsSelectionScreen even when Firestore write fails',
       (WidgetTester tester) async {
         // Render ProfileSetupScreen with default uninitialized Firestore mock
         // This exercises lines 166-218 in ProfileSetupScreen where Firestore set is inside try-catch (_)
@@ -347,10 +348,10 @@ void main() {
 
         // 2. Reach photo step with no photo selected
         expect(find.text('Upload a profile photo'), findsOneWidget);
-        final skipButtonFinder = find.text('SKIP');
+        final skipButtonFinder = find.text('Skip');
         expect(skipButtonFinder, findsOneWidget);
 
-        // 3. Tap "SKIP": triggers _saveProfile() which attempts Firestore write and catches failure
+        // 3. Tap "Skip": triggers _saveProfile() which attempts Firestore write and catches failure
         await tester.tap(skipButtonFinder);
         await tester.pumpAndSettle();
 
