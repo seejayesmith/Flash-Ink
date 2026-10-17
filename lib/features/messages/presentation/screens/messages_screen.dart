@@ -112,6 +112,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                 ),
                 child: TextField(
                   controller: _searchController,
+                  textAlignVertical: TextAlignVertical.center,
                   onChanged: (val) {
                     setState(() {
                       _query = val;
@@ -122,14 +123,16 @@ class _MessagesScreenState extends State<MessagesScreen> {
                     fontSize: 13,
                   ),
                   decoration: InputDecoration(
+                    isDense: true,
                     hintText: 'Search conversations...',
                     hintStyle: GoogleFonts.plusJakartaSans(
                       color: AppTheme.navInactive,
                       fontSize: 12,
                     ),
                     prefixIcon: const Icon(Icons.search, color: AppTheme.navInactive, size: 18),
+                    prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 42),
                     border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    contentPadding: EdgeInsets.zero,
                   ),
                 ),
               ),

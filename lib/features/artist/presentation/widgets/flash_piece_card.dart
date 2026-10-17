@@ -55,7 +55,18 @@ class FlashPieceCard extends StatelessWidget {
                   borderRadius: BorderRadius.vertical(
                     top: Radius.circular(AppRadius.radiusMd + 1),
                   ),
-                  child: _buildImage(),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _buildImage(),
+                      if (_shouldShowBadge)
+                        Positioned(
+                          top: 8,
+                          left: 8,
+                          child: _buildBadge(),
+                        ),
+                    ],
+                  ),
                 ),
               ),
 
@@ -153,6 +164,57 @@ class FlashPieceCard extends StatelessWidget {
           color: AppTheme.navInactiveAlt,
           size: 26,
         ),
+      ),
+    );
+  }
+
+  bool get _shouldShowBadge => piece.isClaimed || piece.isExclusive;
+
+  Widget _buildBadge() {
+    final bool isClaimed = piece.isClaimed;
+    final Color bg = isClaimed
+        ? const Color(0xFF261919).withAlpha(230)
+        : const Color(0xFF1A2218).withAlpha(230);
+    final Color border = isClaimed
+        ? const Color(0xFF7A3535)
+        : const Color(0xFF436938);
+    final Color text = isClaimed
+        ? const Color(0xFFF87171)
+        : const Color(0xFF4ADE80);
+    final String label = isClaimed ? 'CLAIMED' : 'EXCLUSIVE';
+    final IconData icon = isClaimed
+        ? Icons.lock_outline
+        : Icons.check_circle_outline;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: border, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(90),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: text),
+          const SizedBox(width: 3.5),
+          Text(
+            label,
+            style: AppTypography.labelBold.copyWith(
+              color: text,
+              fontSize: 9.5,
+              height: 1.1,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
       ),
     );
   }

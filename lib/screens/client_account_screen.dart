@@ -18,7 +18,7 @@ import 'splash_screen.dart';
 ///
 /// Accessible by tapping the user's avatar icon at the top right of the client interface.
 /// Provides profile management, aesthetic preferences, notification settings,
-/// policies, sign out, and account deletion.
+/// support & legal resources, sign out, and account deletion.
 class ClientAccountScreen extends StatefulWidget {
   final AuthService? authService;
 
@@ -39,7 +39,6 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
   bool _isUploadingPhoto = false;
 
   // Profile fields
-  String _displayName = 'Flash Client';
   String _username = 'flashclient';
   String _email = 'client@flash.ink';
   String _phoneNumber = '+1 (555) 234-5678';
@@ -63,9 +62,6 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
     if (user != null) {
       if (mounted) {
         setState(() {
-          if (user.displayName != null && user.displayName!.isNotEmpty) {
-            _displayName = user.displayName!;
-          }
           if (user.email != null && user.email!.isNotEmpty) {
             _email = user.email!;
           }
@@ -83,11 +79,6 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
         if (doc.exists && doc.data() != null && mounted) {
           final data = doc.data()!;
           setState(() {
-            if (data['displayName'] != null) {
-              _displayName = data['displayName'] as String;
-            } else if (data['username'] != null) {
-              _displayName = data['username'] as String;
-            }
             if (data['username'] != null) {
               _username = data['username'] as String;
             }
@@ -396,17 +387,14 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => ClientEditProfileScreen(
-          initialDisplayName: _displayName,
           initialUsername: _username,
-          onSave: (newName, newUsername) async {
+          onSave: (newUsername) async {
             setState(() {
-              _displayName = newName;
               _username = newUsername;
             });
             final user = _authService.currentUser;
             if (user != null) {
               await _updateFirestoreUser(user.uid, {
-                'displayName': newName,
                 'username': newUsername,
               });
             }
@@ -417,7 +405,6 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
 
     if (result != null && mounted) {
       setState(() {
-        _displayName = result['displayName'] ?? _displayName;
         _username = result['username'] ?? _username;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -503,19 +490,6 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
           ),
         ),
         centerTitle: false,
-        actions: [
-          IconButton(
-            key: const Key('account_edit_button'),
-            icon: const Icon(
-              Icons.edit_outlined,
-              color: AppTheme.gold,
-              size: 20,
-            ),
-            tooltip: 'Edit Profile Settings',
-            onPressed: _showEditProfileDialog,
-          ),
-          const SizedBox(width: 8),
-        ],
       ),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
@@ -544,14 +518,6 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
             _buildSectionHeader('PERSONAL INFORMATION'),
             const SizedBox(height: 10),
             _buildSettingsContainer([
-              _buildSettingsTile(
-                icon: Icons.person_outline,
-                title: 'Display Name',
-                subtitle: _displayName,
-                trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
-                onTap: _showEditProfileDialog,
-              ),
-              const Divider(color: AppTheme.darkBorder, height: 1),
               _buildSettingsTile(
                 icon: Icons.alternate_email,
                 title: 'Username',
@@ -625,47 +591,7 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
 
             const SizedBox(height: 28),
 
-            // Section 3: Studio & Policies
-            _buildSectionHeader('STUDIO & SAFETY POLICIES'),
-            const SizedBox(height: 10),
-            _buildSettingsContainer([
-              _buildSettingsTile(
-                icon: Icons.health_and_safety_outlined,
-                title: 'Health & Safety Standards',
-                subtitle: 'Bloodborne pathogen protocol, sterilization & studio standards',
-                trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
-                onTap: () => _showInfoModal(
-                  'Health & Safety Protocol',
-                  'All resident and guest tattooers on Flash.Ink operate in state-licensed studios adhering to OSHA Bloodborne Pathogen standards, single-use sterilized needle cartridges, and medical-grade disinfectants.',
-                ),
-              ),
-              const Divider(color: AppTheme.darkBorder, height: 1),
-              _buildSettingsTile(
-                icon: Icons.policy_outlined,
-                title: 'Booking & Deposit Policies',
-                subtitle: 'Learn how flash reservations and custom deposits work',
-                trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
-                onTap: () => _showInfoModal(
-                  'Deposit & Booking Terms',
-                  'Flash deposits are non-refundable and hold your selected flash piece exclusively. Cancellations with over 48 hours notice allow one complimentary reschedule.',
-                ),
-              ),
-              const Divider(color: AppTheme.darkBorder, height: 1),
-              _buildSettingsTile(
-                icon: Icons.healing_outlined,
-                title: 'Tattoo Aftercare Guide',
-                subtitle: 'Standardized healing instructions and recommended balms',
-                trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
-                onTap: () => _showInfoModal(
-                  'Aftercare Instructions',
-                  'Leave second-skin barrier on for 3-5 days unless leaking. Wash gently with antibacterial soap and warm water. Apply a thin layer of unscented moisturizer twice daily.',
-                ),
-              ),
-            ]),
-
-            const SizedBox(height: 28),
-
-            // Section 4: Support & Legal
+            // Section 3: Support & Legal
             _buildSectionHeader('SUPPORT & LEGAL'),
             const SizedBox(height: 10),
             _buildSettingsContainer([
@@ -846,27 +772,18 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
               ),
               const SizedBox(width: 16),
 
-              // Name, Username, and Badges
+              // Username, Email, and Badges
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _displayName,
-                      key: const Key('account_display_name'),
+                      '@$_username',
+                      key: const Key('account_username'),
                       style: GoogleFonts.plusJakartaSans(
                         color: AppTheme.textPrimary,
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '@$_username',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: AppTheme.gold,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 6),

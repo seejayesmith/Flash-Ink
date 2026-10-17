@@ -7,20 +7,27 @@ import '../theme/app_buttons.dart';
 import '../widgets/adaptive_glass_container.dart';
 import '../widgets/flash_image.dart';
 import '../widgets/skip_pill_button.dart';
+import '../services/auth_service.dart';
 import 'account_creation_screen.dart';
 import 'profile_setup_screen.dart';
 import 'main_feed_screen.dart';
 
 class AestheticsSelectionScreen extends StatefulWidget {
   final bool isGuest;
+  final AuthService? authService;
 
-  const AestheticsSelectionScreen({super.key, this.isGuest = false});
+  const AestheticsSelectionScreen({
+    super.key,
+    this.isGuest = false,
+    this.authService,
+  });
 
   @override
   State<AestheticsSelectionScreen> createState() => _AestheticsSelectionScreenState();
 }
 
 class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
+  late final AuthService _authService = widget.authService ?? AuthService();
   final List<String> _selectedAesthetics = [];
   bool _isLoading = false;
 
@@ -91,7 +98,7 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
     if (_selectedAesthetics.isEmpty) return;
     setState(() => _isLoading = true);
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = _authService.currentUser ?? FirebaseAuth.instance.currentUser;
       if (user != null) {
         try {
           await FirebaseFirestore.instance
@@ -105,7 +112,7 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
         // Destructive routing directly to Main Home Feed (clearing all previous routes)
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (_) => const MainFeedScreen()),
+          MaterialPageRoute(builder: (_) => MainFeedScreen(authService: _authService)),
           (route) => false,
         );
       }
@@ -128,7 +135,7 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
   Future<void> _skipAesthetics() async {
     setState(() => _isLoading = true);
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = _authService.currentUser ?? FirebaseAuth.instance.currentUser;
       if (user != null) {
         try {
           await FirebaseFirestore.instance
@@ -141,7 +148,7 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
       if (mounted) {
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (_) => const MainFeedScreen()),
+          MaterialPageRoute(builder: (_) => MainFeedScreen(authService: _authService)),
           (route) => false,
         );
       }

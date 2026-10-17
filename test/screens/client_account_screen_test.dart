@@ -202,8 +202,10 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Check user identity
-        expect(find.text('Alice Walker'), findsWidgets);
+        // Check user identity (display name removed, username displayed)
+        expect(find.text('Display Name'), findsNothing);
+        expect(find.text('Alice Walker'), findsNothing);
+        expect(find.text('@flashclient'), findsWidgets);
         expect(find.text('collector@flash.ink'), findsWidgets);
         expect(find.text('COLLECTOR • VERIFIED'), findsOneWidget);
 
@@ -220,7 +222,8 @@ void main() {
         // Check settings sections
         expect(find.text('PERSONAL INFORMATION'), findsOneWidget);
         expect(find.text('NOTIFICATIONS & ALERTS'), findsOneWidget);
-        expect(find.text('STUDIO & SAFETY POLICIES'), findsOneWidget);
+        expect(find.text('STUDIO & SAFETY POLICIES'), findsNothing);
+        expect(find.text('Health & Safety Standards'), findsNothing);
         expect(find.text('SUPPORT & LEGAL'), findsOneWidget);
 
         // Check action buttons
@@ -259,7 +262,7 @@ void main() {
     );
 
     testWidgets(
-      'Tapping edit button opens edit profile bottom sheet and saves changes',
+      'Tapping Username opens edit profile bottom sheet and saves changes',
       (WidgetTester tester) async {
         final fakeAuth = FakeAccountAuthService();
         await tester.pumpWidget(
@@ -271,25 +274,29 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Tap edit profile button in AppBar
-        await tester.tap(find.byKey(const Key('account_edit_button')));
+        // Verify top-right edit button is not present
+        expect(find.byKey(const Key('account_edit_button')), findsNothing);
+
+        // Tap Username tile to open edit profile bottom sheet
+        await tester.tap(find.text('Username'));
         await tester.pumpAndSettle();
 
         // Verify bottom sheet appears
         expect(find.byKey(const Key('edit_profile_sheet_title')), findsOneWidget);
-        expect(find.byKey(const Key('account_edit_name_input')), findsOneWidget);
+        expect(find.byKey(const Key('account_edit_username_input')), findsOneWidget);
+        expect(find.byKey(const Key('account_edit_name_input')), findsNothing);
 
-        // Enter new display name
-        await tester.enterText(find.byKey(const Key('account_edit_name_input')), 'Elena Vance');
+        // Enter new username
+        await tester.enterText(find.byKey(const Key('account_edit_username_input')), 'elenavance');
         await tester.pump();
 
         // Tap save button
         await tester.tap(find.byKey(const Key('account_save_profile_button')));
         await tester.pumpAndSettle();
 
-        // Verify sheet dismissed and name updated
+        // Verify sheet dismissed and username updated
         expect(find.byKey(const Key('edit_profile_sheet_title')), findsNothing);
-        expect(find.text('Elena Vance'), findsWidgets);
+        expect(find.text('@elenavance'), findsWidgets);
       },
     );
 

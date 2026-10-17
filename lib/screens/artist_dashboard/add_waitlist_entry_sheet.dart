@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../models/waitlist_entry.dart';
+import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
 
 /// Bottom sheet dialog for artists to add friends, family, or VIP clients to their waitlist.
@@ -210,19 +211,19 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-
-    return Container(
+    return ConstrainedBox(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.92,
       ),
-      decoration: const BoxDecoration(
-        color: Color(0xFF141616),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border(
-          top: BorderSide(color: Color(0xFFEEC200), width: 1.5),
-        ),
-      ),
-      child: Column(
+      child: AdaptiveGlassContainer.bottomSheet(
+        glassEnabled: false,
+        androidSurfaceColor: const Color(0xFF141616),
+        selectedBorderColor: const Color(0xFFEEC200),
+        unselectedBorderColor: const Color(0xFFEEC200),
+        selectedBorderWidth: 1.5,
+        unselectedBorderWidth: 1.5,
+        topRadius: 28.0,
+        child: Column(
         children: [
           // Drag handle
           Padding(
@@ -446,8 +447,9 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildModeTab({required int index, required IconData icon, required String label}) {
     final isSelected = _activeTabIndex == index;

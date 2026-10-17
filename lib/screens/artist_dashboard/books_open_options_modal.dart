@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist_dashboard_data.dart';
+import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_switch.dart';
 
 /// Modal dialog presented when an artist opens their books, offering the choice
@@ -47,21 +48,17 @@ class _BooksOpenOptionsModalState extends State<BooksOpenOptionsModal> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF161818),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border(
-          top: BorderSide(color: Color(0xFFEEC200), width: 1.5),
-        ),
-      ),
-      padding: EdgeInsets.fromLTRB(
-        22,
-        14,
-        22,
-        MediaQuery.paddingOf(context).bottom + 20,
-      ),
-      child: SingleChildScrollView(
+    return AdaptiveGlassContainer.bottomSheet(
+      glassEnabled: false,
+      androidSurfaceColor: const Color(0xFF161818),
+      selectedBorderColor: const Color(0xFFEEC200),
+      unselectedBorderColor: const Color(0xFFEEC200),
+      selectedBorderWidth: 1.5,
+      unselectedBorderWidth: 1.5,
+      topRadius: 28.0,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 14, 22, 20),
+        child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -225,8 +222,9 @@ class _BooksOpenOptionsModalState extends State<BooksOpenOptionsModal> {
           ),
         ],
       ),
-      ),
-    );
+    ),
+  ),
+);
   }
 
   Widget _buildHourPill(int hours, String label) {

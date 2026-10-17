@@ -5,13 +5,13 @@ import '../theme/app_spacing.dart';
 import '../widgets/adaptive_glass_container.dart';
 
 class ClientEditProfileScreen extends StatefulWidget {
-  final String initialDisplayName;
+  final String? initialDisplayName;
   final String initialUsername;
-  final Future<void> Function(String displayName, String username)? onSave;
+  final Future<void> Function(String username)? onSave;
 
   const ClientEditProfileScreen({
     super.key,
-    required this.initialDisplayName,
+    this.initialDisplayName,
     required this.initialUsername,
     this.onSave,
   });
@@ -21,39 +21,34 @@ class ClientEditProfileScreen extends StatefulWidget {
 }
 
 class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
-  late final TextEditingController _nameController;
   late final TextEditingController _usernameController;
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.initialDisplayName);
     _usernameController = TextEditingController(text: widget.initialUsername);
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
     _usernameController.dispose();
     super.dispose();
   }
 
   Future<void> _handleSave() async {
-    final newName = _nameController.text.trim();
     final newUsername = _usernameController.text.trim().replaceAll('@', '');
 
-    if (newName.isEmpty) return;
+    if (newUsername.isEmpty) return;
 
     setState(() => _isSaving = true);
     try {
       if (widget.onSave != null) {
-        await widget.onSave!(newName, newUsername.isNotEmpty ? newUsername : widget.initialUsername);
+        await widget.onSave!(newUsername);
       }
       if (mounted) {
         Navigator.pop(context, {
-          'displayName': newName,
-          'username': newUsername.isNotEmpty ? newUsername : widget.initialUsername,
+          'username': newUsername,
         });
       }
     } finally {
@@ -99,35 +94,6 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Display Name',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFF919696),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      key: const Key('account_edit_name_input'),
-                      controller: _nameController,
-                      style: GoogleFonts.plusJakartaSans(color: AppTheme.textPrimary),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: const Color(0xFF141616),
-                        hintText: 'Enter your display name',
-                        hintStyle: const TextStyle(color: Color(0xFF4D5252)),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppTheme.darkBorder),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppTheme.gold),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
                     Text(
                       'Username (@handle)',
                       style: GoogleFonts.plusJakartaSans(

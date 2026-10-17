@@ -5,16 +5,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 import '../widgets/adaptive_glass_container.dart';
 import '../widgets/photo_crop_screen.dart';
 import '../widgets/photo_source_bottom_sheet.dart';
+import '../widgets/profile_avatar_placeholder.dart';
 import '../widgets/skip_pill_button.dart';
 import 'aesthetics_selection_screen.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
-  const ProfileSetupScreen({super.key});
+  final AuthService? authService;
+
+  const ProfileSetupScreen({super.key, this.authService});
 
   @override
   State<ProfileSetupScreen> createState() => _ProfileSetupScreenState();
@@ -60,6 +64,7 @@ class _UsernameInputFormatter extends TextInputFormatter {
 }
 
 class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
+  late final AuthService _authService = widget.authService ?? AuthService();
   final _usernameController = TextEditingController();
   final FocusNode _usernameFocusNode = FocusNode();
   bool _isLoading = false;
@@ -130,6 +135,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       final pickedFile = await _picker.pickImage(source: source, imageQuality: 80);
       if (pickedFile != null && mounted) {
         final bytes = await pickedFile.readAsBytes();
+        if (!mounted) return;
         final croppedBytes = await Navigator.push<Uint8List?>(
           context,
           MaterialPageRoute(
@@ -151,46 +157,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     }
   }
 
-  Future<void> _useSamplePhoto() async {
-    try {
-      final byteData = await rootBundle.load('assets/images/flash_traditional_moth.jpg');
-      final bytes = byteData.buffer.asUint8List();
-      if (mounted) {
-        final croppedBytes = await Navigator.push<Uint8List?>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PhotoCropScreen(
-              imageBytes: bytes,
-              title: 'CROP SAMPLE FLASH',
-            ),
-          ),
-        );
-        if (croppedBytes != null && mounted) {
-          setState(() {
-            _imageBytes = croppedBytes;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Loaded sample photo for testing.'),
-              backgroundColor: Color(0xFF22C55E),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load sample photo: $e')),
-        );
-      }
-    }
-  }
-
   Future<void> _saveProfile() async {
     setState(() => _isLoading = true);
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = _authService.currentUser ?? FirebaseAuth.instance.currentUser;
       if (user != null) {
         String? photoUrl;
         if (_imageBytes != null) {
@@ -222,7 +192,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => const AestheticsSelectionScreen(isGuest: false),
+            builder: (_) => AestheticsSelectionScreen(
+              isGuest: _authService.isGuest,
+              authService: _authService,
+            ),
           ),
         );
       }
@@ -257,7 +230,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     FocusScope.of(context).unfocus();
     final raw = _usernameController.text.trim().replaceAll('@', '');
     if (raw.isEmpty) {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = _authService.currentUser ?? FirebaseAuth.instance.currentUser;
       String autoHandle = 'user';
       if (user?.email != null && user!.email!.contains('@')) {
         final prefix = user.email!.split('@').first.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '');
@@ -295,50 +268,40 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Profile Setup',
+                'Step ${_currentPage + 1} of 4',
                 style: GoogleFonts.plusJakartaSans(
-                  color: AppTheme.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
+                  color: AppTheme.navInactive,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 6),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildProgressIndicator(0),
-                  const SizedBox(width: 6),
-                  _buildProgressIndicator(1),
-                ],
+              const SizedBox(height: 8),
+              SizedBox(
+                width: 180,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: (_currentPage + 1) / 4.0,
+                    backgroundColor: const Color(0xFF262929),
+                    valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.gold),
+                    minHeight: 4,
+                  ),
+                ),
               ),
             ],
           ),
-          SkipPillButton(
-            onPressed: _isLoading
-                ? null
-                : () {
-                    FocusScope.of(context).unfocus();
-                    if (_currentPage == 0) {
+          if (_currentPage == 0)
+            SkipPillButton(
+              onPressed: _isLoading
+                  ? null
+                  : () {
+                      FocusScope.of(context).unfocus();
                       _skipUsername();
-                    } else {
-                      _saveProfile();
-                    }
-                  },
-          ),
+                    },
+            )
+          else
+            const SizedBox(width: 48, height: 48),
         ],
-      ),
-    );
-  }
-
-  Widget _buildProgressIndicator(int stepIndex) {
-    final isActive = _currentPage >= stepIndex;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      width: _currentPage == stepIndex ? 24 : 12,
-      height: 4,
-      decoration: BoxDecoration(
-        color: isActive ? AppTheme.gold : const Color(0xFF333737),
-        borderRadius: BorderRadius.circular(2),
       ),
     );
   }
@@ -474,177 +437,153 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
   Widget _buildPhotoStep() {
     final hasPhoto = _imageBytes != null;
-    return SingleChildScrollView(
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: AppSpacing.spaceLg),
-          Text(
-            hasPhoto ? 'Looks good!' : 'Upload a profile photo',
-            style: GoogleFonts.plusJakartaSans(
-              color: AppTheme.textPrimary,
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
-            ),
-          ),
-          AppGaps.gapSm,
-          Text(
-            hasPhoto
-                ? 'Looking sharp! Tap the photo anytime to change it.'
-                : "Doesn't have to be your face. Just whatever you'd like to represent you.",
-            style: GoogleFonts.plusJakartaSans(
-              color: AppTheme.navInactive,
-              fontSize: 16,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.spaceXxl),
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                GestureDetector(
-                  onTap: _pickImage,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    alignment: Alignment.center,
-                    children: [
-                      Container(
-                        width: 156,
-                        height: 156,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xFF1E2020),
-                          border: Border.all(
-                            color: const Color(0xFF333737),
-                            width: 2.0,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withAlpha(60),
-                              blurRadius: 16,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                          image: hasPhoto
-                              ? DecorationImage(
-                                  image: MemoryImage(_imageBytes!),
-                                  fit: BoxFit.cover,
-                                )
-                              : null,
-                        ),
-                        child: !hasPhoto
-                            ? const Center(
-                                child: Icon(
-                                  Icons.person_outline_rounded,
-                                  size: 76,
-                                  color: AppTheme.navInactive,
-                                ),
-                              )
-                            : null,
-                      ),
-                      Positioned(
-                        bottom: 4,
-                        right: 4,
-                        child: Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: AppTheme.gold,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: const Color(0xFF141616), width: 2.5),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(60),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.camera_alt_rounded,
-                            size: 20,
-                            color: Color(0xFF121414),
-                          ),
-                        ),
-                      ),
-                    ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: IntrinsicHeight(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: AppSpacing.spaceLg),
+                  Text(
+                    'Add a profile photo',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AppTheme.textPrimary,
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.5,
+                    ),
                   ),
-                ),
-                AppGaps.gapLg,
-                GestureDetector(
-                  onTap: _pickImage,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        hasPhoto ? Icons.edit_outlined : Icons.add_photo_alternate_outlined,
-                        size: 16,
-                        color: hasPhoto ? AppTheme.navInactive : AppTheme.textPrimary,
+                  const SizedBox(height: 8),
+                  Text(
+                    'Show the community who you are!\nYou can always change this later.',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AppTheme.navInactive,
+                      fontSize: 15,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  Center(
+                    child: ProfileAvatarPlaceholder(
+                      imageBytes: _imageBytes,
+                      onTap: _handlePhotoSelect,
+                      onBadgeTap: _handlePhotoSelect,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Upload a Photo button
+                  GestureDetector(
+                    onTap: () => _pickImage(ImageSource.gallery),
+                    child: Container(
+                      width: double.infinity,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E2020),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: const Color(0xFF383C3C),
+                          width: 1.2,
+                        ),
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        hasPhoto ? 'Tap to change photo' : 'Tap to select photo',
+                      alignment: Alignment.center,
+                      child: Text(
+                        'Upload a Photo',
                         style: GoogleFonts.plusJakartaSans(
-                          color: hasPhoto ? AppTheme.navInactive : AppTheme.textPrimary,
+                          fontSize: 15,
                           fontWeight: FontWeight.w600,
-                          fontSize: 14,
+                          color: AppTheme.textPrimary,
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          if (hasPhoto) ...[
-            const SizedBox(height: 36),
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _saveProfile,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.gold,
-                  foregroundColor: const Color(0xFF121414),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(26),
-                  ),
-                  elevation: 0,
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Color(0xFF121414),
-                        ),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'CONTINUE',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              letterSpacing: 1.0,
-                            ),
+                  const SizedBox(height: 12),
+
+                  // Take a Picture button
+                  Center(
+                    child: GestureDetector(
+                      onTap: () => _pickImage(ImageSource.camera),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          'Take a Picture',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
                           ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.arrow_forward_rounded, size: 18),
-                        ],
+                        ),
                       ),
+                    ),
+                  ),
+                  const Spacer(),
+                  const SizedBox(height: 24),
+
+                  // Continue Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: (hasPhoto && !_isLoading) ? _saveProfile : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.gold,
+                        disabledBackgroundColor: const Color(0xFF262929),
+                        disabledForegroundColor: const Color(0xFF6B7272),
+                        foregroundColor: const Color(0xFF121414),
+                        shape: const StadiumBorder(),
+                        elevation: 0,
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF121414)),
+                              ),
+                            )
+                          : Text(
+                              'Continue',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Skip for now button
+                  Center(
+                    child: TextButton(
+                      onPressed: _isLoading ? null : _saveProfile,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppTheme.navInactive,
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                      ),
+                      child: Text(
+                        'Skip for now',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.navInactive,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.spaceMd),
+                ],
               ),
             ),
-          ],
-        ],
-      ),
+          ),
+        );
+      },
     );
   }
 

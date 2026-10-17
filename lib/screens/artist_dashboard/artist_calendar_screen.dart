@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../services/auth_service.dart';
+import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/tattoo_machine_icon.dart';
 import 'appointment_detail_screen.dart';
@@ -1098,10 +1099,7 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF191B1B),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         final allAppointments = ArtistDashboardRepository.calendarAppointments;
 
@@ -1111,7 +1109,11 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
           maxChildSize: 0.95,
           expand: false,
           builder: (_, scrollController) {
-            return Column(
+            return AdaptiveGlassContainer.bottomSheet(
+              glassEnabled: false,
+              androidSurfaceColor: const Color(0xFF191B1B),
+              topRadius: 24.0,
+              child: Column(
               children: [
                 const SizedBox(height: 12),
                 Container(
@@ -1229,8 +1231,9 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
                   ),
                 ),
               ],
-            );
-          },
+            ),
+          );
+        },
         );
       },
     );

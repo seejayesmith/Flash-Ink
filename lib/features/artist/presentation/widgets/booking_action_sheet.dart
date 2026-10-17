@@ -5,6 +5,7 @@ import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../theme/app_typography.dart';
+import '../../../../widgets/adaptive_glass_container.dart';
 import '../../domain/models/artist_profile.dart';
 
 /// Anchored frosted glass action bar or bottom sheet container for initiating
@@ -113,24 +114,17 @@ class BookingActionSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.onyxContainer,
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppRadius.radiusXl),
-        ),
-        border: Border.all(
-          color: AppTheme.goldBorder,
-          width: 1.0,
-        ),
-      ),
-      padding: EdgeInsets.fromLTRB(
+    return AdaptiveGlassContainer.bottomSheet(
+      glassEnabled: false,
+      androidSurfaceColor: AppTheme.onyxContainer,
+      selectedBorderColor: AppTheme.goldBorder,
+      unselectedBorderColor: AppTheme.goldBorder,
+      topRadius: AppRadius.radiusXl,
+      padding: const EdgeInsets.fromLTRB(
         AppSpacing.spaceLg,
         AppSpacing.spaceMd,
         AppSpacing.spaceLg,
-        AppSpacing.spaceLg + bottomPadding,
+        AppSpacing.spaceLg,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

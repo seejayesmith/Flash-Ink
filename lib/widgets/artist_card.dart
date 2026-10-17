@@ -136,17 +136,18 @@ class ArtistCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Profile Details (aligned next to the overlapping avatar)
+                // Profile Details (aligned next to the overlapping avatar) with top-aligned Books open badge
                 Padding(
-                  padding: const EdgeInsets.only(left: 90.0),
-                  child: Column(
+                  padding: const EdgeInsets.only(left: 90.0, top: 10.0),
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Artist Name + Books Open Tag
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Artist Name
+                            Text(
                               artist.name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -157,57 +158,57 @@ class ArtistCard extends StatelessWidget {
                                 letterSpacing: -0.2,
                               ),
                             ),
-                          ),
-                          if (artist.isBooksOpen) ...[
-                            AppGaps.gapSm,
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1A1D16),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: const Color(0xFF8C7E55),
-                                  width: 1,
+                            const SizedBox(height: 3),
+                            // Studio Name Row
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.storefront_outlined,
+                                  size: 14,
+                                  color: Color(0xFF919696),
                                 ),
-                              ),
-                              child: Text(
-                                'Books open',
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: const Color(0xFFEEC200),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    artist.studioType,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: const Color(0xFF919696),
+                                      fontSize: 13,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
                           ],
-                        ],
+                        ),
                       ),
-                      const SizedBox(height: 3),
-                      // Studio Name Row
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.storefront_outlined,
-                            size: 14,
-                            color: Color(0xFF919696),
+                      if (artist.isBooksOpen) ...[
+                        const SizedBox(width: AppSpacing.spaceSm),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
                           ),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              artist.studioType,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.plusJakartaSans(
-                                color: const Color(0xFF919696),
-                                fontSize: 13,
-                              ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1A1D16),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: const Color(0xFF8C7E55),
+                              width: 1,
                             ),
                           ),
-                        ],
-                      ),
+                          child: Text(
+                            'Books open',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFFEEC200),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

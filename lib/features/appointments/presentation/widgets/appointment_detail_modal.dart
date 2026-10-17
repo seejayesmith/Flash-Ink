@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_buttons.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
+import '../../../../widgets/adaptive_glass_container.dart';
 import '../../../../widgets/flash_image.dart';
 import '../../domain/models/appointment_item.dart';
 
@@ -34,19 +35,19 @@ class AppointmentDetailModal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).padding.bottom;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.onyxContainer,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border.all(color: AppTheme.goldBorder, width: 1.2),
-      ),
-      padding: EdgeInsets.fromLTRB(
+    return AdaptiveGlassContainer.bottomSheet(
+      glassEnabled: false,
+      androidSurfaceColor: AppTheme.onyxContainer,
+      selectedBorderColor: AppTheme.goldBorder,
+      unselectedBorderColor: AppTheme.goldBorder,
+      selectedBorderWidth: 1.2,
+      unselectedBorderWidth: 1.2,
+      topRadius: 24.0,
+      padding: const EdgeInsets.fromLTRB(
         AppSpacing.spaceLg,
         AppSpacing.spaceMd,
         AppSpacing.spaceLg,
-        AppSpacing.spaceLg + bottomInset,
+        AppSpacing.spaceLg,
       ),
       child: SingleChildScrollView(
         child: Column(

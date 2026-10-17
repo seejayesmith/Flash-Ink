@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../../screens/custom_request_screen.dart';
 import '../../../../screens/flash_details_screen.dart';
 import '../../../../widgets/guest_auth_prompt_bottom_sheet.dart';
@@ -45,6 +46,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
   ArtistShowcaseTab _selectedTab = ArtistShowcaseTab.available;
   int _visibleFlashCount = 6;
   bool _isLoadingMore = false;
+  final Set<String> _claimedPieceIds = <String>{};
 
   @override
   void initState() {
@@ -73,7 +75,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
   }
 
   List<FlashPiece> _getFilteredPieces() {
-    final allPieces = widget.artist.flashArtworks.isNotEmpty
+    final rawPieces = widget.artist.flashArtworks.isNotEmpty
         ? widget.artist.flashArtworks
         : List.generate(
             widget.artist.images.length,
@@ -90,16 +92,21 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
             ),
           );
 
+    final allPieces = rawPieces.map((p) {
+      if (_claimedPieceIds.contains(p.id)) {
+        return p.copyWith(status: FlashStatus.claimed);
+      }
+      return p;
+    }).toList();
+
     if (_selectedTab == ArtistShowcaseTab.available) {
-      final available = allPieces
+      return allPieces
           .where((p) => p.status != FlashStatus.claimed)
           .toList();
-      return available.isNotEmpty ? available : allPieces;
     } else {
-      final completed = allPieces
+      return allPieces
           .where((p) => p.status == FlashStatus.claimed)
           .toList();
-      return completed.isNotEmpty ? completed : allPieces;
     }
   }
 
@@ -241,7 +248,11 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
           // 2. Key Metrics Row (Rating, Avail Pieces, Min Deposit)
           SliverToBoxAdapter(
             child: ArtistStatsRow(
-              artist: widget.artist,
+              artist: _claimedPieceIds.isEmpty
+                  ? widget.artist
+                  : widget.artist.copyWith(
+                      availablePieces: (widget.artist.availablePieces - _claimedPieceIds.length).clamp(0, 999),
+                    ),
             ),
           ),
 
@@ -267,7 +278,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
               ),
             ),
             const SliverToBoxAdapter(
-              child: SizedBox(height: AppSpacing.spaceLg),
+              child: SizedBox(height: AppSpacing.spaceMd),
             ),
           ],
 
@@ -281,37 +292,63 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
           ),
 
           // 5. Artwork / Flash Cards Responsive Grid
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: AppSpacing.spaceSm + 2,
-                mainAxisSpacing: AppSpacing.spaceMd,
-                childAspectRatio: 0.58,
+          if (visiblePieces.isEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: AppSpacing.spaceXxl,
+                  horizontal: AppSpacing.spaceLg,
+                ),
+                child: Center(
+                  child: Text(
+                    _selectedTab == ArtistShowcaseTab.available
+                        ? 'No available pieces at this time'
+                        : 'No completed pieces yet',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AppTheme.navInactive,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
               ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final item = visiblePieces[index];
-                  return FlashPieceCard(
-                    piece: item,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => FlashDetailsScreen(
-                            flash: item,
-                            artist: widget.artist,
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: AppSpacing.spaceSm + 2,
+                  mainAxisSpacing: AppSpacing.spaceMd,
+                  childAspectRatio: 0.58,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final item = visiblePieces[index];
+                    return FlashPieceCard(
+                      piece: item,
+                      onTap: () async {
+                        final booked = await Navigator.push<bool>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => FlashDetailsScreen(
+                              flash: item,
+                              artist: widget.artist,
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                  );
-                },
-                childCount: visiblePieces.length,
+                        );
+                        if (booked == true && mounted) {
+                          setState(() {
+                            _claimedPieceIds.add(item.id);
+                          });
+                        }
+                      },
+                    );
+                  },
+                  childCount: visiblePieces.length,
+                ),
               ),
             ),
-          ),
 
           // 6. "Load More" Outlined Button
           if (hasMore) ...[

@@ -25,6 +25,7 @@ class AdaptiveGlassContainer extends StatelessWidget {
   final bool useGradient;
   final bool glassEnabled;
   final VoidCallback? onTap;
+  final bool isBottomSheet;
 
   const AdaptiveGlassContainer({
     super.key,
@@ -46,15 +47,104 @@ class AdaptiveGlassContainer extends StatelessWidget {
     this.useGradient = true,
     this.glassEnabled = true,
     this.onTap,
+    this.isBottomSheet = false,
   });
+
+  /// Factory constructor configured for modal bottom sheets that sit flush at the
+  /// bottom edge of the screen and trace the device hardware bezel curve.
+  const AdaptiveGlassContainer.bottomSheet({
+    Key? key,
+    required Widget child,
+    double topRadius = 28.0,
+    BorderRadiusGeometry? customBorderRadius,
+    EdgeInsetsGeometry? padding,
+    EdgeInsetsGeometry? margin,
+    bool isSelected = false,
+    Color selectedBorderColor = const Color(0xFFEEC200),
+    Color unselectedBorderColor = const Color(0xFF8C7E55),
+    double selectedBorderWidth = 2.0,
+    double unselectedBorderWidth = 1.0,
+    Color androidSurfaceColor = const Color(0xFF1E2020),
+    double blurSigma = 16.0,
+    int? baseTintAlpha,
+    int? selectedBaseTintAlpha,
+    int? unselectedBaseTintAlpha,
+    bool useGradient = true,
+    bool glassEnabled = true,
+    VoidCallback? onTap,
+  }) : this(
+          key: key,
+          child: child,
+          borderRadius: topRadius,
+          customBorderRadius: customBorderRadius,
+          padding: padding,
+          margin: margin,
+          isSelected: isSelected,
+          selectedBorderColor: selectedBorderColor,
+          unselectedBorderColor: unselectedBorderColor,
+          selectedBorderWidth: selectedBorderWidth,
+          unselectedBorderWidth: unselectedBorderWidth,
+          androidSurfaceColor: androidSurfaceColor,
+          blurSigma: blurSigma,
+          baseTintAlpha: baseTintAlpha,
+          selectedBaseTintAlpha: selectedBaseTintAlpha,
+          unselectedBaseTintAlpha: unselectedBaseTintAlpha,
+          useGradient: useGradient,
+          glassEnabled: glassEnabled,
+          onTap: onTap,
+          isBottomSheet: true,
+        );
 
   @override
   Widget build(BuildContext context) {
-    final radius = (customBorderRadius as BorderRadius?) ?? BorderRadius.circular(borderRadius);
+    final viewPadding = MediaQuery.viewPaddingOf(context);
+    final mediaQueryPadding = MediaQuery.paddingOf(context);
+    final bottomSafe = viewPadding.bottom > 0 ? viewPadding.bottom : mediaQueryPadding.bottom;
+    final viewInsets = MediaQuery.viewInsetsOf(context);
+    final hasHardwareCurve = isBottomSheet && bottomSafe > 0 && viewInsets.bottom == 0;
+
+    final double bottomRadius;
+    if (hasHardwareCurve) {
+      final screenHeight = MediaQuery.sizeOf(context).height;
+      if (screenHeight >= 900) {
+        bottomRadius = 55.0;
+      } else if (screenHeight >= 840) {
+        bottomRadius = 50.0;
+      } else {
+        bottomRadius = 47.0;
+      }
+    } else {
+      bottomRadius = 0.0;
+    }
+
+    final BorderRadius radius;
+    if (isBottomSheet) {
+      final custom = customBorderRadius;
+      final topL = custom is BorderRadius
+          ? custom.topLeft
+          : Radius.circular(borderRadius != 16.0 ? borderRadius : 28.0);
+      final topR = custom is BorderRadius
+          ? custom.topRight
+          : Radius.circular(borderRadius != 16.0 ? borderRadius : 28.0);
+      radius = BorderRadius.only(
+        topLeft: topL,
+        topRight: topR,
+        bottomLeft: Radius.circular(bottomRadius),
+        bottomRight: Radius.circular(bottomRadius),
+      );
+    } else {
+      radius = (customBorderRadius as BorderRadius?) ?? BorderRadius.circular(borderRadius);
+    }
 
     Widget content = Container(
       padding: padding,
-      child: child,
+      child: isBottomSheet
+          ? SafeArea(
+              top: false,
+              bottom: true,
+              child: child,
+            )
+          : child,
     );
 
     Widget surface;
@@ -130,6 +220,7 @@ class AdaptiveGlassContainer extends StatelessWidget {
                         ? selectedBorderColor
                         : unselectedBorderColor.withAlpha(90),
                     width: isSelected ? selectedBorderWidth : unselectedBorderWidth,
+                    strokeAlign: BorderSide.strokeAlignInside,
                   ),
                   boxShadow: isSelected
                       ? [
@@ -170,6 +261,7 @@ class AdaptiveGlassContainer extends StatelessWidget {
                 ? selectedBorderColor
                 : const Color(0xFF2E3232),
             width: isSelected ? selectedBorderWidth : unselectedBorderWidth,
+            strokeAlign: BorderSide.strokeAlignInside,
           ),
           boxShadow: [
             BoxShadow(
@@ -190,8 +282,13 @@ class AdaptiveGlassContainer extends StatelessWidget {
       );
     }
 
-    if (margin != null) {
-      surface = Padding(padding: margin!, child: surface);
+    final effectiveMargin = margin ??
+        (isBottomSheet
+            ? EdgeInsets.fromLTRB(1.0, 0, 1.0, hasHardwareCurve ? 1.0 : 0.0)
+            : null);
+
+    if (effectiveMargin != null) {
+      surface = Padding(padding: effectiveMargin, child: surface);
     }
 
     if (onTap != null) {

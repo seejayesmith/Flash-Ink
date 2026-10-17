@@ -146,76 +146,76 @@ class ArtistHeaderSection extends StatelessWidget {
 
                     // Name, Books Open Badge, Location & Studio
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Name and "Books open" badge
-                          Wrap(
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            spacing: AppSpacing.spaceXs,
-                            runSpacing: AppSpacing.spaceXxs,
-                            children: [
-                              Text(
-                                artist.name,
-                                style: AppTypography.h4.copyWith(
-                                  color: AppTheme.gold,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: -0.2,
-                                  fontSize: 22,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 10.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // "Books open" badge
+                            if (artist.isBooksOpen) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.goldBadgeBackground,
+                                  border: Border.all(
+                                    color: AppTheme.goldBadgeBorder,
+                                    width: 1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(AppRadius.radiusXs),
+                                ),
+                                child: Text(
+                                  'Books open',
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  style: AppTypography.labelBold.copyWith(
+                                    color: AppTheme.gold,
+                                    fontSize: 10,
+                                    height: 1.1,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
-                              if (artist.isBooksOpen)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 7,
-                                    vertical: 2.5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.goldBadgeBackground,
-                                    border: Border.all(
-                                      color: AppTheme.goldBadgeBorder,
-                                      width: 1,
-                                    ),
-                                    borderRadius: BorderRadius.circular(AppRadius.radiusXs),
-                                  ),
-                                  child: Text(
-                                    'Books open',
-                                    maxLines: 1,
-                                    softWrap: false,
-                                    style: AppTypography.labelBold.copyWith(
-                                      color: AppTheme.gold,
-                                      fontSize: 10,
-                                      height: 1.1,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
+                              const SizedBox(height: 2),
                             ],
-                          ),
-                          const SizedBox(height: AppSpacing.spaceXxs + 2),
 
-                          // Studio Name Row
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.storefront_outlined,
-                                color: AppTheme.navInactive,
-                                size: 14,
+                            // Name
+                            Text(
+                              artist.name,
+                              style: AppTypography.h4.copyWith(
+                                color: AppTheme.gold,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.2,
+                                fontSize: 22,
                               ),
-                              const SizedBox(width: AppSpacing.spaceXxs - 1),
-                              Text(
-                                artist.studioType,
-                                style: AppTypography.label.copyWith(
+                            ),
+                            const SizedBox(height: AppSpacing.spaceXxs + 2),
+
+                            // Studio Name Row
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.storefront_outlined,
                                   color: AppTheme.navInactive,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
+                                  size: 14,
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
+                                const SizedBox(width: AppSpacing.spaceXxs - 1),
+                                Text(
+                                  artist.studioType,
+                                  style: AppTypography.label.copyWith(
+                                    color: AppTheme.navInactive,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],

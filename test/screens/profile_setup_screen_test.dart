@@ -6,7 +6,6 @@ import 'package:firebase_core_platform_interface/test.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:flash_ink/screens/profile_setup_screen.dart';
-import 'package:flash_ink/theme/app_theme.dart';
 import 'package:flash_ink/widgets/adaptive_glass_container.dart';
 
 void main() {
@@ -153,18 +152,22 @@ void main() {
       await tester.tap(find.text('CONTINUE'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Upload a profile photo'), findsOneWidget);
+      expect(find.text('Add a profile photo'), findsOneWidget);
     });
   });
 
   group('ProfileSetupScreen Photo Step and Keyboard Behavior Tests', () {
-    testWidgets('unfocuses keyboard and renders photo step without container or yellow styling', (WidgetTester tester) async {
+    testWidgets('unfocuses keyboard and renders wireframe photo step elements', (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: ProfileSetupScreen(),
         ),
       );
       await tester.pumpAndSettle();
+
+      // Verify Step 1 of 4 and progress bar on username step
+      expect(find.text('Step 1 of 4'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
 
       // Focus username input field
       await tester.tap(find.byType(TextField));
@@ -177,10 +180,12 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify on photo step
-      expect(find.text('Upload a profile photo'), findsOneWidget);
+      expect(find.text('Step 2 of 4'), findsOneWidget);
+      expect(find.text('Add a profile photo'), findsOneWidget);
+      expect(find.text('Show the community who you are!\nYou can always change this later.'), findsOneWidget);
 
       // Verify keyboard was dismissed (no focused child)
-      final FocusScopeNode currentScope = FocusScope.of(tester.element(find.text('Upload a profile photo')));
+      final FocusScopeNode currentScope = FocusScope.of(tester.element(find.text('Add a profile photo')));
       expect(currentScope.hasFocus, isFalse);
 
       // Verify no AdaptiveGlassContainer on the photo step
@@ -192,9 +197,11 @@ void main() {
         findsNothing,
       );
 
-      // Verify "Tap to select photo" text exists and has textPrimary color (no yellow)
-      final uploadTextWidget = tester.widget<Text>(find.text('Tap to select photo'));
-      expect(uploadTextWidget.style?.color, equals(AppTheme.textPrimary));
+      // Verify wireframe buttons are present
+      expect(find.text('Upload a Photo'), findsOneWidget);
+      expect(find.text('Take a Picture'), findsOneWidget);
+      expect(find.text('Continue'), findsOneWidget);
+      expect(find.text('Skip for now'), findsOneWidget);
 
       // Verify avatar container circle exists with non-yellow border
       final avatarContainerFinder = find.byWidgetPredicate((widget) {

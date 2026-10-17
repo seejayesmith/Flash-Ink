@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import '../config/dev_config.dart';
 import '../models/user.dart';
 
 /// Minimal mock user for development and testing bypasses.
@@ -16,13 +17,27 @@ class DevMockUser implements User {
   final String? email;
   @override
   final bool isAnonymous;
+  @override
+  final String? phoneNumber;
+  final String? role;
+  @override
+  final bool emailVerified;
 
   DevMockUser({
     this.uid = 'dev_tester_uid',
     this.displayName = 'Dev Tester',
     this.email = 'dev@flash.ink',
+    this.phoneNumber = '+15552345678',
     this.isAnonymous = false,
+    this.emailVerified = true,
+    this.role,
   });
+
+  @override
+  Future<void> reload() async {}
+
+  @override
+  Future<void> updatePhotoURL(String? photoURL) async {}
 
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
@@ -32,6 +47,74 @@ class AuthService {
   final FirebaseAuth? _authInstance;
   final FirebaseFirestore? _firestoreInstance;
   final User? _mockUser;
+
+  static DevMockUser? devMockUser;
+
+  static DevMockUser createDevMockClient({FirebaseFirestore? firestore}) {
+    final user = DevMockUser(
+      uid: 'dev_client_uid',
+      displayName: 'Alex Rivers',
+      email: 'alex.rivers@example.com',
+      phoneNumber: '+15552345678',
+      isAnonymous: false,
+      role: 'client',
+    );
+    devMockUser = user;
+    _syncMockToFirestore(user, role: 'client', firestore: firestore);
+    return user;
+  }
+
+  static DevMockUser createDevMockArtist({FirebaseFirestore? firestore}) {
+    final user = DevMockUser(
+      uid: 'dev_artist_uid',
+      displayName: 'OddMaree',
+      email: 'oddmaree@flash.ink',
+      phoneNumber: '+15559876543',
+      isAnonymous: false,
+      role: 'artist',
+    );
+    devMockUser = user;
+    _syncMockToFirestore(user, role: 'artist', firestore: firestore);
+    return user;
+  }
+
+  static void clearDevMockUser() {
+    devMockUser = null;
+  }
+
+  static Future<void> _syncMockToFirestore(
+    DevMockUser mockUser, {
+    required String role,
+    FirebaseFirestore? firestore,
+  }) async {
+    try {
+      final db = firestore ?? FirebaseFirestore.instance;
+      await db.collection('users').doc(mockUser.uid).set({
+        'uid': mockUser.uid,
+        'email': mockUser.email,
+        'displayName': mockUser.displayName,
+        'phoneNumber': mockUser.phoneNumber,
+        'role': role,
+        'profileCompleted': true,
+        'isAnonymous': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)).timeout(const Duration(milliseconds: 500));
+
+      if (role == 'artist') {
+        await db.collection('artists').doc(mockUser.uid).set({
+          'name': mockUser.displayName,
+          'email': mockUser.email,
+          'instagramHandle': '@oddmaree',
+          'profileCompleted': true,
+          'minDeposit': 50,
+          'tags': ['Traditional', 'Fine-line'],
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true)).timeout(const Duration(milliseconds: 500));
+      }
+    } catch (_) {
+      // Best-effort in offline/sandbox test mode
+    }
+  }
 
   AuthService({
     FirebaseAuth? auth,
@@ -45,6 +128,7 @@ class AuthService {
 
   User? get currentUser {
     if (_mockUser != null) return _mockUser;
+    if (kEnableDevBypass && devMockUser != null) return devMockUser;
     try {
       return _auth.currentUser;
     } catch (_) {
@@ -396,6 +480,7 @@ class AuthService {
 
   // Signs out the current user
   Future<void> signOut() async {
+    devMockUser = null;
     try {
       await _auth.signOut();
       await GoogleSignIn().signOut();
@@ -404,6 +489,10 @@ class AuthService {
 
   // Delete the currently authenticated user and their data
   Future<void> deleteAccount() async {
+    if (devMockUser != null) {
+      devMockUser = null;
+      return;
+    }
     if (_mockUser != null) {
       return;
     }
@@ -517,5 +606,10 @@ class AuthService {
   Exception handleFirebaseAuthException(FirebaseAuthException e) => _handleFirebaseAuthException(e);
 
   // Get stream of auth state changes
-  Stream<User?> get authStateChanges => _auth.authStateChanges();
+  Stream<User?> get authStateChanges {
+    if (kEnableDevBypass && devMockUser != null) {
+      return Stream<User?>.value(devMockUser);
+    }
+    return _auth.authStateChanges();
+  }
 }

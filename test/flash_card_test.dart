@@ -49,7 +49,7 @@ void main() {
       expect(find.text('\$60 dep'), findsOneWidget);
 
       // Status badge
-      expect(find.text('AVAILABLE'), findsOneWidget);
+      expect(find.text('EXCLUSIVE'), findsOneWidget);
 
       // Specs
       expect(find.text('5" x 8"'), findsOneWidget);

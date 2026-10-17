@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../models/waitlist_entry.dart';
+import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
 import 'add_waitlist_entry_sheet.dart';
 import 'books_open_options_modal.dart';
@@ -104,12 +105,12 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
   void _showEntryActions(WaitlistEntry entry) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF161818),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (context) {
-        return SafeArea(
+        return AdaptiveGlassContainer.bottomSheet(
+          glassEnabled: false,
+          androidSurfaceColor: const Color(0xFF161818),
+          topRadius: 24.0,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Column(

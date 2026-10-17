@@ -5,6 +5,7 @@ import '../screens/booking/flash_booking_screen.dart';
 import '../theme/app_buttons.dart';
 import '../theme/app_spacing.dart';
 import 'flash_image.dart';
+import 'adaptive_glass_container.dart';
 import 'animated_favorite_button.dart';
 import 'guest_auth_prompt_bottom_sheet.dart';
 
@@ -337,7 +338,7 @@ class FlashCard extends StatelessWidget {
         bg = const Color(0xFF1A2218).withAlpha(230);
         border = const Color(0xFF436938);
         text = const Color(0xFF4ADE80);
-        label = 'AVAILABLE';
+        label = flash.isExclusive ? 'EXCLUSIVE' : 'AVAILABLE';
         icon = Icons.check_circle_outline;
         break;
     }
@@ -517,16 +518,17 @@ void showFlashBookingSheet(
     builder: (modalContext) {
       return StatefulBuilder(
         builder: (context, setSheetState) {
-          return Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFF171A1A),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              border: Border(
-                top: BorderSide(color: Color(0xFF38352A), width: 1.5),
-              ),
-            ),
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-            child: SingleChildScrollView(
+          return AdaptiveGlassContainer.bottomSheet(
+            glassEnabled: false,
+            androidSurfaceColor: const Color(0xFF171A1A),
+            selectedBorderColor: const Color(0xFF38352A),
+            unselectedBorderColor: const Color(0xFF38352A),
+            selectedBorderWidth: 1.5,
+            unselectedBorderWidth: 1.5,
+            topRadius: 24.0,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -580,7 +582,9 @@ void showFlashBookingSheet(
                           border: Border.all(color: const Color(0xFF436938)),
                         ),
                         child: Text(
-                          flash.status.label.toUpperCase(),
+                          flash.isClaimed
+                              ? 'CLAIMED'
+                              : (flash.isExclusive ? 'EXCLUSIVE' : flash.status.label.toUpperCase()),
                           style: GoogleFonts.plusJakartaSans(
                             color: const Color(0xFF4ADE80),
                             fontSize: 10,
@@ -714,8 +718,9 @@ void showFlashBookingSheet(
                 ],
               ),
             ),
-          );
-        },
+          ),
+        );
+      },
       );
     },
   );

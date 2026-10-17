@@ -121,12 +121,12 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
   void _showImageSourcePicker() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1E2121),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (bottomSheetContext) {
-        return SafeArea(
+        return AdaptiveGlassContainer.bottomSheet(
+          glassEnabled: false,
+          androidSurfaceColor: const Color(0xFF1E2121),
+          topRadius: 20.0,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: Column(
@@ -141,38 +141,45 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                ListTile(
-                  leading: const Icon(Icons.photo_library, color: Color(0xFFEEC200)),
-                  title: Text(
-                    'Choose from Gallery',
-                    style: GoogleFonts.plusJakartaSans(color: Colors.white),
+                Material(
+                  color: Colors.transparent,
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.photo_library, color: Color(0xFFEEC200)),
+                        title: Text(
+                          'Choose from Gallery',
+                          style: GoogleFonts.plusJakartaSans(color: Colors.white),
+                        ),
+                        onTap: () {
+                          Navigator.pop(bottomSheetContext);
+                          _pickImage(ImageSource.gallery);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.camera_alt, color: Color(0xFFEEC200)),
+                        title: Text(
+                          'Take a Photo',
+                          style: GoogleFonts.plusJakartaSans(color: Colors.white),
+                        ),
+                        onTap: () {
+                          Navigator.pop(bottomSheetContext);
+                          _pickImage(ImageSource.camera);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.auto_awesome, color: Color(0xFFEEC200)),
+                        title: Text(
+                          'Use Sample Flash: Traditional Panther',
+                          style: GoogleFonts.plusJakartaSans(color: Colors.white),
+                        ),
+                        onTap: () {
+                          Navigator.pop(bottomSheetContext);
+                          _useSampleFlash('assets/images/flash_traditional_panther.jpg');
+                        },
+                      ),
+                    ],
                   ),
-                  onTap: () {
-                    Navigator.pop(bottomSheetContext);
-                    _pickImage(ImageSource.gallery);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.camera_alt, color: Color(0xFFEEC200)),
-                  title: Text(
-                    'Take a Photo',
-                    style: GoogleFonts.plusJakartaSans(color: Colors.white),
-                  ),
-                  onTap: () {
-                    Navigator.pop(bottomSheetContext);
-                    _pickImage(ImageSource.camera);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.auto_awesome, color: Color(0xFFEEC200)),
-                  title: Text(
-                    'Use Sample Flash: Traditional Panther',
-                    style: GoogleFonts.plusJakartaSans(color: Colors.white),
-                  ),
-                  onTap: () {
-                    Navigator.pop(bottomSheetContext);
-                    _useSampleFlash('assets/images/flash_traditional_panther.jpg');
-                  },
                 ),
               ],
             ),
@@ -212,6 +219,32 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
     }
   }
 
+  void _onDonePressed() {
+    if (_uploadedItems.length < 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Notice: You must include four pieces of flash artwork to complete your showcase (${_uploadedItems.length} of 4 added).',
+            style: GoogleFonts.plusJakartaSans(
+              color: Colors.white,
+              fontSize: 13,
+            ),
+          ),
+          backgroundColor: const Color(0xFF262929),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(
+            label: 'CONTINUE ANYWAY',
+            textColor: const Color(0xFFEEC200),
+            onPressed: _proceedToIdentityTags,
+          ),
+        ),
+      );
+      return;
+    }
+    _proceedToIdentityTags();
+  }
+
   void _proceedToIdentityTags() {
     // Convert uploaded items to FlashArtwork list
     final flashArtworks = _uploadedItems.map((item) {
@@ -225,6 +258,7 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
         dimensions: item.size,
         status: item.isRepeatable ? FlashStatus.repeatable : FlashStatus.available,
         category: item.styleTag,
+        isExclusive: !item.isRepeatable,
       );
     }).toList();
 
@@ -298,7 +332,10 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
                     color: const Color(0xFF919696),
                   ),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 18),
+
+                _buildFourPiecesNotice(),
+                const SizedBox(height: 24),
 
                 // Dynamic content based on state:
                 // 1. If currently editing item details (Creation 10)
@@ -318,7 +355,7 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
                       height: 52,
                       child: ElevatedButton(
                         key: const Key('done_flash_button'),
-                        onPressed: _proceedToIdentityTags,
+                        onPressed: _onDonePressed,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFEEC200),
                           foregroundColor: const Color(0xFF121414),
@@ -343,6 +380,130 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildFourPiecesNotice() {
+    final count = _uploadedItems.length;
+    final isComplete = count >= 4;
+
+    return Container(
+      key: const Key('four_pieces_notice'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E2121),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isComplete
+              ? const Color(0xFF4CAF50).withAlpha(128)
+              : const Color(0xFFEEC200).withAlpha(90),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: (isComplete
+                          ? const Color(0xFF4CAF50)
+                          : const Color(0xFFEEC200))
+                      .withAlpha(38),
+                ),
+                child: Icon(
+                  isComplete
+                      ? Icons.check_circle_outline_rounded
+                      : Icons.info_outline_rounded,
+                  size: 20,
+                  color: isComplete
+                      ? const Color(0xFF4CAF50)
+                      : const Color(0xFFEEC200),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '4 Pieces Required',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFFF9FAFA),
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: (isComplete
+                                    ? const Color(0xFF4CAF50)
+                                    : const Color(0xFFEEC200))
+                                .withAlpha(38),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '$count of 4 added',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: isComplete
+                                  ? const Color(0xFF4CAF50)
+                                  : const Color(0xFFEEC200),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'You must include four pieces of flash artwork to complete your showcase and fill your 2x2 profile preview.',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        color: const Color(0xFF919696),
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: List.generate(4, (index) {
+              final filled = index < count;
+              return Expanded(
+                child: Container(
+                  height: 3,
+                  margin: EdgeInsets.only(right: index < 3 ? 4 : 0),
+                  decoration: BoxDecoration(
+                    color: filled
+                        ? (isComplete
+                            ? const Color(0xFF4CAF50)
+                            : const Color(0xFFEEC200))
+                        : const Color(0xFF333636),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
+import 'adaptive_glass_container.dart';
 import 'photo_crop_screen.dart';
 
 /// The result returned after a user picks/crops a photo or chooses to remove it.
@@ -116,19 +117,17 @@ class PhotoSourceBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppTheme.onyxContainer,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border.fromBorderSide(
-          BorderSide(color: AppTheme.goldBorder, width: 0.8),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Column(
+    return AdaptiveGlassContainer.bottomSheet(
+      glassEnabled: false,
+      androidSurfaceColor: AppTheme.onyxContainer,
+      selectedBorderColor: AppTheme.goldBorder,
+      unselectedBorderColor: AppTheme.goldBorder,
+      selectedBorderWidth: 0.8,
+      unselectedBorderWidth: 0.8,
+      topRadius: 24.0,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -218,7 +217,6 @@ class PhotoSourceBottomSheet extends StatelessWidget {
             ],
           ),
         ),
-      ),
     );
   }
 

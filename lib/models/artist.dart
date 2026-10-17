@@ -32,6 +32,7 @@ class FlashArtwork {
   final int deposit;
   final String category;
   final String? artistName;
+  final bool? _isExclusive;
 
   const FlashArtwork({
     required this.id,
@@ -48,11 +49,14 @@ class FlashArtwork {
     int? deposit,
     this.category = 'Flash',
     this.artistName,
-  })  : price = price ?? fullPrice ?? (deposit != null ? deposit * 3 : 150),
+    bool? isExclusive,
+  })  : _isExclusive = isExclusive,
+        price = price ?? fullPrice ?? (deposit != null ? deposit * 3 : 150),
         dimensions = dimensions ?? size ?? '5" x 7"',
         deposit = deposit ?? 50;
 
   bool get isClaimed => status == FlashStatus.claimed;
+  bool get isExclusive => _isExclusive ?? (status != FlashStatus.repeatable);
   int get fullPrice => price;
   String get size => dimensions;
 
@@ -69,6 +73,7 @@ class FlashArtwork {
     int? deposit,
     String? category,
     String? artistName,
+    bool? isExclusive,
   }) {
     return FlashArtwork(
       id: id ?? this.id,
@@ -83,6 +88,7 @@ class FlashArtwork {
       deposit: deposit ?? this.deposit,
       category: category ?? this.category,
       artistName: artistName ?? this.artistName,
+      isExclusive: isExclusive ?? _isExclusive,
     );
   }
 

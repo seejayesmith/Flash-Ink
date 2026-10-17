@@ -6,6 +6,7 @@ import '../../models/artist_dashboard_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/stripe_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/tattoo_machine_icon.dart';
 import 'appointment_detail_screen.dart';
@@ -122,15 +123,15 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
   void _showBookingReceiptModal(BuildContext context, PastBookingEarningsItem item) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1A1D1D),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: Column(
+        return AdaptiveGlassContainer.bottomSheet(
+          glassEnabled: false,
+          androidSurfaceColor: const Color(0xFF1A1D1D),
+          topRadius: 24.0,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -252,11 +253,10 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                 const SizedBox(height: 8),
               ],
             ),
-          ),
-        );
-      },
-    );
-  }
+          );
+        },
+      );
+    }
 
   Widget _buildReceiptRow(
     String label,
@@ -291,10 +291,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF1A1D1D),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return DraggableScrollableSheet(
           initialChildSize: 0.8,
@@ -302,7 +299,11 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
           maxChildSize: 0.95,
           expand: false,
           builder: (_, scrollController) {
-            return Column(
+            return AdaptiveGlassContainer.bottomSheet(
+              glassEnabled: false,
+              androidSurfaceColor: const Color(0xFF1A1D1D),
+              topRadius: 24.0,
+              child: Column(
               children: [
                 const SizedBox(height: 14),
                 Container(
@@ -350,8 +351,9 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                   ),
                 ),
               ],
-            );
-          },
+            ),
+          );
+        },
         );
       },
     );
@@ -360,18 +362,15 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
   void _showTaxDocsModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1A1D1D),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return SafeArea(
-          child: Material(
-            color: const Color(0xFF1A1D1D),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              child: Column(
+        return AdaptiveGlassContainer.bottomSheet(
+          glassEnabled: false,
+          androidSurfaceColor: const Color(0xFF1A1D1D),
+          topRadius: 24.0,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -457,12 +456,10 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                 const SizedBox(height: 12),
               ],
             ),
-          ),
-        ),
+          );
+        },
       );
-    },
-  );
-}
+    }
 
   Widget _buildTaxItem({
     required String title,
@@ -530,15 +527,15 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
   void _showBankInfoModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1A1D1D),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: Column(
+        return AdaptiveGlassContainer.bottomSheet(
+          glassEnabled: false,
+          androidSurfaceColor: const Color(0xFF1A1D1D),
+          topRadius: 24.0,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -679,10 +676,9 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                 const SizedBox(height: 8),
               ],
             ),
-          ),
-        );
-      },
-    );
+          );
+        },
+      );
   }
 
   void _showInstantTransferModal(BuildContext context) {
@@ -696,15 +692,15 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1A1D1D),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: Column(
+        return AdaptiveGlassContainer.bottomSheet(
+          glassEnabled: false,
+          androidSurfaceColor: const Color(0xFF1A1D1D),
+          topRadius: 24.0,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -942,10 +938,9 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                 ),
               ],
             ),
-          ),
-        );
-      },
-    );
+          );
+        },
+      );
   }
 
   List<DashboardAppointment> get _allHistoryAppointments {

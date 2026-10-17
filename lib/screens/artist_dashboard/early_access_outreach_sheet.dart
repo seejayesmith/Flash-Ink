@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../models/waitlist_entry.dart';
+import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
 
 /// Modal bottom sheet providing the artist with a real-time outreach checklist
@@ -109,18 +110,19 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
     final registeredUsers = waitlist.where((e) => e.isRegisteredFlashUser).toList();
     final manualFriends = waitlist.where((e) => !e.isRegisteredFlashUser).toList();
 
-    return Container(
+    return ConstrainedBox(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.88,
       ),
-      decoration: const BoxDecoration(
-        color: Color(0xFF141616),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border(
-          top: BorderSide(color: Color(0xFFEEC200), width: 1.5),
-        ),
-      ),
-      child: Column(
+      child: AdaptiveGlassContainer.bottomSheet(
+        glassEnabled: false,
+        androidSurfaceColor: const Color(0xFF141616),
+        selectedBorderColor: const Color(0xFFEEC200),
+        unselectedBorderColor: const Color(0xFFEEC200),
+        selectedBorderWidth: 1.5,
+        unselectedBorderWidth: 1.5,
+        topRadius: 28.0,
+        child: Column(
         children: [
           // Drag handle
           Padding(
@@ -348,8 +350,9 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildManualFriendCard(WaitlistEntry entry) {
     final isSent = _manuallySentIds.contains(entry.id) || entry.hasEarlyAccessSent;

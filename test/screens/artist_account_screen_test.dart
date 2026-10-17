@@ -98,7 +98,7 @@ void main() {
       expect(find.text('Account'), findsOneWidget);
       expect(find.byKey(const Key('artist_account_back_button')), findsOneWidget);
       expect(find.byKey(const Key('artist_account_view_public_profile_button')), findsOneWidget);
-      expect(find.byKey(const Key('artist_account_edit_button')), findsOneWidget);
+      expect(find.byKey(const Key('artist_account_edit_button')), findsNothing);
     });
 
     testWidgets('Renders Profile Hero card with avatar, name, handle, and location', (tester) async {
@@ -159,11 +159,11 @@ void main() {
       expect(find.text('Health & Safety Protocol'), findsNothing);
     });
 
-    testWidgets('Tapping Edit Profile button opens edit profile bottom sheet and updates fields', (tester) async {
+    testWidgets('Tapping Display Name opens edit profile bottom sheet and updates fields', (tester) async {
       await tester.pumpWidget(buildTestWidget());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('artist_account_edit_button')));
+      await tester.tap(find.text('Display Name'));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('edit_profile_sheet_title')), findsOneWidget);

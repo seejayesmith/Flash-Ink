@@ -6,6 +6,7 @@ import 'package:flash_ink/models/artist.dart';
 import 'package:flash_ink/screens/artist_profile_screen.dart';
 import 'package:flash_ink/screens/custom_request_screen.dart';
 import 'package:flash_ink/screens/flash_details_screen.dart';
+import 'package:flash_ink/features/artist/presentation/widgets/flash_piece_card.dart';
 import 'package:flash_ink/theme/app_theme.dart';
 import 'package:flash_ink/widgets/artist_card.dart';
 
@@ -206,6 +207,17 @@ void main() {
       expect(find.text('SIZE'), findsOneWidget);
       expect(find.text('DEPOSIT'), findsOneWidget);
 
+      // Verify caption directly below the CTA button
+      expect(
+        find.text('\$${artist.flashArtworks[0].deposit} deposit reserves this exclusive piece • Applied to final balance'),
+        findsOneWidget,
+      );
+      // Verify old standalone deposit info card is removed
+      expect(
+        find.textContaining('Claiming reserves this exclusive piece. The \$'),
+        findsNothing,
+      );
+
       // Tap Claim button
       await tester.tap(find.text('CLAIM & BOOK FLASH'));
       await tester.pump();
@@ -365,6 +377,236 @@ void main() {
       // Action row: VIEW PROFILE + Favorite button
       expect(find.text('VIEW PROFILE'), findsOneWidget);
       expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+    });
+  });
+
+  group('FlashDetailsScreen Bottom Bar Caption Tests', () {
+    testWidgets('Shows fallback caption for non-exclusive / repeatable piece', (tester) async {
+      final artist = Artist.mockArtists.first;
+      const repeatablePiece = FlashArtwork(
+        id: 'repeatable_1',
+        title: 'Wave Motif',
+        imageUrl: 'https://example.com/wave.jpg',
+        deposit: 75,
+        status: FlashStatus.repeatable,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FlashDetailsScreen(
+            flash: repeatablePiece,
+            artist: artist,
+          ),
+        ),
+      );
+
+      // Verify repeatable piece fallback caption
+      expect(
+        find.text('\$75 deposit goes towards final balance'),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.info_outline), findsOneWidget);
+      expect(find.text('Designed by ${artist.name}'), findsOneWidget);
+    });
+
+    testWidgets('Hides deposit caption when piece is already claimed', (tester) async {
+      final artist = Artist.mockArtists.first;
+      const claimedPiece = FlashArtwork(
+        id: 'claimed_1',
+        title: 'Sacred Serpent',
+        imageUrl: 'https://example.com/serpent.jpg',
+        deposit: 60,
+        status: FlashStatus.claimed,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FlashDetailsScreen(
+            flash: claimedPiece,
+            artist: artist,
+          ),
+        ),
+      );
+
+      // Button should reflect claimed state
+      expect(find.text('PIECE ALREADY CLAIMED'), findsOneWidget);
+
+      // Caption should be hidden
+      expect(
+        find.textContaining('deposit reserves this exclusive piece'),
+        findsNothing,
+      );
+      expect(
+        find.textContaining('deposit goes towards final balance'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('Disclaimer caption is below the CTA button, centered, and does not truncate', (tester) async {
+      final artist = Artist.mockArtists.first;
+      const exclusivePiece = FlashArtwork(
+        id: 'ex_1',
+        title: 'Sacred Serpent',
+        imageUrl: 'https://example.com/serpent.jpg',
+        deposit: 60,
+        status: FlashStatus.available,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FlashDetailsScreen(
+            flash: exclusivePiece,
+            artist: artist,
+          ),
+        ),
+      );
+
+      final ctaFinder = find.widgetWithText(ElevatedButton, 'CLAIM & BOOK FLASH');
+      final disclaimerFinder = find.text('\$60 deposit reserves this exclusive piece • Applied to final balance');
+
+      expect(ctaFinder, findsOneWidget);
+      expect(disclaimerFinder, findsOneWidget);
+
+      // Verify disclaimer is positioned below the CTA button
+      final ctaBottomY = tester.getBottomLeft(ctaFinder).dy;
+      final disclaimerTopY = tester.getTopLeft(disclaimerFinder).dy;
+      expect(disclaimerTopY, greaterThan(ctaBottomY));
+
+      // Verify text is centered and not truncated
+      final textWidget = tester.widget<Text>(disclaimerFinder);
+      expect(textWidget.textAlign, TextAlign.center);
+      expect(textWidget.maxLines, isNull);
+      expect(textWidget.overflow, isNull);
+    });
+  });
+
+  group('Exclusive Badge Widget & Model Tests', () {
+    test('FlashArtwork.isExclusive defaults correctly and supports explicit override', () {
+      const availablePiece = FlashArtwork(
+        id: 'ex_1',
+        title: 'Exclusive Piece',
+        imageUrl: 'https://example.com/ex1.jpg',
+        status: FlashStatus.available,
+      );
+      expect(availablePiece.isExclusive, isTrue);
+
+      const repeatablePiece = FlashArtwork(
+        id: 'rep_1',
+        title: 'Repeatable Piece',
+        imageUrl: 'https://example.com/rep1.jpg',
+        status: FlashStatus.repeatable,
+      );
+      expect(repeatablePiece.isExclusive, isFalse);
+
+      const claimedPiece = FlashArtwork(
+        id: 'claim_1',
+        title: 'Claimed Piece',
+        imageUrl: 'https://example.com/claim1.jpg',
+        status: FlashStatus.claimed,
+      );
+      expect(claimedPiece.isExclusive, isTrue);
+
+      final explicitOverride = repeatablePiece.copyWith(isExclusive: true);
+      expect(explicitOverride.isExclusive, isTrue);
+    });
+
+    testWidgets('FlashPieceCard renders EXCLUSIVE badge for available 1-of-1 piece', (tester) async {
+      const exclusivePiece = FlashArtwork(
+        id: 'ex_card_1',
+        title: 'Lone Wolf',
+        imageUrl: 'assets/images/flash_traditional_dagger.jpg',
+        location: 'Forearm',
+        size: '5" x 7"',
+        deposit: 60,
+        status: FlashStatus.available,
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 180,
+              height: 280,
+              child: FlashPieceCard(piece: exclusivePiece),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('EXCLUSIVE'), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+    });
+
+    testWidgets('FlashPieceCard does not render EXCLUSIVE badge for repeatable piece', (tester) async {
+      const repeatablePiece = FlashArtwork(
+        id: 'rep_card_1',
+        title: 'Wave Motif',
+        imageUrl: 'assets/images/flash_traditional_dagger.jpg',
+        location: 'Forearm',
+        size: '5" x 7"',
+        deposit: 60,
+        status: FlashStatus.repeatable,
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 180,
+              height: 280,
+              child: FlashPieceCard(piece: repeatablePiece),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('EXCLUSIVE'), findsNothing);
+      expect(find.text('REPEATABLE'), findsNothing);
+    });
+
+    testWidgets('FlashPieceCard renders CLAIMED badge for claimed piece', (tester) async {
+      const claimedPiece = FlashArtwork(
+        id: 'claimed_card_1',
+        title: 'Sacred Dagger',
+        imageUrl: 'assets/images/flash_traditional_dagger.jpg',
+        location: 'Forearm',
+        size: '5" x 7"',
+        deposit: 60,
+        status: FlashStatus.claimed,
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 180,
+              height: 280,
+              child: FlashPieceCard(piece: claimedPiece),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('CLAIMED'), findsOneWidget);
+      expect(find.byIcon(Icons.lock_outline), findsOneWidget);
+    });
+
+    testWidgets('ArtistProfileScreen renders EXCLUSIVE badges on available 1-of-1 pieces', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final artist = Artist.mockArtists.first;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistProfileScreen(artist: artist),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // In available tab, 1-of-1 pieces have EXCLUSIVE badge
+      expect(find.text('EXCLUSIVE'), findsWidgets);
     });
   });
 }

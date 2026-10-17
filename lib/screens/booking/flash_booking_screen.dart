@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist.dart';
 import '../../models/booking.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_spacing.dart';
+import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_switch.dart';
 import '../../services/stripe_service.dart';
@@ -178,12 +180,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: _currentStep < 3,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _currentStep == 3) {
-          Navigator.of(context).pop(true);
-        }
-      },
+      canPop: true,
       child: Scaffold(
         backgroundColor: const Color(0xFF121414),
         appBar: _buildAppBar(),
@@ -386,7 +383,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        _buildPlacementDropdown(),
+        _buildPlacementSelector(),
         const SizedBox(height: 20),
 
         // Silent Session Preference Switch
@@ -602,6 +599,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         return ChoiceChip(
           label: Text(slot.time),
           selected: isSelected,
+          showCheckmark: false,
           onSelected: (selected) {
             if (selected) {
               setState(() {
@@ -629,43 +627,59 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     );
   }
 
-  Widget _buildPlacementDropdown() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF171A1A),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF262929)),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _placementOptions.contains(_selectedPlacement)
-              ? _selectedPlacement
-              : _placementOptions.first,
-          isExpanded: true,
-          dropdownColor: const Color(0xFF1E2020),
-          icon: const Icon(Icons.arrow_drop_down, color: Color(0xFFEEC200)),
-          items: _placementOptions.map((placement) {
-            return DropdownMenuItem<String>(
-              value: placement,
-              child: Text(
-                placement,
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFF9FAFA),
-                  fontSize: 14,
-                ),
+  Widget _buildPlacementSelector() {
+    return AdaptiveGlassContainer(
+      key: const Key('placement_selector_trigger'),
+      borderRadius: 14.0,
+      onTap: _showPlacementBottomSheet,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      useGradient: true,
+      child: Row(
+        children: [
+          const Icon(
+            Icons.accessibility_new_rounded,
+            color: Color(0xFFEEC200),
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _selectedPlacement,
+              key: const Key('placement_selector_text'),
+              style: GoogleFonts.plusJakartaSans(
+                color: const Color(0xFFF9FAFA),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
               ),
-            );
-          }).toList(),
-          onChanged: (val) {
-            if (val != null) {
-              setState(() {
-                _selectedPlacement = val;
-              });
-            }
-          },
-        ),
+            ),
+          ),
+          const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: Color(0xFFEEC200),
+            size: 22,
+          ),
+        ],
       ),
+    );
+  }
+
+  void _showPlacementBottomSheet() {
+    HapticFeedback.lightImpact();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (bottomSheetContext) {
+        return _PlacementSelectionBottomSheet(
+          initialPlacement: _selectedPlacement,
+          options: _placementOptions,
+          onSelected: (newPlacement) {
+            setState(() {
+              _selectedPlacement = newPlacement;
+            });
+          },
+        );
+      },
     );
   }
 
@@ -1401,3 +1415,279 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     );
   }
 }
+
+class _PlacementSelectionBottomSheet extends StatefulWidget {
+  final String initialPlacement;
+  final List<String> options;
+  final ValueChanged<String> onSelected;
+
+  const _PlacementSelectionBottomSheet({
+    required this.initialPlacement,
+    required this.options,
+    required this.onSelected,
+  });
+
+  @override
+  State<_PlacementSelectionBottomSheet> createState() =>
+      _PlacementSelectionBottomSheetState();
+}
+
+class _PlacementSelectionBottomSheetState
+    extends State<_PlacementSelectionBottomSheet> {
+  late String _currentSelection;
+  late final TextEditingController _customController;
+  bool _isCustomActive = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentSelection = widget.initialPlacement;
+    final isPreset = widget.options
+        .where((opt) => opt != 'Other')
+        .contains(widget.initialPlacement);
+
+    if (!isPreset && widget.initialPlacement.isNotEmpty) {
+      _isCustomActive = true;
+      _customController = TextEditingController(
+        text: widget.initialPlacement == 'Other' ? '' : widget.initialPlacement,
+      );
+    } else {
+      _customController = TextEditingController();
+    }
+  }
+
+  @override
+  void dispose() {
+    _customController.dispose();
+    super.dispose();
+  }
+
+  void _selectPreset(String option) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _currentSelection = option;
+      _isCustomActive = false;
+    });
+    widget.onSelected(option);
+    Navigator.of(context).pop();
+  }
+
+  void _activateCustom() {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _currentSelection = 'Other';
+      _isCustomActive = true;
+    });
+  }
+
+  void _submitCustom() {
+    final text = _customController.text.trim();
+    final chosen = text.isNotEmpty ? text : 'Other';
+    HapticFeedback.selectionClick();
+    widget.onSelected(chosen);
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: AdaptiveGlassContainer.bottomSheet(
+        glassEnabled: true,
+        androidSurfaceColor: const Color(0xFF171A1A),
+        topRadius: 24.0,
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Grab Handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4D5252),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Title Header & Close Icon
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Select Body Placement',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFF9FAFA),
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    key: const Key('close_placement_sheet'),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: Color(0xFF919696),
+                      size: 22,
+                    ),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Choose where you want this flash piece tattooed',
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFF919696),
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Divider(color: Color(0xFF262929), height: 1),
+
+              // Minimalist list rows
+              ...widget.options.map((option) {
+                final isOther = option == 'Other';
+                final isSelected = isOther
+                    ? (_isCustomActive ||
+                        !widget.options
+                            .where((o) => o != 'Other')
+                            .contains(_currentSelection))
+                    : (_currentSelection == option && !_isCustomActive);
+
+                return Column(
+                  children: [
+                    InkWell(
+                      key: Key('placement_option_$option'),
+                      onTap: () {
+                        if (isOther) {
+                          _activateCustom();
+                        } else {
+                          _selectPreset(option);
+                        }
+                      },
+                      splashColor: const Color(0xFFEEC200).withAlpha(20),
+                      highlightColor: Colors.transparent,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 14, horizontal: 4),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                option,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: isSelected
+                                      ? const Color(0xFFEEC200)
+                                      : const Color(0xFFF9FAFA),
+                                  fontSize: 15,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                ),
+                              ),
+                            ),
+                            if (isSelected)
+                              const Icon(
+                                Icons.check_rounded,
+                                color: Color(0xFFEEC200),
+                                size: 20,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // If Other is active and this is the Other row, show inline input
+                    if (isOther && _isCustomActive) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6, bottom: 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                key: const Key('custom_placement_field'),
+                                controller: _customController,
+                                autofocus: true,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: const Color(0xFFF9FAFA),
+                                  fontSize: 14,
+                                ),
+                                textInputAction: TextInputAction.done,
+                                onSubmitted: (_) => _submitCustom(),
+                                decoration: InputDecoration(
+                                  hintText: 'e.g. Behind ear, Ankle, Ribs',
+                                  hintStyle: GoogleFonts.plusJakartaSans(
+                                    color: const Color(0xFF6B7280),
+                                    fontSize: 13,
+                                  ),
+                                  filled: true,
+                                  fillColor: const Color(0xFF121414),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFF262929),
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFFEEC200),
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            SizedBox(
+                              height: 44,
+                              child: ElevatedButton(
+                                key: const Key('confirm_custom_placement_btn'),
+                                onPressed: _submitCustom,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFEEC200),
+                                  foregroundColor: const Color(0xFF121414),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                  ),
+                                ),
+                                child: Text(
+                                  'Set',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const Divider(color: Color(0xFF262929), height: 1),
+                  ],
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+

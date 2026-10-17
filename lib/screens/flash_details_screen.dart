@@ -124,7 +124,7 @@ class _FlashDetailsScreenState extends State<FlashDetailsScreen> {
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Color(0xFFF9FAFA)),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(context, _isClaimed),
         ),
         title: Text(
           'Flash Artwork',
@@ -161,7 +161,7 @@ class _FlashDetailsScreenState extends State<FlashDetailsScreen> {
             Expanded(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg, vertical: 16),
+                padding: const EdgeInsets.fromLTRB(AppSpacing.spaceLg, 12, AppSpacing.spaceLg, 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -190,76 +190,74 @@ class _FlashDetailsScreenState extends State<FlashDetailsScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
 
                     // Title and Price Row
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                flash.title,
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: const Color(0xFFF9FAFA),
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: _isClaimed
-                                      ? const Color(0xFF2E1C1C)
-                                      : const Color(0xFF1B281B),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: _isClaimed
-                                        ? const Color(0xFF7A3535)
-                                        : const Color(0xFF386835),
-                                  ),
-                                ),
-                                child: Text(
-                                  _isClaimed ? 'CLAIMED' : 'AVAILABLE (1-OF-1)',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    color: _isClaimed
-                                        ? const Color(0xFFF87171)
-                                        : const Color(0xFF4ADE80),
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                            ],
+                          child: Text(
+                            flash.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFFF9FAFA),
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              height: 1.2,
+                            ),
                           ),
                         ),
+                        const SizedBox(width: AppSpacing.spaceXl),
                         Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
                               '\$${flash.fullPrice}',
                               style: GoogleFonts.plusJakartaSans(
                                 color: const Color(0xFFEEC200),
-                                fontSize: 26,
+                                fontSize: 22,
                                 fontWeight: FontWeight.bold,
+                                height: 1.1,
                               ),
                             ),
-                            Text(
-                              'Full Price',
-                              style: GoogleFonts.plusJakartaSans(
-                                color: const Color(0xFF919696),
-                                fontSize: 11,
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: _isClaimed
+                                    ? const Color(0xFF2E1C1C)
+                                    : const Color(0xFF1B281B),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: _isClaimed
+                                      ? const Color(0xFF7A3535)
+                                      : const Color(0xFF386835),
+                                ),
+                              ),
+                              child: Text(
+                                _isClaimed
+                                    ? 'CLAIMED'
+                                    : (widget.flash.isExclusive ? 'EXCLUSIVE' : 'AVAILABLE'),
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: _isClaimed
+                                      ? const Color(0xFFF87171)
+                                      : const Color(0xFF4ADE80),
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                  height: 1.1,
+                                ),
                               ),
                             ),
                           ],
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
 
                     // Specs Container
                     Container(
@@ -282,7 +280,7 @@ class _FlashDetailsScreenState extends State<FlashDetailsScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
 
                     // Artist Info Tile
                     if (artist != null) ...[
@@ -352,36 +350,8 @@ class _FlashDetailsScreenState extends State<FlashDetailsScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 12),
                     ],
-
-                    // Booking Policy Callout
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF181A1A),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF2A2D2D)),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(Icons.info_outline, color: Color(0xFFEEC200), size: 18),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Claiming reserves this exclusive piece. The \$${flash.deposit} deposit goes directly toward your final tattoo balance.',
-                              style: GoogleFonts.plusJakartaSans(
-                                color: const Color(0xFFC0C5C5),
-                                fontSize: 12,
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 32),
                   ],
                 ),
               ),
@@ -389,37 +359,76 @@ class _FlashDetailsScreenState extends State<FlashDetailsScreen> {
 
             // Bottom CTA
             Container(
-              padding: const EdgeInsets.all(AppSpacing.spaceLg),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.spaceLg,
+                12,
+                AppSpacing.spaceLg,
+                14,
+              ),
               decoration: const BoxDecoration(
                 color: Color(0xFF151717),
                 border: Border(
                   top: BorderSide(color: Color(0xFF262929), width: 1),
                 ),
               ),
-              child: SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _isClaimed ? null : _claimFlash,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEEC200),
-                    foregroundColor: const Color(0xFF121414),
-                    disabledBackgroundColor: const Color(0xFF2E3333),
-                    disabledForegroundColor: const Color(0xFF6B7272),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: _isClaimed ? null : _claimFlash,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFEEC200),
+                        foregroundColor: const Color(0xFF121414),
+                        disabledBackgroundColor: const Color(0xFF2E3333),
+                        disabledForegroundColor: const Color(0xFF6B7272),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        _isClaimed ? 'PIECE ALREADY CLAIMED' : 'CLAIM & BOOK FLASH',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
                     ),
-                    elevation: 0,
                   ),
-                  child: Text(
-                    _isClaimed ? 'PIECE ALREADY CLAIMED' : 'CLAIM & BOOK FLASH',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.8,
+                  if (!_isClaimed) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.info_outline,
+                            color: Color(0xFF919696),
+                            size: 14,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              flash.status != FlashStatus.repeatable
+                                  ? '\$${flash.deposit} deposit reserves this exclusive piece • Applied to final balance'
+                                  : '\$${flash.deposit} deposit goes towards final balance',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: const Color(0xFF919696),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
+                  ],
+                ],
               ),
             ),
           ],

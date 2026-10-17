@@ -587,16 +587,6 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
             tooltip: 'View Public Profile',
             onPressed: _navigateToPublicProfile,
           ),
-          IconButton(
-            key: const Key('artist_account_edit_button'),
-            icon: const Icon(
-              Icons.edit_outlined,
-              color: AppTheme.gold,
-              size: 20,
-            ),
-            tooltip: 'Edit Profile Settings',
-            onPressed: _showEditProfileDialog,
-          ),
           const SizedBox(width: 8),
         ],
       ),

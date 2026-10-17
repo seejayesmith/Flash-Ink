@@ -10,8 +10,10 @@ import 'package:flash_ink/screens/account_creation_screen.dart';
 import 'package:flash_ink/screens/profile_setup_screen.dart';
 import 'package:flash_ink/screens/aesthetics_selection_screen.dart';
 import 'package:flash_ink/screens/main_feed_screen.dart';
+import 'package:flash_ink/screens/artist_onboarding/artist_info_screen.dart';
 import 'package:flash_ink/widgets/skip_pill_button.dart';
 import 'package:flash_ink/services/auth_service.dart';
+import 'package:flash_ink/services/stripe_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -36,7 +38,7 @@ void main() {
 
   group('Onboarding Skip & Dev Bypass Removal Tests', () {
     testWidgets(
-      'RoleSelectionScreen: Dev Skip button is never shown initially or upon role selection',
+      'RoleSelectionScreen: Skip button is completely removed and role must be selected',
       (WidgetTester tester) async {
         await tester.pumpWidget(
           const MaterialApp(
@@ -45,22 +47,26 @@ void main() {
         );
         await tester.pump();
 
-        // 1. Initial state
+        // 1. Initial state: No Skip button of any kind
         expect(find.text("Let's get started."), findsOneWidget);
         expect(find.byKey(const Key('dev_skip_role_button')), findsNothing);
-        expect(find.text('Skip (Dev)'), findsNothing);
+        expect(find.byKey(const Key('skip_role_selection_button')), findsNothing);
+        expect(find.byType(SkipPillButton), findsNothing);
+        expect(find.text('Skip'), findsNothing);
 
         // 2. Select client role
         await tester.tap(find.text('I get tattoos'));
         await tester.pump();
-        expect(find.byKey(const Key('dev_skip_role_button')), findsNothing);
-        expect(find.text('Skip (Dev)'), findsNothing);
+        expect(find.byKey(const Key('skip_role_selection_button')), findsNothing);
+        expect(find.byType(SkipPillButton), findsNothing);
+        expect(find.text('Skip'), findsNothing);
 
         // 3. Select artist role
         await tester.tap(find.text('I make tattoos'));
         await tester.pump();
-        expect(find.byKey(const Key('dev_skip_role_button')), findsNothing);
-        expect(find.text('Skip (Dev)'), findsNothing);
+        expect(find.byKey(const Key('skip_role_selection_button')), findsNothing);
+        expect(find.byType(SkipPillButton), findsNothing);
+        expect(find.text('Skip'), findsNothing);
       },
     );
 
@@ -183,6 +189,109 @@ void main() {
 
         // Test deleteAccount no-op for mock sessions
         await expectLater(authService.deleteAccount(), completes);
+      },
+    );
+
+    testWidgets(
+      'AccountCreationScreen (client): Tapping Skip creates mock client account and routes to ProfileSetupScreen with isGuest == false',
+      (WidgetTester tester) async {
+        AuthService.clearDevMockUser();
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: AccountCreationScreen(role: 'client'),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final skipFinder = find.byKey(const Key('skip_account_creation_button'));
+        expect(skipFinder, findsOneWidget);
+
+        await tester.tap(skipFinder);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AccountCreationScreen), findsNothing);
+        expect(find.byType(ProfileSetupScreen), findsOneWidget);
+
+        // Verify devMockUser is initialized as client
+        final user = AuthService().currentUser;
+        expect(user, isNotNull);
+        expect(user!.uid, 'dev_client_uid');
+        expect(user.displayName, 'Alex Rivers');
+        expect(user.email, 'alex.rivers@example.com');
+        expect(AuthService().isGuest, isFalse);
+      },
+    );
+
+    testWidgets(
+      'AccountCreationScreen (artist): Tapping Skip creates mock artist account and routes to ArtistInfoScreen with isGuest == false',
+      (WidgetTester tester) async {
+        AuthService.clearDevMockUser();
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: AccountCreationScreen(role: 'artist'),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final skipFinder = find.byKey(const Key('skip_account_creation_button'));
+        expect(skipFinder, findsOneWidget);
+
+        await tester.tap(skipFinder);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AccountCreationScreen), findsNothing);
+        expect(find.byType(ArtistInfoScreen), findsOneWidget);
+
+        // Verify devMockUser is initialized as artist
+        final user = AuthService().currentUser;
+        expect(user, isNotNull);
+        expect(user!.uid, 'dev_artist_uid');
+        expect(user.displayName, 'OddMaree');
+        expect(user.email, 'oddmaree@flash.ink');
+        expect(AuthService().isGuest, isFalse);
+      },
+    );
+
+    test(
+      'AuthService devMockUser lifecycle: creation, isGuest, and clear / signOut',
+      () async {
+        AuthService.clearDevMockUser();
+        expect(AuthService().currentUser, isNull);
+        expect(AuthService().isGuest, isTrue);
+
+        final client = AuthService.createDevMockClient();
+        expect(client.uid, 'dev_client_uid');
+        expect(AuthService().currentUser?.displayName, 'Alex Rivers');
+        expect(AuthService().isGuest, isFalse);
+
+        await AuthService().signOut();
+        expect(AuthService().currentUser, isNull);
+        expect(AuthService().isGuest, isTrue);
+
+        final artist = AuthService.createDevMockArtist();
+        expect(artist.uid, 'dev_artist_uid');
+        expect(AuthService().currentUser?.displayName, 'OddMaree');
+        expect(AuthService().isGuest, isFalse);
+
+        await AuthService().deleteAccount();
+        expect(AuthService().currentUser, isNull);
+        expect(AuthService().isGuest, isTrue);
+      },
+    );
+
+    test(
+      'StripeService: presentDepositPaymentSheet simulates gracefully in tests and handles non-acct destination IDs',
+      () async {
+        final stripe = StripeService();
+        final response = await stripe.presentDepositPaymentSheet(
+          amountInDollars: 60,
+          flashTitle: 'Sacred Dagger & Serpent',
+          customerEmail: 'alex.rivers@example.com',
+          customerName: 'Alex Rivers',
+          artistStripeAccountId: 'artist_1',
+        );
+
+        expect(response.isSuccess, isTrue);
       },
     );
   });

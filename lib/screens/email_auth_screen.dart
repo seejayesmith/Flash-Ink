@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../config/dev_config.dart';
 import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_radius.dart';
@@ -129,6 +130,13 @@ class _EmailAuthScreenState extends State<EmailAuthScreen> {
   }
 
   void _handleSkip() {
+    if (kEnableDevBypass) {
+      if (widget.role == 'artist') {
+        AuthService.createDevMockArtist();
+      } else {
+        AuthService.createDevMockClient();
+      }
+    }
     if (widget.role == 'artist') {
       Navigator.pushReplacement(
         context,
@@ -142,7 +150,9 @@ class _EmailAuthScreenState extends State<EmailAuthScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => const ProfileSetupScreen(),
+          builder: (_) => ProfileSetupScreen(
+            authService: _authService,
+          ),
         ),
       );
     }

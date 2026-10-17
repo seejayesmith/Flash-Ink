@@ -309,12 +309,12 @@ void main() {
       await tester.tap(find.text('Skip'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Upload a profile\nphoto'), findsOneWidget);
+      expect(find.text('Add a profile photo'), findsOneWidget);
     });
   });
 
   group('ArtistProfilePhotoScreen Tests', () {
-    testWidgets('Renders Upload Photo state with CHANGE and SELECT PHOTO buttons', (tester) async {
+    testWidgets('Renders Upload Photo state with wireframe buttons and copy', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: ArtistProfilePhotoScreen(
@@ -324,13 +324,15 @@ void main() {
         ),
       );
 
-      expect(find.text('Upload a profile\nphoto'), findsOneWidget);
-      expect(find.text('CHANGE'), findsOneWidget);
-      expect(find.text('SELECT PHOTO'), findsOneWidget);
-      expect(find.byIcon(Icons.camera_alt), findsOneWidget);
+      expect(find.text('Add a profile photo'), findsOneWidget);
+      expect(find.text('Show the community who you are!\nYou can always change this later.'), findsOneWidget);
+      expect(find.text('Upload a Photo'), findsOneWidget);
+      expect(find.text('Take a Picture'), findsOneWidget);
+      expect(find.text('Continue'), findsOneWidget);
+      expect(find.text('Skip for now'), findsOneWidget);
     });
 
-    testWidgets('Renders Looks Good preview state when photo is present', (tester) async {
+    testWidgets('Renders preview state with active Continue button when photo is present', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: ArtistProfilePhotoScreen(
@@ -341,9 +343,9 @@ void main() {
         ),
       );
 
-      expect(find.text('Looks good'), findsOneWidget);
-      expect(find.text('CONTINUE'), findsOneWidget);
-      expect(find.text('CHANGE'), findsOneWidget);
+      expect(find.text('Add a profile photo'), findsOneWidget);
+      expect(find.text('Continue'), findsOneWidget);
+      expect(find.text('Upload a Photo'), findsOneWidget);
     });
 
     testWidgets('Tapping CONTINUE navigates to ArtistInstagramScreen (Screen 6)', (tester) async {
@@ -357,7 +359,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('CONTINUE'));
+      await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
 
       expect(find.text('Keep your\naudience'), findsOneWidget);
@@ -417,7 +419,7 @@ void main() {
   });
 
   group('ArtistSetPriceScreen (Screens 7 & 8) Tests', () {
-    testWidgets('Renders price card, numeric keypad, and skip/continue buttons', (tester) async {
+    testWidgets('Renders price card, faded placeholder, and skip/continue buttons', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: ArtistSetPriceScreen(
@@ -429,9 +431,8 @@ void main() {
 
       expect(find.text('Set your price'), findsOneWidget);
       expect(find.byKey(const Key('price_display_card')), findsOneWidget);
+      expect(find.byKey(const Key('price_text_field')), findsOneWidget);
       expect(find.text('100'), findsOneWidget);
-      expect(find.byKey(const Key('keypad_1')), findsOneWidget);
-      expect(find.byKey(const Key('keypad_backspace')), findsOneWidget);
       expect(find.text('CONTINUE'), findsOneWidget);
       expect(find.byKey(const Key('skip_price_button')), findsOneWidget);
       expect(find.text('Skip'), findsOneWidget);
@@ -453,7 +454,7 @@ void main() {
       expect(find.text('Showcase your\nwork'), findsOneWidget);
     });
 
-    testWidgets('Keypad entry and backspace updates price', (tester) async {
+    testWidgets('Tapping price card requests focus, text entry updates price and clearing restores placeholder', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: ArtistSetPriceScreen(
@@ -463,24 +464,28 @@ void main() {
         ),
       );
 
-      // Tap backspace twice
-      await tester.tap(find.byKey(const Key('keypad_backspace')));
-      await tester.pump();
-      await tester.tap(find.byKey(const Key('keypad_backspace')));
-      await tester.pump();
+      // Initially field is not focused and shows placeholder '100'
+      final textFieldFinder = find.byKey(const Key('price_text_field'));
+      final textField = tester.widget<TextField>(textFieldFinder);
+      expect(textField.focusNode?.hasFocus ?? false, isFalse);
+      expect(find.text('100'), findsOneWidget);
 
-      // Now price should be '1'
-      expect(find.text('1'), findsWidgets);
-
-      // Tap 5
-      await tester.tap(find.byKey(const Key('keypad_5')));
+      // Tap card to request focus
+      await tester.tap(find.byKey(const Key('price_display_card')));
       await tester.pump();
+      expect(textField.focusNode?.hasFocus ?? false, isTrue);
 
-      // Tap 0
-      await tester.tap(find.byKey(const Key('keypad_0')));
+      // Enter amount
+      await tester.enterText(textFieldFinder, '150');
       await tester.pump();
 
-      expect(find.text('150'), findsOneWidget);
+      expect(find.byWidgetPredicate((w) => w is Text && w.data == '150'), findsOneWidget);
+
+      // Clear amount to restore placeholder
+      await tester.enterText(textFieldFinder, '');
+      await tester.pump();
+
+      expect(find.text('100'), findsOneWidget);
     });
 
     testWidgets('Tapping CONTINUE navigates to ArtistFlashUploadScreen (Screens 9-12)', (tester) async {
@@ -535,6 +540,75 @@ void main() {
 
       expect(find.text('Tell them who\nyou are'), findsOneWidget);
       expect(find.text('Help clients find a space where they feel welcome by tagging your identity, vibe, and accommodations'), findsOneWidget);
+    });
+
+    testWidgets('Renders notice that artists must include four pieces of flash artwork', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ArtistFlashUploadScreen(
+            artistName: 'OddMaree',
+            instagramHandle: '@OddMaree',
+            minDeposit: 100,
+          ),
+        ),
+      );
+
+      expect(find.byKey(const Key('four_pieces_notice')), findsOneWidget);
+      expect(find.text('4 Pieces Required'), findsOneWidget);
+      expect(find.text('0 of 4 added'), findsOneWidget);
+      expect(
+        find.text('You must include four pieces of flash artwork to complete your showcase and fill your 2x2 profile preview.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Uploading flash artwork updates notice count and shows notice on DONE with < 4 items', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ArtistFlashUploadScreen(
+            artistName: 'OddMaree',
+            instagramHandle: '@OddMaree',
+            minDeposit: 100,
+          ),
+        ),
+      );
+
+      // Open upload bottom sheet
+      await tester.tap(find.byKey(const Key('upload_flash_trigger')));
+      await tester.pumpAndSettle();
+
+      // Tap sample flash
+      await tester.tap(find.text('Use Sample Flash: Traditional Panther'));
+      await tester.pumpAndSettle();
+
+      // Details editor is now open
+      expect(find.text('Upload Flash: Item Details'), findsOneWidget);
+      expect(find.byKey(const Key('four_pieces_notice')), findsOneWidget);
+
+      // Save item
+      await tester.tap(find.byKey(const Key('done_details_button')));
+      await tester.pumpAndSettle();
+
+      // Back to main view: notice now reflects 1 of 4 added
+      expect(find.text('1 of 4 added'), findsOneWidget);
+      expect(find.text('UPLOADED FLASH (1)'), findsOneWidget);
+      expect(find.byKey(const Key('done_flash_button')), findsOneWidget);
+
+      // Tapping DONE with 1 piece triggers SnackBar notice
+      await tester.tap(find.byKey(const Key('done_flash_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 750));
+
+      expect(
+        find.text('Notice: You must include four pieces of flash artwork to complete your showcase (1 of 4 added).'),
+        findsOneWidget,
+      );
+
+      // Tapping CONTINUE ANYWAY in SnackBar proceeds
+      await tester.tap(find.text('CONTINUE ANYWAY'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tell them who\nyou are'), findsOneWidget);
     });
   });
 

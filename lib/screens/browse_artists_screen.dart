@@ -7,6 +7,7 @@ import '../models/artist.dart';
 import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
+import '../widgets/adaptive_glass_container.dart';
 import '../widgets/artist_card.dart';
 import '../widgets/flash_switch.dart';
 import 'artist_profile_screen.dart';
@@ -469,6 +470,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
         ),
         child: TextField(
           controller: _searchController,
+          textAlignVertical: TextAlignVertical.center,
           onChanged: (val) {
             setState(() {
               _searchQuery = val;
@@ -479,12 +481,14 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
             fontSize: 14,
           ),
           decoration: InputDecoration(
+            isDense: true,
             hintText: 'Search artists, studios, styles...',
             hintStyle: GoogleFonts.plusJakartaSans(
               color: AppTheme.navInactive,
               fontSize: 13,
             ),
             prefixIcon: const Icon(Icons.search, color: AppTheme.gold, size: 20),
+            prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 46),
             suffixIcon: _searchController.text.isNotEmpty
                 ? IconButton(
                     icon: const Icon(Icons.close, color: AppTheme.navInactive, size: 18),
@@ -496,8 +500,9 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                     },
                   )
                 : null,
+            suffixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 46),
             border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(vertical: 12),
+            contentPadding: EdgeInsets.zero,
           ),
         ),
       ),
@@ -756,25 +761,27 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             final mediaQuery = MediaQuery.of(context);
-            return Container(
+            return ConstrainedBox(
               constraints: BoxConstraints(
                 maxHeight: mediaQuery.size.height * 0.85,
               ),
-              decoration: const BoxDecoration(
-                color: Color(0xFF1E2020),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                border: Border(
-                  top: BorderSide(color: Color(0xFF383B3B), width: 1.0),
-                ),
-              ),
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.spaceLg,
-                AppSpacing.spaceMd,
-                AppSpacing.spaceLg,
-                mediaQuery.padding.bottom + AppSpacing.spaceLg,
-              ),
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
+              child: AdaptiveGlassContainer.bottomSheet(
+                glassEnabled: false,
+                androidSurfaceColor: const Color(0xFF1E2020),
+                selectedBorderColor: const Color(0xFF383B3B),
+                unselectedBorderColor: const Color(0xFF383B3B),
+                selectedBorderWidth: 1.0,
+                unselectedBorderWidth: 1.0,
+                topRadius: 24.0,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.spaceLg,
+                    AppSpacing.spaceMd,
+                    AppSpacing.spaceLg,
+                    AppSpacing.spaceLg,
+                  ),
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1077,9 +1084,11 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                   ],
                 ),
               ),
-            );
-          },
+            ),
+          ),
         );
+      },
+    );
       },
     );
   }
@@ -1091,21 +1100,22 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (modalContext) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF1E2020),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border(
-              top: BorderSide(color: Color(0xFF383B3B), width: 1.0),
+        return AdaptiveGlassContainer.bottomSheet(
+          glassEnabled: false,
+          androidSurfaceColor: const Color(0xFF1E2020),
+          selectedBorderColor: const Color(0xFF383B3B),
+          unselectedBorderColor: const Color(0xFF383B3B),
+          selectedBorderWidth: 1.0,
+          unselectedBorderWidth: 1.0,
+          topRadius: 24.0,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.spaceLg,
+              AppSpacing.spaceMd,
+              AppSpacing.spaceLg,
+              AppSpacing.spaceLg,
             ),
-          ),
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.spaceLg,
-            AppSpacing.spaceMd,
-            AppSpacing.spaceLg,
-            MediaQuery.of(context).padding.bottom + AppSpacing.spaceLg,
-          ),
-          child: SingleChildScrollView(
+            child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1240,8 +1250,9 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
             ],
           ),
         ),
-        );
-      },
+      ),
+    );
+  },
     );
   }
 

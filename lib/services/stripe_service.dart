@@ -70,6 +70,7 @@ class StripeService {
 
   /// Checks if Stripe is configured with a valid publishable key.
   static bool get isStripeConfigured {
+    if (!dotenv.isInitialized) return false;
     final key = dotenv.env['STRIPE_PUBLISHABLE_KEY'];
     return key != null && key.isNotEmpty && !key.contains('YOUR_STRIPE');
   }
@@ -91,7 +92,7 @@ class StripeService {
     String? effectiveClientSecret = clientSecret;
     String? intentId;
 
-    if (effectiveClientSecret == null) {
+    if (effectiveClientSecret == null && dotenv.isInitialized) {
       final backendUrl = dotenv.env['STRIPE_BACKEND_URL'];
       final secretKey = dotenv.env['STRIPE_SECRET_KEY'];
 
@@ -103,7 +104,8 @@ class StripeService {
             body: jsonEncode({
               'amount': (amountInDollars * 100).round(),
               'currency': 'usd',
-              'accountId': artistStripeAccountId,
+              if (artistStripeAccountId != null && artistStripeAccountId.startsWith('acct_'))
+                'accountId': artistStripeAccountId,
               'flashTitle': flashTitle,
               'customerEmail': customerEmail,
             }),
@@ -130,7 +132,9 @@ class StripeService {
               'currency': 'usd',
               'description': 'Flash Ink Deposit: $flashTitle',
               'automatic_payment_methods[enabled]': 'true',
-              if (artistStripeAccountId != null && artistStripeAccountId.isNotEmpty) ...{
+              if (artistStripeAccountId != null &&
+                  artistStripeAccountId.isNotEmpty &&
+                  artistStripeAccountId.startsWith('acct_')) ...{
                 'transfer_data[destination]': artistStripeAccountId,
               },
             },

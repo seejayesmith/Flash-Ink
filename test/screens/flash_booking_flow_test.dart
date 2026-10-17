@@ -221,7 +221,7 @@ void main() {
 
       // Verify initial state
       expect(find.text('CLAIM & BOOK FLASH'), findsOneWidget);
-      expect(find.text('AVAILABLE (1-OF-1)'), findsOneWidget);
+      expect(find.text('EXCLUSIVE'), findsOneWidget);
 
       // Tap CLAIM & BOOK FLASH to launch flow
       await tester.tap(find.text('CLAIM & BOOK FLASH'));
@@ -248,6 +248,7 @@ void main() {
       expect(find.text('Flash Claimed & Booked!'), findsOneWidget);
 
       // Tap DONE to return
+      await tester.ensureVisible(find.text('DONE'));
       await tester.tap(find.text('DONE'));
       await tester.pumpAndSettle();
 
@@ -255,6 +256,94 @@ void main() {
       expect(find.text('PIECE ALREADY CLAIMED'), findsOneWidget);
       expect(find.text('CLAIMED'), findsOneWidget);
       expect(find.textContaining('Deposit \$75 confirmed'), findsOneWidget);
+    });
+
+    testWidgets('FlashDetailsScreen renders title and price with AppSpacing.spaceXl gap and maxLines: 2',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: FlashDetailsScreen(
+            flash: testFlash,
+            artist: testArtist,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final titleFinder = find.text(testFlash.title);
+      expect(titleFinder, findsOneWidget);
+
+      final Text titleWidget = tester.widget<Text>(titleFinder);
+      expect(titleWidget.maxLines, 2);
+      expect(titleWidget.overflow, TextOverflow.ellipsis);
+
+      // Verify price is rendered
+      expect(find.text('\$${testFlash.fullPrice}'), findsOneWidget);
+
+      // Verify the 32px (AppSpacing.spaceXl) spacing SizedBox exists
+      final sizedBoxes = tester.widgetList<SizedBox>(find.byType(SizedBox));
+      final has32pxGap = sizedBoxes.any((box) => box.width == 32.0);
+      expect(has32pxGap, isTrue);
+    });
+
+    testWidgets('Placement selector opens glassmorphic bottom sheet, selects preset or custom placement',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: FlashBookingScreen(
+            flash: testFlash,
+            artist: testArtist,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Trigger is initially 'Forearm'
+      expect(find.byKey(const Key('placement_selector_trigger')), findsOneWidget);
+      expect(find.text('Forearm'), findsOneWidget);
+
+      // Tap trigger to open bottom sheet
+      await tester.tap(find.byKey(const Key('placement_selector_trigger')));
+      await tester.pumpAndSettle();
+
+      // Bottom sheet is displayed
+      expect(find.text('Select Body Placement'), findsOneWidget);
+      expect(find.text('Choose where you want this flash piece tattooed'), findsOneWidget);
+      expect(find.byKey(const Key('placement_option_Thigh')), findsOneWidget);
+
+      // Select 'Thigh'
+      await tester.tap(find.byKey(const Key('placement_option_Thigh')));
+      await tester.pumpAndSettle();
+
+      // Bottom sheet dismissed, trigger updated
+      expect(find.text('Select Body Placement'), findsNothing);
+      expect(find.text('Thigh'), findsOneWidget);
+
+      // Reopen sheet to select 'Other' with custom input
+      await tester.tap(find.byKey(const Key('placement_selector_trigger')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('placement_option_Other')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('custom_placement_field')), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('custom_placement_field')), 'Collarbone');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('confirm_custom_placement_btn')));
+      await tester.pumpAndSettle();
+
+      // Sheet dismissed, trigger displays custom placement
+      expect(find.text('Select Body Placement'), findsNothing);
+      expect(find.text('Collarbone'), findsOneWidget);
     });
   });
 }

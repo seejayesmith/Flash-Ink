@@ -3,10 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_buttons.dart';
 import '../widgets/adaptive_glass_container.dart';
-import '../widgets/skip_pill_button.dart';
 import '../services/auth_service.dart';
 import 'account_creation_screen.dart';
-import 'aesthetics_selection_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
   final AuthService? authService;
@@ -19,17 +17,6 @@ class RoleSelectionScreen extends StatefulWidget {
 
 class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   String? _selectedRole; // Must be explicitly selected by the user
-
-  void _handleSkip() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const AestheticsSelectionScreen(
-          isGuest: true,
-        ),
-      ),
-    );
-  }
 
   void _handleContinue() {
     if (_selectedRole == null) return;
@@ -134,17 +121,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
           elevation: 0,
           scrolledUnderElevation: 0,
           automaticallyImplyLeading: false,
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: 16.0),
-              child: Center(
-                child: SkipPillButton(
-                  key: const Key('skip_role_selection_button'),
-                  onPressed: _handleSkip,
-                ),
-              ),
-            ),
-          ],
         ),
         body: Stack(
           children: [

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../config/dev_config.dart';
 import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_radius.dart';
@@ -116,6 +117,13 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
   }
 
   void _handleSkip() {
+    if (kEnableDevBypass) {
+      if (widget.role == 'artist') {
+        AuthService.createDevMockArtist();
+      } else {
+        AuthService.createDevMockClient();
+      }
+    }
     if (widget.role == 'artist') {
       Navigator.pushReplacement(
         context,
@@ -129,7 +137,9 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => const ProfileSetupScreen(),
+          builder: (_) => ProfileSetupScreen(
+            authService: _authService,
+          ),
         ),
       );
     }

@@ -379,6 +379,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 ),
                 child: TextField(
                   controller: _searchController,
+                  textAlignVertical: TextAlignVertical.center,
                   onChanged: (val) {
                     setState(() {
                       _searchQuery = val;
@@ -389,12 +390,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     fontSize: 14,
                   ),
                   decoration: InputDecoration(
+                    isDense: true,
                     hintText: 'Search artists, styles, studios...',
                     hintStyle: GoogleFonts.plusJakartaSans(
                       color: AppTheme.navInactive,
                       fontSize: 13,
                     ),
                     prefixIcon: const Icon(Icons.search, color: AppTheme.gold, size: 20),
+                    prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 46),
                     suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.close, color: AppTheme.navInactive, size: 18),
@@ -406,8 +409,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
                             },
                           )
                         : null,
+                    suffixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 46),
                     border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    contentPadding: EdgeInsets.zero,
                   ),
                 ),
               ),
