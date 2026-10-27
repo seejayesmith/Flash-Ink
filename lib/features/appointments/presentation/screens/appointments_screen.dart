@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_buttons.dart';
+import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
 import '../../domain/models/appointment_item.dart';
@@ -26,15 +27,11 @@ class AppointmentsScreen extends StatefulWidget {
 
 class _AppointmentsScreenState extends State<AppointmentsScreen> {
   int _selectedTabIndex = 0; // 0: Upcoming, 1: Past
-  late List<ClientAppointment> _upcoming;
-  late List<ClientAppointment> _past;
 
-  @override
-  void initState() {
-    super.initState();
-    _upcoming = widget.mockUpcoming ?? List.from(ClientAppointment.mockUpcoming);
-    _past = widget.mockPast ?? List.from(ClientAppointment.mockPast);
-  }
+  List<ClientAppointment> get _upcoming =>
+      widget.mockUpcoming ?? ClientAppointment.activeUpcoming;
+  List<ClientAppointment> get _past =>
+      widget.mockPast ?? ClientAppointment.activePast;
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +44,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
         backgroundColor: AppTheme.onyxBackground,
         elevation: 0,
         scrolledUnderElevation: 0,
-        titleSpacing: AppSpacing.spaceLg,
+        titleSpacing: AppSpacing.screenGutter,
         title: Text(
           'Appointments',
           style: GoogleFonts.plusJakartaSans(
@@ -72,9 +69,9 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                   ? _buildEmptyState()
                   : ListView.builder(
                       padding: EdgeInsets.fromLTRB(
-                        AppSpacing.spaceLg,
+                        AppSpacing.screenGutter,
                         0,
-                        AppSpacing.spaceLg,
+                        AppSpacing.screenGutter,
                         AppSpacing.spaceXxl + AppTheme.navBarHeight + bottomInset,
                       ),
                       itemCount: currentList.length,
@@ -91,13 +88,13 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
 
   Widget _buildSegmentedControl() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
       child: Container(
         height: 44,
-        padding: const EdgeInsets.all(4),
+        padding: const EdgeInsets.all(AppSpacing.spaceXxs),
         decoration: BoxDecoration(
           color: AppTheme.onyxContainer,
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(AppRadius.radiusFull),
           border: Border.all(color: AppTheme.cardBorder),
         ),
         child: Row(
@@ -134,7 +131,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
         curve: Curves.easeInOut,
         decoration: BoxDecoration(
           color: isSelected ? AppTheme.gold : Colors.transparent,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(AppRadius.radiusFull),
         ),
         child: Center(
           child: Text(

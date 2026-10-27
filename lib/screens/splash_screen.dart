@@ -96,7 +96,14 @@ class _SplashScreenState extends State<SplashScreen> {
             }
           }
 
-          // Fetch user document from Firestore
+          // Verify role from server-minted Firebase Auth Custom Claims (JWT)
+          final effectiveAuth = widget.authService ?? AuthService();
+          final verifiedRole = await effectiveAuth.getVerifiedRole(
+            user: user,
+            forceRefresh: true,
+          );
+
+          // Fetch user document from Firestore for onboarding progress
           final firestore = widget.firestore ?? FirebaseFirestore.instance;
           final doc = await firestore
               .collection('users')
@@ -105,20 +112,38 @@ class _SplashScreenState extends State<SplashScreen> {
               .timeout(const Duration(seconds: 6));
           final data = doc.data();
 
-          String role = (data?['role'] as String?) ?? 'client';
           final profileCompleted = data?['profileCompleted'] == true;
 
-          // If role was missing in Firestore, backfill it so future starts have it
-          if (data == null || data['role'] == null) {
+          // Check if artist document exists
+          bool isArtist = verifiedRole == 'artist';
+          if (!isArtist) {
+            try {
+              final artistDoc = await firestore
+                  .collection('artists')
+                  .doc(user.uid)
+                  .get()
+                  .timeout(const Duration(seconds: 3));
+              if (artistDoc.exists) {
+                isArtist = true;
+              }
+            } catch (_) {}
+          }
+
+          // If role was missing in Firestore and not an artist, backfill default 'client' role
+          if (!isArtist && (data == null || data['role'] == null)) {
             try {
               await firestore
                   .collection('users')
                   .doc(user.uid)
-                  .set({'role': role}, SetOptions(merge: true));
+                  .set({
+                    'uid': user.uid,
+                    'role': 'client',
+                  }, SetOptions(merge: true));
             } catch (_) {}
           }
 
-          if (role == 'artist') {
+          // Route to ArtistDashboardScreen if verified custom claims or artist document exists
+          if (isArtist) {
             nextScreen = const ArtistDashboardScreen();
           } else {
             final aesthetics = data?['aesthetics'];
@@ -180,17 +205,24 @@ class _SplashScreenState extends State<SplashScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF121414),
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
-          // Splash background image
-          Container(
-            decoration: const BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage('assets/images/tattoo_setup.png'),
-                fit: BoxFit.cover,
-                colorFilter: ColorFilter.mode(
-                  Colors.black87,
-                  BlendMode.darken,
+          // Splash background image pinned to full screen
+          Positioned(
+            top: 0,
+            left: 0,
+            width: MediaQuery.sizeOf(context).width,
+            height: MediaQuery.sizeOf(context).height,
+            child: Container(
+              decoration: const BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage('assets/images/tattoo_setup.png'),
+                  fit: BoxFit.cover,
+                  colorFilter: ColorFilter.mode(
+                    Colors.black87,
+                    BlendMode.darken,
+                  ),
                 ),
               ),
             ),

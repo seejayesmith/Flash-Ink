@@ -11,6 +11,9 @@ stripe_client = Stripe::StripeClient.new(ENV["STRIPE_SECRET_KEY"])
 set :public_folder, File.dirname(__FILE__) + "/public"
 enable :sessions
 
+# In-memory store for webhook-confirmed bookings keyed by payment_intent_id
+CONFIRMED_BOOKINGS = {}
+
 # Create a sample product and return a price for it
 post "/api/create-product" do
   data = parse_request_body
@@ -56,12 +59,29 @@ post "/api/create-payment-intent" do
   account_id = data['accountId']
   flash_title = data['flashTitle'] || 'Flash Artwork Deposit'
   customer_email = data['customerEmail']
+  customer_name = data['customerName']
+  booking_id = data['bookingId']
+  selected_date = data['selectedDate']
+  selected_time_slot = data['selectedTimeSlot']
+  placement = data['placement']
+
+  metadata = {
+    booking_id: booking_id.to_s,
+    flash_title: flash_title.to_s,
+    customer_name: customer_name.to_s,
+    customer_email: customer_email.to_s,
+    selected_date: selected_date.to_s,
+    selected_time_slot: selected_time_slot.to_s,
+    placement: placement.to_s,
+    artist_account_id: account_id.to_s,
+  }.reject { |_, v| v.empty? }
 
   intent_params = {
     amount: amount,
     currency: currency,
     description: "Flash Ink Deposit: #{flash_title}",
     automatic_payment_methods: { enabled: true },
+    metadata: metadata,
   }
 
   intent_params[:receipt_email] = customer_email if customer_email && !customer_email.empty?
@@ -74,10 +94,19 @@ post "/api/create-payment-intent" do
 
   begin
     intent = Stripe::PaymentIntent.create(intent_params)
+    CONFIRMED_BOOKINGS[intent.id] = {
+      paymentIntentId: intent.id,
+      status: "pending",
+      amount: amount,
+      currency: currency,
+      metadata: metadata,
+      updatedAt: Time.now.utc.iso8601,
+    }
     content_type :json
     {
       clientSecret: intent.client_secret,
       id: intent.id,
+      metadata: metadata,
     }.to_json
   rescue Stripe::StripeError => e
     status 500
@@ -256,15 +285,10 @@ post "/api/webhook" do
   request.body.rewind
   payload = request.body.read
 
-  # Replace this endpoint secret with your endpoint's unique secret
-  # If you are testing with the CLI, find the secret by running 'stripe listen'
-  # If you are using an endpoint defined with the API or dashboard, look in your webhook settings
-  # at https://dashboard.stripe.com/webhooks
-  endpoint_secret = ""
+  # Use STRIPE_WEBHOOK_SECRET from environment when configured.
+  endpoint_secret = ENV["STRIPE_WEBHOOK_SECRET"].to_s
 
-  # Only verify the event if you have an endpoint secret defined.
-  # Otherwise use the basic event deserialized directly.
-  if endpoint_secret != ""
+  if !endpoint_secret.empty?
     signature = request.env["HTTP_STRIPE_SIGNATURE"]
     begin
       event = Stripe::Webhook.construct_event(payload, signature, endpoint_secret)
@@ -276,23 +300,72 @@ post "/api/webhook" do
     event = JSON.parse(payload, symbolize_names: true)
   end
 
-  case event[:type]
+  event_type = event.is_a?(Hash) ? event[:type] : event.type
+  stripe_object = event.is_a?(Hash) ? event[:data][:object] : event.data.object
+
+  case event_type
+  when "payment_intent.succeeded"
+    intent_id = stripe_object.is_a?(Hash) ? stripe_object[:id] : stripe_object.id
+    amount = stripe_object.is_a?(Hash) ? stripe_object[:amount] : stripe_object.amount
+    raw_meta = stripe_object.is_a?(Hash) ? (stripe_object[:metadata] || {}) : (stripe_object.metadata&.to_h || {})
+    CONFIRMED_BOOKINGS[intent_id] = {
+      paymentIntentId: intent_id,
+      status: "confirmed",
+      amount: amount,
+      metadata: raw_meta,
+      confirmedAt: Time.now.utc.iso8601,
+    }
+    puts "PaymentIntent #{intent_id} succeeded. Booking confirmed: #{raw_meta[:booking_id]}"
+  when "payment_intent.payment_failed"
+    intent_id = stripe_object.is_a?(Hash) ? stripe_object[:id] : stripe_object.id
+    raw_meta = stripe_object.is_a?(Hash) ? (stripe_object[:metadata] || {}) : (stripe_object.metadata&.to_h || {})
+    CONFIRMED_BOOKINGS[intent_id] = {
+      paymentIntentId: intent_id,
+      status: "failed",
+      metadata: raw_meta,
+      updatedAt: Time.now.utc.iso8601,
+    }
+    puts "PaymentIntent #{intent_id} failed."
   when "checkout.session.completed"
-    stripe_object = event[:data][:object]
-    status = stripe_object[:status]
-    puts "Checkout Session status is #{status}."
-    # handle_checkout_session_completed(stripe_object)
+    session_status = stripe_object.is_a?(Hash) ? stripe_object[:status] : stripe_object.status
+    puts "Checkout Session status is #{session_status}."
   when "checkout.session.async_payment_failed"
-    stripe_object = event[:data][:object]
-    status = stripe_object[:status]
-    puts "Checkout Session status is #{status}."
-    # handle_checkout_session_failed(stripe_object)
+    session_status = stripe_object.is_a?(Hash) ? stripe_object[:status] : stripe_object.status
+    puts "Checkout Session status is #{session_status}."
   else
-    # Unexpected event type
-    puts "Unhandled event type #{event[:type]}."
+    puts "Unhandled event type #{event_type}."
   end
 
+  content_type :json
   status 200
+  { received: true, type: event_type }.to_json
+end
+
+# Query server-side booking & payment status verified by Stripe / webhooks
+get "/api/booking-status/:payment_intent_id" do
+  payment_intent_id = params[:payment_intent_id]
+  content_type :json
+
+  if CONFIRMED_BOOKINGS.key?(payment_intent_id)
+    return CONFIRMED_BOOKINGS[payment_intent_id].to_json
+  end
+
+  begin
+    intent = Stripe::PaymentIntent.retrieve(payment_intent_id)
+    booking_status = intent.status == "succeeded" ? "confirmed" : intent.status
+    result = {
+      paymentIntentId: intent.id,
+      status: booking_status,
+      amount: intent.amount,
+      currency: intent.currency,
+      metadata: intent.metadata&.to_h || {},
+    }
+    CONFIRMED_BOOKINGS[payment_intent_id] = result
+    result.to_json
+  rescue Stripe::StripeError => e
+    status 404
+    { error: e.message }.to_json
+  end
 end
 
 post "/api/thin-webhook" do

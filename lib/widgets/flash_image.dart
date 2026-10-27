@@ -33,7 +33,8 @@ class FlashImage extends StatelessWidget {
       return _buildErrorPlaceholder();
     }
 
-    final targetCacheWidth = width != null ? (width! * 2.5).round().clamp(200, 1200) : 800;
+    final targetCacheWidth =
+        (width != null && width!.isFinite) ? (width! * 2.5).round().clamp(200, 1200) : 800;
 
     if (_isNetwork) {
       return Image.network(

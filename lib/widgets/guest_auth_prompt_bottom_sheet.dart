@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../features/auth/presentation/screens/account_recovery_hub_screen.dart';
 import '../services/auth_service.dart';
 import '../theme/app_buttons.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
 import 'adaptive_glass_container.dart';
+import 'fade_page_route.dart';
+import 'keyboard_collapse_button.dart';
 import 'social_auth_buttons.dart';
 
 /// Contextual trigger type for guest auth gating prompts.
@@ -204,7 +207,7 @@ class _GuestAuthPromptBottomSheetState extends State<GuestAuthPromptBottomSheet>
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
       child: AdaptiveGlassContainer.bottomSheet(
-        topRadius: 28.0,
+        topRadius: AppRadius.radiusSheet,
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.spaceLg,
           14,
@@ -216,16 +219,27 @@ class _GuestAuthPromptBottomSheetState extends State<GuestAuthPromptBottomSheet>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Top drag pill
-                Center(
-                  child: Container(
-                    width: 44,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF4D5252),
-                      borderRadius: BorderRadius.circular(3),
+                // Top drag pill & keyboard collapse button
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF4D5252),
+                          borderRadius: BorderRadius.circular(AppRadius.dragHandle),
+                        ),
+                      ),
                     ),
-                  ),
+                    const Align(
+                      alignment: Alignment.centerRight,
+                      child: KeyboardCollapseButton(
+                        padding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ],
                 ),
                 AppGaps.gapLg,
 
@@ -290,7 +304,7 @@ class _GuestAuthPromptBottomSheetState extends State<GuestAuthPromptBottomSheet>
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: const Color(0xFFEF4444).withAlpha(30),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                       border: Border.all(color: const Color(0xFFEF4444).withAlpha(120)),
                     ),
                     child: Row(
@@ -436,16 +450,45 @@ class _GuestAuthPromptBottomSheetState extends State<GuestAuthPromptBottomSheet>
 
                 // "Maybe Later" Cancel Option
                 Center(
-                  child: TextButton(
-                    onPressed: _isLoading ? null : () => Navigator.of(context).pop(false),
-                    child: Text(
-                      'Maybe Later',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFF6B7272),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TextButton(
+                        onPressed: _isLoading ? null : () => Navigator.of(context).pop(false),
+                        child: Text(
+                          'Maybe Later',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF6B7272),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
-                    ),
+                      const Text('•', style: TextStyle(color: Color(0xFF4D5252))),
+                      TextButton(
+                        onPressed: _isLoading
+                            ? null
+                            : () {
+                                Navigator.of(context).pop(false);
+                                Navigator.push(
+                                  context,
+                                  FadePageRoute(
+                                    builder: (_) => const AccountRecoveryHubScreen(),
+                                  ),
+                                );
+                              },
+                        child: Text(
+                          'Trouble signing in?',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF8C9191),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            decoration: TextDecoration.underline,
+                            decorationColor: const Color(0xFF8C9191),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],

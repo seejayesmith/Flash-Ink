@@ -197,11 +197,15 @@ void main() {
         findsNothing,
       );
 
-      // Verify wireframe buttons are present
-      expect(find.text('Upload a Photo'), findsOneWidget);
-      expect(find.text('Take a Picture'), findsOneWidget);
+      // Verify upload and take picture buttons are removed from screen
+      expect(find.text('Upload a Photo'), findsNothing);
+      expect(find.text('Take a Picture'), findsNothing);
       expect(find.text('Continue'), findsOneWidget);
       expect(find.text('Skip for now'), findsOneWidget);
+
+      // Verify camera icon and '+' badge are present
+      expect(find.byIcon(Icons.camera_alt_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.add), findsOneWidget);
 
       // Verify avatar container circle exists with non-yellow border
       final avatarContainerFinder = find.byWidgetPredicate((widget) {

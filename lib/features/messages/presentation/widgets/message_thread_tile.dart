@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_theme.dart';
 import '../../domain/models/message_thread.dart';
 import '../screens/chat_conversation_screen.dart';
@@ -43,7 +44,7 @@ class MessageThreadTile extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: AppTheme.cardBackground,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.radiusLg),
           border: Border.all(
             color: thread.hasUnread ? AppTheme.goldBorder : AppTheme.cardBorder,
             width: thread.hasUnread ? 1.2 : 1.0,
@@ -163,7 +164,7 @@ class MessageThreadTile extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                           decoration: BoxDecoration(
                             color: AppTheme.gold,
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(AppRadius.radiusFull),
                           ),
                           child: Text(
                             '${thread.unreadCount}',

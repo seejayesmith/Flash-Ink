@@ -4,8 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../models/waitlist_entry.dart';
+import '../../theme/app_radius.dart';
+import '../../theme/app_spacing.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
+import '../../widgets/flash_snack_bar.dart';
 import 'add_waitlist_entry_sheet.dart';
 import 'books_open_options_modal.dart';
 import 'early_access_outreach_sheet.dart';
@@ -74,31 +77,9 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
 
   void _copyVipLink(WaitlistEntry entry) {
     Clipboard.setData(ClipboardData(text: entry.vipBookingLink));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Color(0xFFEEC200), size: 18),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'VIP link for ${entry.clientName} copied!',
-                style: GoogleFonts.plusJakartaSans(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12.5,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF1E2121),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Color(0xFFEEC200), width: 1),
-        ),
-      ),
+    FlashSnackBar.showSuccess(
+      context,
+      'VIP link for ${entry.clientName} copied!',
     );
   }
 
@@ -110,7 +91,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
         return AdaptiveGlassContainer.bottomSheet(
           glassEnabled: false,
           androidSurfaceColor: const Color(0xFF161818),
-          topRadius: 24.0,
+          topRadius: AppRadius.radiusSheet,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Column(
@@ -204,6 +185,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF121414),
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             // Top App Bar
@@ -211,45 +193,68 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
 
             // Content List
             Expanded(
-              child: ListView(
+              child: CustomScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 110),
-                children: [
-                  // Books & Early Access Status Banner
-                  _buildStatusBanner(schedule),
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.screenGutter,
+                      10,
+                      AppSpacing.screenGutter,
+                      0,
+                    ),
+                    sliver: SliverList(
+                      delegate: SliverChildListDelegate([
+                        // Books & Early Access Status Banner
+                        _buildStatusBanner(schedule),
 
-                  const SizedBox(height: 18),
+                        const SizedBox(height: 18),
 
-                  // Metrics Row
-                  _buildMetricsRow(
-                    total: allEntries.length,
-                    waiting: waitingCount,
-                    invited: invitedCount,
-                    booked: bookedCount,
+                        // Metrics Row
+                        _buildMetricsRow(
+                          total: allEntries.length,
+                          waiting: waitingCount,
+                          invited: invitedCount,
+                          booked: bookedCount,
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Search & Filter Row
+                        _buildSearchAndActionRow(),
+
+                        const SizedBox(height: 14),
+                      ]),
+                    ),
                   ),
 
-                  const SizedBox(height: 20),
-
-                  // Search & Filter Row
-                  _buildSearchAndActionRow(),
-
-                  const SizedBox(height: 14),
-
-                  // Filter Chips
-                  _buildFilterChips(
-                    allCount: allEntries.length,
-                    waitingCount: waitingCount,
-                    invitedCount: invitedCount,
-                    bookedCount: bookedCount,
+                  // Filter Chips (Full-bleed unclipped horizontal scrollable)
+                  SliverToBoxAdapter(
+                    child: _buildFilterChips(
+                      allCount: allEntries.length,
+                      waitingCount: waitingCount,
+                      invitedCount: invitedCount,
+                      bookedCount: bookedCount,
+                    ),
                   ),
 
-                  const SizedBox(height: 18),
-
-                  // Waitlist Cards
-                  if (_filteredEntries.isEmpty)
-                    _buildEmptyState()
-                  else
-                    ..._filteredEntries.map((e) => _buildWaitlistCard(e)),
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(
+                      AppSpacing.screenGutter,
+                      18,
+                      AppSpacing.screenGutter,
+                      MediaQuery.paddingOf(context).bottom + 20,
+                    ),
+                    sliver: SliverList(
+                      delegate: SliverChildListDelegate([
+                        // Waitlist Cards
+                        if (_filteredEntries.isEmpty)
+                          _buildEmptyState()
+                        else
+                          ..._filteredEntries.map((e) => _buildWaitlistCard(e)),
+                      ]),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -261,7 +266,10 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
 
   Widget _buildTopAppBar(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.screenGutter - 8.0,
+        vertical: 8,
+      ),
       child: Row(
         children: [
           IconButton(
@@ -299,7 +307,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
               padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
                 color: const Color(0xFFEEC200),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(AppRadius.radiusSm),
               ),
               child: const Icon(Icons.add_rounded, color: Color(0xFF121414), size: 20),
             ),
@@ -320,7 +328,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: const Color(0xFF1A1C1C),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(AppRadius.radiusLg),
           border: Border.all(color: const Color(0xFFEEC200), width: 1.2),
           boxShadow: [
             BoxShadow(
@@ -339,7 +347,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: const Color(0xFFEEC200).withAlpha(30),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                   ),
                   child: const Icon(Icons.stars_rounded, color: Color(0xFFEEC200), size: 18),
                 ),
@@ -385,7 +393,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
                       foregroundColor: const Color(0xFFEEC200),
                       side: const BorderSide(color: Color(0xFFEEC200)),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       textStyle: GoogleFonts.plusJakartaSans(
@@ -401,18 +409,16 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
                     onPressed: () {
                       ArtistDashboardRepository.openBooksPublicly();
                       setState(() {});
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Books opened to public!'),
-                          backgroundColor: Color(0xFF22C55E),
-                        ),
+                      FlashSnackBar.showSuccess(
+                        context,
+                        'Books opened to public!',
                       );
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF242828),
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       elevation: 0,
@@ -436,7 +442,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: const Color(0xFF1A1C1C),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(AppRadius.radiusLg),
           border: Border.all(color: const Color(0xFF2C3030)),
         ),
         child: Row(
@@ -445,7 +451,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: const Color(0xFF282C2C),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(AppRadius.radiusSm),
               ),
               child: const Icon(Icons.lock_clock_rounded, color: Color(0xFF8C9191), size: 18),
             ),
@@ -491,7 +497,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
                 backgroundColor: const Color(0xFFEEC200),
                 foregroundColor: const Color(0xFF121414),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 elevation: 0,
@@ -512,7 +518,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFF161E1A),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.radiusLg),
         border: Border.all(color: const Color(0xFF22C55E).withAlpha(100)),
       ),
       child: Row(
@@ -558,7 +564,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       decoration: BoxDecoration(
         color: const Color(0xFF1A1C1C),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
         border: Border.all(color: const Color(0xFF282C2C)),
       ),
       child: Column(
@@ -594,7 +600,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
             height: 44,
             decoration: BoxDecoration(
               color: const Color(0xFF1A1D1D),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.radiusFull),
               border: Border.all(color: const Color(0xFF2A2E2E)),
             ),
             child: TextField(
@@ -609,7 +615,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
                 ),
                 prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF8C9191), size: 18),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
             ),
           ),
@@ -623,7 +629,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
             backgroundColor: const Color(0xFFEEC200),
             foregroundColor: const Color(0xFF121414),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.radiusMd),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             elevation: 0,
@@ -653,6 +659,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
       child: Row(
         children: filters.map((f) {
           final label = f['label'] as String;
@@ -663,13 +670,13 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
             padding: const EdgeInsets.only(right: 8),
             child: InkWell(
               onTap: () => setState(() => _selectedFilter = label),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(AppRadius.radiusFull),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 160),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF1A1D1D),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusFull),
                   border: Border.all(
                     color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF282C2C),
                   ),
@@ -695,7 +702,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: const Color(0xFF181B1B),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppRadius.radiusLg),
         border: Border.all(
           color: entry.status == WaitlistStatus.earlyAccessSent
               ? const Color(0xFF38BDF8).withAlpha(120)
@@ -707,7 +714,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
         color: Colors.transparent,
         child: InkWell(
           onTap: () => _openAddSheet(entry: entry),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(AppRadius.radiusLg),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -767,7 +774,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
                                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFF282E2E),
-                                    borderRadius: BorderRadius.circular(4),
+                                    borderRadius: BorderRadius.circular(AppRadius.radiusXs),
                                   ),
                                   child: Text(
                                     'Non-App',
@@ -787,7 +794,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFEEC200).withAlpha(24),
-                                  borderRadius: BorderRadius.circular(4),
+                                  borderRadius: BorderRadius.circular(AppRadius.radiusXs),
                                 ),
                                 child: Text(
                                   entry.relationshipTag,
@@ -803,7 +810,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFF282E2E),
-                                  borderRadius: BorderRadius.circular(4),
+                                  borderRadius: BorderRadius.circular(AppRadius.radiusXs),
                                 ),
                                 child: Text(
                                   entry.designType,
@@ -824,7 +831,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: entry.status.badgeColor.withAlpha(24),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                         border: Border.all(
                           color: entry.status.badgeColor.withAlpha(100),
                           width: 1,
@@ -864,7 +871,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: const Color(0xFF141616),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -906,7 +913,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
                           foregroundColor: const Color(0xFFC7CDCD),
                           side: const BorderSide(color: Color(0xFF333838)),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                           ),
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           textStyle: GoogleFonts.plusJakartaSans(
@@ -928,11 +935,9 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
                               ),
                             );
                             setState(() {});
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Early access sent to ${entry.clientName}!'),
-                                backgroundColor: const Color(0xFF38BDF8),
-                              ),
+                            FlashSnackBar.showSuccess(
+                              context,
+                              'Early access sent to ${entry.clientName}!',
                             );
                           },
                           icon: const Icon(Icons.send_rounded, size: 13),
@@ -941,7 +946,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
                             backgroundColor: const Color(0xFFEEC200),
                             foregroundColor: const Color(0xFF121414),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             elevation: 0,
@@ -970,7 +975,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
                             backgroundColor: const Color(0xFF22C55E),
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             elevation: 0,
@@ -1017,7 +1022,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
       padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
       decoration: BoxDecoration(
         color: const Color(0xFF181B1B),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AppRadius.radiusXl),
         border: Border.all(color: const Color(0xFF282C2C)),
       ),
       child: Column(
@@ -1050,7 +1055,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
               backgroundColor: const Color(0xFFEEC200),
               foregroundColor: const Color(0xFF121414),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppRadius.radiusMd),
               ),
             ),
           ),

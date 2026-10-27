@@ -13,19 +13,29 @@ class TattooBackgroundWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.sizeOf(context);
+
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Background subtle tattoo texture extending edge to edge
-        Positioned.fill(
+        // Background subtle tattoo texture extending edge to edge fixed to full screen
+        Positioned(
+          top: 0,
+          left: 0,
+          width: screenSize.width,
+          height: screenSize.height,
           child: Image.asset(
             'assets/images/tattoo_setup.png',
             fit: BoxFit.cover,
             cacheWidth: 1080,
           ),
         ),
-        // Dark vignette gradient overlay for high contrast & text legibility
-        Positioned.fill(
+        // Dark vignette gradient overlay for high contrast & text legibility fixed to full screen
+        Positioned(
+          top: 0,
+          left: 0,
+          width: screenSize.width,
+          height: screenSize.height,
           child: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(

@@ -1,19 +1,27 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../core/utils/distance_calculator.dart';
 import '../core/widgets/flash_bottom_nav_bar.dart';
 import '../models/artist.dart';
+import '../models/user.dart';
+import '../providers/app_providers.dart';
 import '../services/auth_service.dart';
+import '../services/location_service.dart';
+import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 import '../widgets/adaptive_glass_container.dart';
 import '../widgets/artist_card.dart';
+import '../widgets/flash_snack_bar.dart';
 import '../widgets/flash_switch.dart';
 import 'artist_profile_screen.dart';
 import 'splash_screen.dart';
 import 'client_account_screen.dart';
 import '../widgets/guest_auth_prompt_bottom_sheet.dart';
+import '../widgets/reauthentication_bottom_sheet.dart';
 
 enum ArtistSortOption {
   recommended('Recommended', 'Sort by', 'Sort by'),
@@ -27,26 +35,56 @@ enum ArtistSortOption {
   const ArtistSortOption(this.label, this.chipLabel, this.shortLabel);
 }
 
-class BrowseArtistsScreen extends StatefulWidget {
+class BrowseArtistsScreen extends StatelessWidget {
   final AuthService? authService;
   final bool showBottomNav;
+  final List<Artist>? initialArtists;
 
   const BrowseArtistsScreen({
     super.key,
     this.authService,
     this.showBottomNav = true,
+    this.initialArtists,
   });
 
   @override
-  State<BrowseArtistsScreen> createState() => _BrowseArtistsScreenState();
+  Widget build(BuildContext context) {
+    final content = _BrowseArtistsContent(
+      authService: authService,
+      showBottomNav: showBottomNav,
+      initialArtists: initialArtists,
+    );
+    final hasScope = context.findAncestorWidgetOfExactType<ProviderScope>() !=
+            null ||
+        context.findAncestorWidgetOfExactType<UncontrolledProviderScope>() !=
+            null;
+    return hasScope ? content : ProviderScope(child: content);
+  }
 }
 
-class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
-  late final AuthService _authService = widget.authService ?? AuthService();
+class _BrowseArtistsContent extends ConsumerStatefulWidget {
+  final AuthService? authService;
+  final bool showBottomNav;
+  final List<Artist>? initialArtists;
+
+  const _BrowseArtistsContent({
+    required this.authService,
+    required this.showBottomNav,
+    required this.initialArtists,
+  });
+
+  @override
+  ConsumerState<_BrowseArtistsContent> createState() =>
+      _BrowseArtistsContentState();
+}
+
+class _BrowseArtistsContentState extends ConsumerState<_BrowseArtistsContent> {
+  AuthService get _authService =>
+      widget.authService ?? ref.read(authServiceProvider);
   bool _isDeleting = false;
-  late List<Artist> _artists;
+  final Map<String, bool> _favoriteOverrides = <String, bool>{};
+  String? _lastObservedUid;
   int _activeNavIndex = 0;
-  String? _photoUrl;
 
   // Search state
   final TextEditingController _searchController = TextEditingController();
@@ -62,6 +100,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
   bool _filterBipoc = false;
   bool _filterSilentAppointment = false;
   bool _filterNearby = false;
+  String? _userCity;
   final Set<String> _selectedStyles = <String>{};
   double _maxDeposit = 200.0;
   double _maxPrice = 800.0;
@@ -92,20 +131,23 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
     return count;
   }
 
-  double _parseDistance(String distanceStr) {
-    final match = RegExp(r'([0-9]+(?:\.[0-9]+)?)').firstMatch(distanceStr);
-    if (match != null) {
-      return double.tryParse(match.group(1)!) ?? 0.0;
-    }
-    return 0.0;
-  }
-
-  List<Artist> get _filteredArtists {
+  List<Artist> _computeFilteredArtists({
+    required List<Artist> source,
+    required GeoPointCoords? clientCoords,
+    required UserProfile? userProfile,
+  }) {
     final query = _searchQuery.trim().toLowerCase();
 
-    final filtered = _artists.where((artist) {
+    final filtered = source.map((artist) {
+      final favOverride = _favoriteOverrides[artist.id];
+      return favOverride != null
+          ? artist.copyWith(isFavorited: favOverride)
+          : artist;
+    }).where((artist) {
       if (query.isNotEmpty) {
         final matchesQuery = artist.name.toLowerCase().contains(query) ||
+            artist.username.toLowerCase().contains(query) ||
+            artist.studioName.toLowerCase().contains(query) ||
             artist.studioType.toLowerCase().contains(query) ||
             artist.location.toLowerCase().contains(query) ||
             artist.tags.any((t) => t.toLowerCase().contains(query));
@@ -135,30 +177,41 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
         if (!isBipoc) return false;
       }
       if (_filterSilentAppointment) {
-        final isSilent = artist.tags.any((t) => t.toLowerCase().contains('silent')) ||
-            artist.policies.any((p) => p.description.toLowerCase().contains('silent')) ||
-            artist.bio.toLowerCase().contains('silent');
+        final isSilent =
+            artist.tags.any((t) => t.toLowerCase().contains('silent')) ||
+                artist.policies.any(
+                    (p) => p.description.toLowerCase().contains('silent')) ||
+                artist.bio.toLowerCase().contains('silent');
         if (!isSilent) return false;
       }
       if (_filterNearby) {
-        final loc = artist.location.toLowerCase();
-        final isNearby = loc.contains('los angeles') ||
-            loc.contains('silver lake') ||
-            loc.contains('downtown') ||
-            loc.contains('arts district') ||
-            loc.contains('little tokyo');
-        if (!isNearby) return false;
+        final radiusMiles = (userProfile?.travelRadiusMiles ?? 50).toDouble();
+        if (clientCoords != null && artist.distanceMiles != null) {
+          if (artist.distanceMiles! > radiusMiles) return false;
+        } else {
+          final loc = artist.location.toLowerCase();
+          final targetCity = (_userCity ??
+                  userProfile?.cityState?.split(',').first.trim() ??
+                  '')
+              .toLowerCase();
+          if (targetCity.isNotEmpty) {
+            if (!loc.contains(targetCity)) return false;
+          } else {
+            return false;
+          }
+        }
       }
       if (_selectedStyles.isNotEmpty) {
-        final matchesStyle = artist.tags.any((tag) =>
-            _selectedStyles.any((sel) => tag.toLowerCase().contains(sel.toLowerCase())));
+        final matchesStyle = artist.tags.any((tag) => _selectedStyles
+            .any((sel) => tag.toLowerCase().contains(sel.toLowerCase())));
         if (!matchesStyle) return false;
       }
       if (artist.minDeposit > _maxDeposit) {
         return false;
       }
       if (artist.flashArtworks.isNotEmpty) {
-        final hasAffordablePiece = artist.flashArtworks.any((p) => p.price <= _maxPrice);
+        final hasAffordablePiece =
+            artist.flashArtworks.any((p) => p.price <= _maxPrice);
         if (!hasAffordablePiece) return false;
       }
       return true;
@@ -167,8 +220,12 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
     switch (_sortOption) {
       case ArtistSortOption.distance:
         filtered.sort((a, b) {
-          final distA = _parseDistance(a.distance);
-          final distB = _parseDistance(b.distance);
+          final distA = a.distanceMiles ??
+              DistanceCalculator.tryParseMiles(a.distance) ??
+              double.infinity;
+          final distB = b.distanceMiles ??
+              DistanceCalculator.tryParseMiles(b.distance) ??
+              double.infinity;
           return distA.compareTo(distB);
         });
         break;
@@ -179,18 +236,10 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
         filtered.sort((a, b) => a.minDeposit.compareTo(b.minDeposit));
         break;
       case ArtistSortOption.recommended:
-      default:
         break;
     }
 
     return filtered;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _artists = List.from(Artist.mockArtists);
-    _loadUserProfile();
   }
 
   @override
@@ -199,37 +248,23 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
     super.dispose();
   }
 
-  Future<void> _loadUserProfile() async {
-    try {
-      final user = _authService.currentUser;
-      if (user != null) {
-        if (mounted) {
+  Future<void> _handleNearbyChipTap() async {
+    final currentCoords = ref.read(effectiveClientCoordinatesProvider);
+    if (!_filterNearby && currentCoords == null) {
+      final loc = await LocationService.getCurrentLocation();
+      if (loc != null && mounted) {
+        ref.read(liveGpsCoordinatesProvider.notifier).setCoordinates(
+              GeoPointCoords(latitude: loc.latitude, longitude: loc.longitude),
+            );
+        if (loc.city != null && loc.city!.isNotEmpty) {
           setState(() {
-            if (user.photoURL != null && user.photoURL!.isNotEmpty) {
-              _photoUrl = user.photoURL;
-            }
+            _userCity = loc.city;
           });
         }
-
-        try {
-          final doc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get();
-          if (doc.exists && doc.data() != null && mounted) {
-            final data = doc.data()!;
-            if (data['photoURL'] != null && (data['photoURL'] as String).isNotEmpty) {
-              setState(() {
-                _photoUrl = data['photoURL'] as String;
-              });
-            }
-          }
-        } catch (_) {
-          // Fallback gracefully if Firestore is unavailable
-        }
       }
-    } catch (_) {
-      // Fallback gracefully if FirebaseAuth is unavailable or uninitialized
+    }
+    if (mounted) {
+      setState(() => _filterNearby = !_filterNearby);
     }
   }
 
@@ -241,25 +276,17 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
     );
     if (!authenticated || !mounted) return;
 
+    final nextFavorited = !targetArtist.isFavorited;
     setState(() {
-      final index = _artists.indexWhere((a) => a.id == targetArtist.id);
-      if (index != -1) {
-        final artist = _artists[index];
-        _artists[index] = artist.copyWith(isFavorited: !artist.isFavorited);
-      }
+      _favoriteOverrides[targetArtist.id] = nextFavorited;
     });
 
-    final isFav = !targetArtist.isFavorited;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          isFav
-              ? 'Saved ${targetArtist.name} to favorites'
-              : 'Removed ${targetArtist.name} from favorites',
-        ),
-        duration: const Duration(seconds: 1),
-        backgroundColor: const Color(0xFF262929),
-      ),
+    FlashSnackBar.showInfo(
+      context,
+      nextFavorited
+          ? 'Saved ${targetArtist.name} to favorites'
+          : 'Removed ${targetArtist.name} from favorites',
+      duration: const Duration(seconds: 1),
     );
   }
 
@@ -272,8 +299,45 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
     );
   }
 
+  String? _resolveAvatarUrl(UserProfile? profile) {
+    if (profile?.photoUrl != null && profile!.photoUrl!.isNotEmpty) {
+      return profile.photoUrl;
+    }
+    try {
+      final authPhoto = _authService.currentUser?.photoURL;
+      if (authPhoto != null && authPhoto.isNotEmpty) {
+        return authPhoto;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final activeUid = ref.watch(activeUidProvider);
+    if (_lastObservedUid != activeUid) {
+      _lastObservedUid = activeUid;
+      _favoriteOverrides.clear();
+      _userCity = null;
+    }
+
+    final artistsAsync = ref.watch(artistsWithDistanceProvider);
+    final userProfile = ref.watch(currentUserProfileProvider).maybeWhen(
+          data: (u) => u,
+          orElse: () => null,
+        );
+    final clientCoords = ref.watch(effectiveClientCoordinatesProvider);
+
+    final allArtists = widget.initialArtists != null
+        ? widget.initialArtists!
+            .map((a) => a.withLiveDistanceFrom(clientCoords))
+            .toList(growable: false)
+        : artistsAsync.maybeWhen(
+            data: (list) => list,
+            orElse: () => const <Artist>[],
+          );
+
+    final avatarUrl = _resolveAvatarUrl(userProfile);
     final mediaQuery = MediaQuery.of(context);
     return Scaffold(
       backgroundColor: const Color(0xFF121414),
@@ -286,7 +350,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Top Header (Sticky)
-                _buildHeader(),
+                _buildHeader(avatarUrl),
 
                 // Search Bar (Sticky)
                 _buildSearchBar(),
@@ -306,30 +370,52 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                       // Calculate available space for the card so it fits between
                       // the top filters and the floating bottom navigation bar
                       final bottomNavHeight = AppTheme.navBarHeight;
-                      final bottomNavFloatingOffset = mediaQuery.padding.bottom + AppTheme.navBarBottomMargin;
-                      final bottomNavTotalOcclusion = bottomNavFloatingOffset + bottomNavHeight;
-                      final bottomBreathingGap = 14.0;
-                      final bottomReserved = bottomNavTotalOcclusion + bottomBreathingGap;
+                      final bottomNavFloatingOffset =
+                          mediaQuery.padding.bottom + AppTheme.navBarBottomMargin;
+                      final bottomNavTotalOcclusion =
+                          bottomNavFloatingOffset + bottomNavHeight;
+                      const bottomBreathingGap = 14.0;
+                      final bottomReserved =
+                          bottomNavTotalOcclusion + bottomBreathingGap;
 
-                      final cardHeight = (constraints.maxHeight - bottomReserved - topOffset)
-                          .clamp(460.0, 600.0);
+                      final cardHeight =
+                          (constraints.maxHeight - bottomReserved - topOffset)
+                              .clamp(460.0, 600.0);
                       final itemExtent = cardHeight + cardGap;
 
                       // Allow the last card to scroll up and snap to the exact same top position
-                      final bottomPadding = (constraints.maxHeight - itemExtent - topOffset)
-                          .clamp(0.0, double.infinity);
+                      final bottomPadding =
+                          (constraints.maxHeight - itemExtent - topOffset)
+                              .clamp(0.0, double.infinity);
 
-                      final displayArtists = _filteredArtists;
+                      final displayArtists = _computeFilteredArtists(
+                        source: allArtists,
+                        clientCoords: clientCoords,
+                        userProfile: userProfile,
+                      );
 
                       if (displayArtists.isEmpty) {
-                        return _buildEmptyState(bottomReserved);
+                        return ListView(
+                          padding: const EdgeInsets.only(
+                            left: AppSpacing.screenGutter,
+                            right: AppSpacing.screenGutter,
+                            top: topOffset,
+                          ),
+                          children: [
+                            _buildEmptyState(
+                              bottomReserved: 16.0,
+                              hasAnyArtistsInDb: allArtists.isNotEmpty,
+                            ),
+                            _buildDeleteAccountFooter(bottomReserved),
+                          ],
+                        );
                       }
 
                       return ListView.builder(
                         physics: SnappingScrollPhysics(itemHeight: itemExtent),
                         padding: EdgeInsets.only(
-                          left: AppSpacing.spaceMd,
-                          right: AppSpacing.spaceMd,
+                          left: AppSpacing.screenGutter,
+                          right: AppSpacing.screenGutter,
                           top: topOffset,
                           bottom: bottomPadding,
                         ),
@@ -362,8 +448,8 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
           // 2. Floating Translucent/Glassmorphic Bottom Navigation Bar (if standalone)
           if (widget.showBottomNav)
             Positioned(
-              left: AppTheme.navBarHorizontalMargin,
-              right: AppTheme.navBarHorizontalMargin,
+              left: AppSpacing.screenGutter,
+              right: AppSpacing.screenGutter,
               bottom: mediaQuery.padding.bottom + AppTheme.navBarBottomMargin,
               child: FlashBottomNavBar(
                 currentIndex: _activeNavIndex,
@@ -377,10 +463,10 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
   }
 
   /// Sticky Header: "Browse Artists" bold title + user avatar
-  Widget _buildHeader() {
+  Widget _buildHeader(String? avatarUrl) {
     return Padding(
       padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.spaceLg,
+        horizontal: AppSpacing.screenGutter,
         vertical: AppSpacing.spaceSm,
       ),
       child: Row(
@@ -407,7 +493,10 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                   ),
                 ),
               );
-              _loadUserProfile();
+              if (mounted) {
+                ref.invalidate(currentUserProfileProvider);
+                setState(() {});
+              }
             },
             child: Container(
               width: 40,
@@ -427,9 +516,9 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                 ],
               ),
               child: ClipOval(
-                child: _photoUrl != null && _photoUrl!.isNotEmpty
+                child: avatarUrl != null && avatarUrl.isNotEmpty
                     ? Image.network(
-                        _photoUrl!,
+                        avatarUrl,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
                           return const Center(
@@ -458,14 +547,14 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
   Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.spaceLg,
+        horizontal: AppSpacing.screenGutter,
         vertical: AppSpacing.spaceXs,
       ),
       child: Container(
         height: 46,
         decoration: BoxDecoration(
           color: AppTheme.cardBackground,
-          borderRadius: BorderRadius.circular(23),
+          borderRadius: BorderRadius.circular(AppRadius.radiusFull),
           border: Border.all(color: AppTheme.cardBorder, width: 1.2),
         ),
         child: TextField(
@@ -521,11 +610,11 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
         children: [
           // Pinned borderless "Sort" button with up/down arrow and selected sort label
           Padding(
-            padding: const EdgeInsets.only(left: AppSpacing.spaceLg),
+            padding: const EdgeInsets.only(left: AppSpacing.screenGutter),
             child: InkWell(
               key: const Key('sort_by_chip'),
               onTap: _showSortModal,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.radiusSm),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 child: Row(
@@ -565,7 +654,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.only(
-                right: AppSpacing.spaceLg,
+                right: AppSpacing.screenGutter,
               ),
               child: Row(
                 children: [
@@ -635,7 +724,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
             icon: Icons.location_on_outlined,
             label: 'Nearby',
             isActive: _filterNearby,
-            onTap: () => setState(() => _filterNearby = !_filterNearby),
+            onTap: _handleNearbyChipTap,
           ),
         ],
       ),
@@ -646,13 +735,19 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
   );
   }
 
-  /// Empty state rendered when active filters yield 0 artist matches
-  Widget _buildEmptyState(double bottomReserved) {
+  /// Honest empty state rendered either when no live artists exist yet or when
+  /// active filters yield 0 artist matches.
+  Widget _buildEmptyState({
+    required double bottomReserved,
+    required bool hasAnyArtistsInDb,
+  }) {
+    final isFilterEmpty = _hasActiveFilters || hasAnyArtistsInDb;
+
     return Center(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
           AppSpacing.spaceLg,
-          32,
+          48,
           AppSpacing.spaceLg,
           bottomReserved,
         ),
@@ -667,15 +762,17 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                 shape: BoxShape.circle,
                 border: Border.all(color: const Color(0xFF383B3B)),
               ),
-              child: const Icon(
-                Icons.search_off_rounded,
-                color: Color(0xFFEEC200),
+              child: Icon(
+                isFilterEmpty
+                    ? Icons.search_off_rounded
+                    : Icons.auto_awesome_outlined,
+                color: const Color(0xFFEEC200),
                 size: 32,
               ),
             ),
             const SizedBox(height: 16),
             Text(
-              'No Artists Found',
+              isFilterEmpty ? 'No Artists Found' : 'No Artists Available Yet',
               style: GoogleFonts.plusJakartaSans(
                 color: const Color(0xFFF9FAFA),
                 fontSize: 18,
@@ -684,7 +781,9 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'No artists match your active filter criteria.\nTry clearing or adjusting your filters.',
+              isFilterEmpty
+                  ? 'No artists match your active filter criteria.\nTry clearing or adjusting your filters.'
+                  : 'Onboarded artists will appear here automatically in real time as soon as their profiles go live.',
               textAlign: TextAlign.center,
               style: GoogleFonts.plusJakartaSans(
                 color: const Color(0xFF919696),
@@ -692,40 +791,42 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                 height: 1.4,
               ),
             ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF262929),
-                foregroundColor: const Color(0xFFEEC200),
-                side: const BorderSide(color: Color(0xFFEEC200)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+            if (isFilterEmpty) ...[
+              const SizedBox(height: 20),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF262929),
+                  foregroundColor: const Color(0xFFEEC200),
+                  side: const BorderSide(color: Color(0xFFEEC200)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _searchController.clear();
+                    _searchQuery = '';
+                    _filterBooksOpen = false;
+                    _filterQueerArtists = false;
+                    _filterFemale = false;
+                    _filterBipoc = false;
+                    _filterSilentAppointment = false;
+                    _filterNearby = false;
+                    _selectedStyles.clear();
+                    _maxDeposit = 200.0;
+                    _maxPrice = 800.0;
+                    _sortOption = ArtistSortOption.recommended;
+                  });
+                },
+                child: Text(
+                  'Reset Filters',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
               ),
-              onPressed: () {
-                setState(() {
-                  _searchController.clear();
-                  _searchQuery = '';
-                  _filterBooksOpen = false;
-                  _filterQueerArtists = false;
-                  _filterFemale = false;
-                  _filterBipoc = false;
-                  _filterSilentAppointment = false;
-                  _filterNearby = false;
-                  _selectedStyles.clear();
-                  _maxDeposit = 200.0;
-                  _maxPrice = 800.0;
-                  _sortOption = ArtistSortOption.recommended;
-                });
-              },
-              child: Text(
-                'Reset Filters',
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-            ),
+            ],
           ],
         ),
       ),
@@ -772,7 +873,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                 unselectedBorderColor: const Color(0xFF383B3B),
                 selectedBorderWidth: 1.0,
                 unselectedBorderWidth: 1.0,
-                topRadius: 24.0,
+                topRadius: AppRadius.radiusSheet,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(
                     AppSpacing.spaceLg,
@@ -793,7 +894,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                         height: 4,
                         decoration: BoxDecoration(
                           color: const Color(0xFF5A5E5E),
-                          borderRadius: BorderRadius.circular(2),
+                          borderRadius: BorderRadius.circular(AppRadius.dragHandle),
                         ),
                       ),
                     ),
@@ -873,7 +974,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                               color: isSelected
                                   ? const Color(0xFFEEC200)
                                   : const Color(0xFF262929),
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(AppRadius.radiusFull),
                               border: Border.all(
                                 color: isSelected
                                     ? const Color(0xFFEEC200)
@@ -1054,7 +1155,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                         foregroundColor: const Color(0xFF121414),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                         ),
                         elevation: 0,
                       ),
@@ -1107,7 +1208,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
           unselectedBorderColor: const Color(0xFF383B3B),
           selectedBorderWidth: 1.0,
           unselectedBorderWidth: 1.0,
-          topRadius: 24.0,
+          topRadius: AppRadius.radiusSheet,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.spaceLg,
@@ -1127,7 +1228,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                   height: 4,
                   decoration: BoxDecoration(
                     color: const Color(0xFF5A5E5E),
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.circular(AppRadius.dragHandle),
                   ),
                 ),
               ),
@@ -1196,12 +1297,12 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                         });
                         Navigator.pop(modalContext);
                       },
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         decoration: BoxDecoration(
                           color: isSelected ? const Color(0xFF262312) : const Color(0xFF262929),
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                           border: Border.all(
                             color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF383B3B),
                             width: isSelected ? 1.5 : 1.0,
@@ -1268,12 +1369,12 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
       color: Colors.transparent,
       child: InkWell(
         onTap: () => onChanged(!value),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: const Color(0xFF262929),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(AppRadius.radiusMd),
             border: Border.all(
               color: value ? const Color(0xFFEEC200).withAlpha(120) : const Color(0xFF383B3B),
               width: 1.0,
@@ -1340,7 +1441,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: isActive ? const Color(0xFF262929) : const Color(0xFF1E2020),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AppRadius.radiusFull),
           border: Border.all(
             color: isActive ? const Color(0xFFEEC200) : const Color(0xFF383B3B),
             width: 1.5,
@@ -1385,7 +1486,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: isActive ? const Color(0xFFEEC200) : const Color(0xFF1E2020),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AppRadius.radiusFull),
           border: Border.all(
             color: isActive ? const Color(0xFFEEC200) : const Color(0xFF383B3B),
             width: 1.5,
@@ -1463,7 +1564,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.radiusMd),
             ),
           ),
         ),
@@ -1481,7 +1582,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
         return AlertDialog(
           backgroundColor: const Color(0xFF1E2020),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AppRadius.radiusLg),
           ),
           title: Center(
             child: Text(
@@ -1528,7 +1629,7 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
                 backgroundColor: const Color(0xFFEF4444),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                 ),
               ),
               onPressed: () {
@@ -1561,18 +1662,10 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
     try {
       await _authService.deleteAccount();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Account deleted. A confirmation email has been sent.',
-              style: GoogleFonts.plusJakartaSans(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            backgroundColor: const Color(0xFF22C55E),
-            behavior: SnackBarBehavior.floating,
-          ),
+        invalidateUserSessionProviders(ref);
+        FlashSnackBar.showSuccess(
+          context,
+          'Account deleted. A confirmation email has been sent.',
         );
         Navigator.pushAndRemoveUntil(
           context,
@@ -1585,15 +1678,36 @@ class _BrowseArtistsScreenState extends State<BrowseArtistsScreen> {
         final errorMessage = e is FirebaseAuthException
             ? _authService.handleFirebaseAuthException(e).toString().replaceFirst('Exception: ', '')
             : e.toString().replaceFirst('Exception: ', '');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              errorMessage,
-              style: GoogleFonts.plusJakartaSans(color: Colors.white),
-            ),
-            backgroundColor: const Color(0xFFEF4444),
-            behavior: SnackBarBehavior.floating,
-          ),
+        final isRecentLogin = errorMessage.contains('requires recent authentication') ||
+            (e is FirebaseAuthException && e.code == 'requires-recent-login');
+
+        FlashSnackBar.showError(
+          context,
+          errorMessage,
+          action: isRecentLogin
+              ? SnackBarAction(
+                  label: 'Verify',
+                  textColor: AppTheme.gold,
+                  onPressed: () {
+                    ReauthenticationBottomSheet.show(
+                      context: context,
+                      authService: _authService,
+                      onSuccess: () {
+                        invalidateUserSessionProviders(ref);
+                        FlashSnackBar.showSuccess(
+                          context,
+                          'Account deleted. A confirmation email has been sent.',
+                        );
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(builder: (_) => const SplashScreen()),
+                          (route) => false,
+                        );
+                      },
+                    );
+                  },
+                )
+              : null,
         );
       }
     } finally {

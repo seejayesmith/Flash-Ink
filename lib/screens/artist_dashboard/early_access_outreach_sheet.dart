@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../models/waitlist_entry.dart';
+import '../../theme/app_radius.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
+import '../../widgets/flash_snack_bar.dart';
 
 /// Modal bottom sheet providing the artist with a real-time outreach checklist
 /// for non-app friends & family, and confirming in-app delivery for registered Flash users.
@@ -48,31 +50,9 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
 
   void _copyVipLink(WaitlistEntry entry) {
     Clipboard.setData(ClipboardData(text: entry.vipBookingLink));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Color(0xFFEEC200), size: 18),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'VIP Link for ${entry.clientName} copied to clipboard!',
-                style: GoogleFonts.plusJakartaSans(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12.5,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF1E2121),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Color(0xFFEEC200), width: 1),
-        ),
-      ),
+    FlashSnackBar.showSuccess(
+      context,
+      'VIP Link for ${entry.clientName} copied to clipboard!',
     );
   }
 
@@ -83,23 +63,9 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
     setState(() {
       _manuallySentIds.add(entry.id);
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Personalized invite text copied! Ready to paste into SMS or Messages.',
-          style: GoogleFonts.plusJakartaSans(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-            fontSize: 12.5,
-          ),
-        ),
-        backgroundColor: const Color(0xFF1E2121),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Color(0xFF38BDF8), width: 1),
-        ),
-      ),
+    FlashSnackBar.showSuccess(
+      context,
+      'Personalized invite text copied! Ready to paste into SMS or Messages.',
     );
   }
 
@@ -121,7 +87,7 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
         unselectedBorderColor: const Color(0xFFEEC200),
         selectedBorderWidth: 1.5,
         unselectedBorderWidth: 1.5,
-        topRadius: 28.0,
+        topRadius: AppRadius.radiusSheet,
         child: Column(
         children: [
           // Drag handle
@@ -132,7 +98,7 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
               height: 4,
               decoration: BoxDecoration(
                 color: const Color(0xFF333838),
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: BorderRadius.circular(AppRadius.dragHandle),
               ),
             ),
           ),
@@ -146,7 +112,7 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: const Color(0xFFEEC200).withAlpha(28),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                     border: Border.all(
                       color: const Color(0xFFEEC200).withAlpha(120),
                       width: 1,
@@ -229,7 +195,7 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: const Color(0xFF1E2121),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                     border: Border.all(color: const Color(0xFF2C3232)),
                   ),
                   child: Row(
@@ -252,11 +218,9 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
                           setState(() {});
                           widget.onBooksUpdated?.call();
                           Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Books are now completely open to the public!'),
-                              backgroundColor: Color(0xFF22C55E),
-                            ),
+                          FlashSnackBar.showSuccess(
+                            context,
+                            'Books are now completely open to the public!',
                           );
                         },
                         style: OutlinedButton.styleFrom(
@@ -306,7 +270,7 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: const Color(0xFF1B1D1D),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                     ),
                     child: Center(
                       child: Text(
@@ -362,7 +326,7 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFF1B1E1E),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.radiusLg),
         border: Border.all(
           color: isSent ? const Color(0xFF22C55E).withAlpha(80) : const Color(0xFF323838),
           width: 1,
@@ -404,7 +368,7 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: const Color(0xFFEEC200).withAlpha(24),
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(AppRadius.radiusXs),
                           ),
                           child: Text(
                             entry.relationshipTag,
@@ -433,7 +397,7 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: const Color(0xFF22C55E).withAlpha(30),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -482,7 +446,7 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
                       fontWeight: FontWeight.w700,
                     ),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                     ),
                   ),
                 ),
@@ -495,7 +459,7 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
                 style: IconButton.styleFrom(
                   backgroundColor: const Color(0xFF262B2B),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                   ),
                 ),
               ),
@@ -512,7 +476,7 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFF1B1E1E),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
         border: Border.all(color: const Color(0xFF282D2D)),
       ),
       child: Row(
@@ -570,7 +534,7 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
               color: const Color(0xFF22C55E).withAlpha(24),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(AppRadius.radiusSm),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,

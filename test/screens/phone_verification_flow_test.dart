@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:flash_ink/screens/account_creation_screen.dart';
+import 'package:flash_ink/screens/artist_onboarding/artist_info_screen.dart';
 import 'package:flash_ink/screens/phone_verification_screen.dart';
 import 'package:flash_ink/screens/profile_setup_screen.dart';
 import 'package:flash_ink/screens/role_selection_screen.dart';
@@ -157,15 +158,11 @@ void main() {
           authService: authService,
         )));
 
-        // Open Phone bottom sheet
-        await tester.tap(find.text('Continue with Phone'));
+        // Leave empty and tap CONTINUE
+        await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
         await tester.pumpAndSettle();
 
-        // Leave empty and tap send
-        await tester.tap(find.text('SEND VERIFICATION CODE'));
-        await tester.pumpAndSettle();
-
-        expect(find.text('Please enter your phone number'), findsOneWidget);
+        expect(find.text('Please enter your email or phone number'), findsOneWidget);
         expect(authService.verifyPhoneNumberCallCount, 0);
         expect(find.byType(PhoneVerificationScreen), findsNothing);
       });
@@ -176,13 +173,10 @@ void main() {
           authService: authService,
         )));
 
-        await tester.tap(find.text('Continue with Phone'));
-        await tester.pumpAndSettle();
-
-        await tester.enterText(find.byType(TextFormField), '555-123');
+        await tester.enterText(find.byKey(const Key('unified_auth_input_field')), '555-123');
         await tester.pump();
 
-        await tester.tap(find.text('SEND VERIFICATION CODE'));
+        await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
         await tester.pumpAndSettle();
 
         expect(find.text('Please enter a valid 10-digit phone number'), findsOneWidget);
@@ -196,17 +190,14 @@ void main() {
           authService: authService,
         )));
 
-        await tester.tap(find.text('Continue with Phone'));
-        await tester.pumpAndSettle();
-
-        await tester.enterText(find.byType(TextFormField), '4155552671');
+        await tester.enterText(find.byKey(const Key('unified_auth_input_field')), '4155552671');
         await tester.pump();
 
-        await tester.tap(find.text('SEND VERIFICATION CODE'));
+        await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
         await tester.pumpAndSettle();
 
         expect(authService.verifyPhoneNumberCallCount, 1);
-        expect(authService.lastPhoneNumberSent, '+1 4155552671');
+        expect(authService.lastPhoneNumberSent, '+14155552671');
         expect(find.byType(PhoneVerificationScreen), findsOneWidget);
       });
 
@@ -216,21 +207,18 @@ void main() {
           authService: authService,
         )));
 
-        await tester.tap(find.text('Continue with Phone'));
-        await tester.pumpAndSettle();
-
-        await tester.enterText(find.byType(TextFormField), '+44 7911 123456');
+        await tester.enterText(find.byKey(const Key('unified_auth_input_field')), '+44 7911 123456');
         await tester.pump();
 
-        await tester.tap(find.text('SEND VERIFICATION CODE'));
+        await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
         await tester.pumpAndSettle();
 
         expect(authService.verifyPhoneNumberCallCount, 1);
-        expect(authService.lastPhoneNumberSent, '+44 7911 123456');
+        expect(authService.lastPhoneNumberSent, '+447911123456');
         expect(find.byType(PhoneVerificationScreen), findsOneWidget);
       });
 
-      testWidgets('Surfaces SMS failure, keeps modal open, and allows recovery on retry', (WidgetTester tester) async {
+      testWidgets('Surfaces SMS failure, keeps screen open, and allows recovery on retry', (WidgetTester tester) async {
         authService.failVerifyPhone = true;
         authService.verifyPhoneErrorCode = 'quota-exceeded';
 
@@ -239,25 +227,22 @@ void main() {
           authService: authService,
         )));
 
-        await tester.tap(find.text('Continue with Phone'));
-        await tester.pumpAndSettle();
-
-        await tester.enterText(find.byType(TextFormField), '5550192834');
+        await tester.enterText(find.byKey(const Key('unified_auth_input_field')), '5550192834');
         await tester.pump();
 
-        await tester.tap(find.text('SEND VERIFICATION CODE'));
+        await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
         await tester.pumpAndSettle();
 
         // Check error surfaced in both banner and snackbar
         expect(find.textContaining('SMS quota exceeded'), findsWidgets);
-        // Modal remains open
-        expect(find.text('Verify Phone Number'), findsOneWidget);
+        // Screen remains open
+        expect(find.byType(AccountCreationScreen), findsOneWidget);
         expect(find.byType(PhoneVerificationScreen), findsNothing);
         expect(authService.firestorePhoneVerifiedSet, isFalse);
 
         // RECOVERY: fix error condition and tap again
         authService.failVerifyPhone = false;
-        await tester.tap(find.text('SEND VERIFICATION CODE'));
+        await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
         await tester.pumpAndSettle();
 
         expect(authService.verifyPhoneNumberCallCount, 2);
@@ -543,14 +528,53 @@ void main() {
         expect(authService.signOutCallCount, 1);
         expect(find.byType(RoleSelectionScreen), findsOneWidget);
       });
+
+      testWidgets('Routes artist role to ArtistInfoScreen via AuthRouting after phone verification', (WidgetTester tester) async {
+        await tester.pumpWidget(createScreen(PhoneVerificationScreen(
+          phoneNumber: '+15550192834',
+          verificationId: 'vid_initial_111',
+          role: 'artist',
+          authService: authService,
+        )));
+
+        await tester.enterText(find.byType(TextField), '123456');
+        await tester.pumpAndSettle();
+
+        expect(authService.firestorePhoneVerifiedSet, isTrue);
+        expect(find.byType(ArtistInfoScreen), findsOneWidget);
+      });
+
+      testWidgets('Displays only inline error banner (no SnackBar) on invalid code and session-expired', (WidgetTester tester) async {
+        authService.failSignInWithPhone = true;
+        authService.signInErrorCode = 'invalid-verification-code';
+
+        await tester.pumpWidget(createScreen(PhoneVerificationScreen(
+          phoneNumber: '+15550192834',
+          verificationId: 'vid_initial_111',
+          authService: authService,
+        )));
+
+        await tester.enterText(find.byType(TextField), '999999');
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('phone_verification_error_banner')), findsOneWidget);
+        expect(find.textContaining('The verification code entered is invalid.'), findsOneWidget);
+        expect(find.byType(SnackBar), findsNothing);
+      });
     });
 
-    group('AuthService Exception Mapper Fallback Edge Cases', () {
+    group('AuthService Exception Mapper & E.164 Formatting Edge Cases', () {
       test('Maps unknown error code to fallback message with code', () {
         final exc = authService.handleFirebaseAuthException(
           FirebaseAuthException(code: 'unknown-vendor-error', message: 'Something went wrong in vendor SDK'),
         );
         expect(exc.toString(), contains('Something went wrong in vendor SDK'));
+      });
+
+      test('Formats phone numbers to strict E.164', () {
+        expect(AuthService.formatE164PhoneNumber('(555) 019-2834'), '+15550192834');
+        expect(AuthService.formatE164PhoneNumber('1-555-019-2834'), '+15550192834');
+        expect(AuthService.formatE164PhoneNumber('+44 7911 123456'), '+447911123456');
       });
     });
   });

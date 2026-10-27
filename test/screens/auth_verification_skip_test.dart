@@ -11,7 +11,6 @@ import 'package:flash_ink/screens/phone_verification_screen.dart';
 import 'package:flash_ink/screens/phone_entry_screen.dart';
 import 'package:flash_ink/screens/role_selection_screen.dart';
 import 'package:flash_ink/screens/account_creation_screen.dart';
-import 'package:flash_ink/screens/aesthetics_selection_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_phone_verification_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_info_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_profile_photo_screen.dart';
@@ -40,12 +39,14 @@ void main() {
   });
 
   setUp(() {
+    AuthService.devMockUser = null;
     final binding = TestWidgetsFlutterBinding.ensureInitialized();
     binding.platformDispatcher.views.first.physicalSize = const Size(1080, 2400);
     binding.platformDispatcher.views.first.devicePixelRatio = 1.0;
   });
 
   tearDown(() {
+    AuthService.devMockUser = null;
     final binding = TestWidgetsFlutterBinding.ensureInitialized();
     binding.platformDispatcher.views.first.resetPhysicalSize();
     binding.platformDispatcher.views.first.resetDevicePixelRatio();
@@ -203,7 +204,7 @@ void main() {
       expect(find.byType(ProfileSetupScreen), findsOneWidget);
     });
 
-    testWidgets('RoleSelectionScreen: Has SkipPillButton and skips to AestheticsSelectionScreen', (tester) async {
+    testWidgets('RoleSelectionScreen: Does not have SkipPillButton and requires role selection', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: RoleSelectionScreen(
@@ -213,13 +214,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('skip_role_selection_button')), findsOneWidget);
-      expect(find.text('Skip'), findsOneWidget);
-
-      await tester.tap(find.byKey(const Key('skip_role_selection_button')));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(AestheticsSelectionScreen), findsOneWidget);
+      expect(find.byKey(const Key('skip_role_selection_button')), findsNothing);
+      expect(find.byType(SkipPillButton), findsNothing);
+      expect(find.text('Skip'), findsNothing);
     });
 
     testWidgets('AccountCreationScreen (client): Has SkipPillButton and skips to ProfileSetupScreen', (tester) async {

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../theme/app_radius.dart';
+import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
 import '../../domain/models/message_thread.dart';
 import '../widgets/booking_receipt_message_tile.dart';
@@ -133,12 +135,13 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         ),
       ),
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             // Context Banner (Flash piece or booking)
             if (widget.thread.flashTitleContext != null)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter, vertical: 8),
                 decoration: const BoxDecoration(
                   color: AppTheme.onyxContainer,
                   border: Border(
@@ -176,7 +179,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             Expanded(
               child: ListView.builder(
                 controller: _scrollController,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter, vertical: 12),
                 itemCount: _messages.length,
                 itemBuilder: (context, index) {
                   final msg = _messages[index];
@@ -239,7 +242,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
             // Message Input Bar
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.screenGutter,
+                8,
+                AppSpacing.screenGutter,
+                MediaQuery.paddingOf(context).bottom + 8,
+              ),
               decoration: const BoxDecoration(
                 color: AppTheme.onyxSurface,
                 border: Border(
@@ -253,7 +261,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                       height: 42,
                       decoration: BoxDecoration(
                         color: AppTheme.cardBackground,
-                        borderRadius: BorderRadius.circular(21),
+                        borderRadius: BorderRadius.circular(AppRadius.radiusFull),
                         border: Border.all(color: AppTheme.cardBorder),
                       ),
                       child: TextField(

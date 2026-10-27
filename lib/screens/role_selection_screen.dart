@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_buttons.dart';
 import '../widgets/adaptive_glass_container.dart';
+import '../widgets/flash_glass_app_bar.dart';
 import '../services/auth_service.dart';
 import 'account_creation_screen.dart';
 
@@ -40,13 +41,13 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   }) {
     final isSelected = _selectedRole == role;
     return AdaptiveGlassContainer(
-      margin: const EdgeInsets.only(bottom: AppSpacing.spaceMd),
-      padding: const EdgeInsets.all(AppSpacing.spaceLg),
+      margin: EdgeInsets.only(bottom: role == 'artist' ? 0 : AppSpacing.spaceMd),
+      padding: AppPadding.card,
       borderRadius: 16.0,
       isSelected: isSelected,
       useGradient: false,
-      unselectedBaseTintAlpha: 82, // ~32% opacity for glass-like transparency
-      selectedBaseTintAlpha: 115,   // ~45% opacity for tactile depth on selection
+      unselectedBaseTintAlpha: 55, // Increased transparency for authentic glass refraction (~21% opacity)
+      selectedBaseTintAlpha: 85,   // Tactile depth while slightly more transparent (~33% opacity)
       onTap: () => setState(() => _selectedRole = role),
       child: Column(
         children: [
@@ -112,20 +113,27 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false, // Prevent popping back to splash
+      canPop: true,
       child: Scaffold(
         backgroundColor: const Color(0xFF121414),
         extendBodyBehindAppBar: true,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          automaticallyImplyLeading: false,
+        resizeToAvoidBottomInset: false,
+        appBar: FlashGlassAppBar(
+          showBackButton: true,
+          onBackPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            }
+          },
         ),
         body: Stack(
           children: [
-            // Background tattoo setup texture - clear and vibrant
-            Positioned.fill(
+            // Background tattoo setup texture - clear and vibrant pinned to full screen
+            Positioned(
+              top: 0,
+              left: 0,
+              width: MediaQuery.sizeOf(context).width,
+              height: MediaQuery.sizeOf(context).height,
               child: Image.asset(
                 'assets/images/tattoo_setup.png',
                 fit: BoxFit.cover,
@@ -133,7 +141,11 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
               ),
             ),
             // Gentle gradient overlay: dark at top for text readability, subtle dark scrim over bright tray sections
-            Positioned.fill(
+            Positioned(
+              top: 0,
+              left: 0,
+              width: MediaQuery.sizeOf(context).width,
+              height: MediaQuery.sizeOf(context).height,
               child: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -152,87 +164,112 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                 ),
               ),
             ),
-            SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: constraints.maxHeight,
-                      ),
-                      child: IntrinsicHeight(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.spaceLg,
-                            vertical: AppSpacing.spaceLg,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+            Column(
+              children: [
+                // Spacing for extended transparent app bar
+                SizedBox(
+                  height: MediaQuery.paddingOf(context).top + kToolbarHeight,
+                ),
 
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  'Let\'s get started.',
-                                  maxLines: 1,
-                                  style: GoogleFonts.plusJakartaSans(
-                                    color: const Color(0xFFF9FAFA),
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.bold,
-                                    height: 1.15,
-                                  ),
-                                ),
-                              ),
-                              AppGaps.gapSm,
-                              Text(
-                                'Tell us how you\'ll be using the\nplatform so we can tailor your\nexperience.',
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: const Color(0xFF919696),
-                                  fontSize: 15,
-                                  height: 1.4,
-                                ),
-                              ),
-                              const SizedBox(height: AppSpacing.spaceXl),
-                              // Adaptive Glass / Material Role Cards
-                              _buildRoleCard(
-                                role: 'client',
-                                title: 'I get tattoos',
-                                description:
-                                    'Discover artists, book\nappointments, and build your\ncollection.',
-                                icon: Icons.favorite,
-                              ),
-                              _buildRoleCard(
-                                role: 'artist',
-                                title: 'I make tattoos',
-                                description:
-                                    'Manage bookings, showcase your\nportfolio, and connect with\nclients.',
-                                icon: Icons.brush,
-                              ),
-                              const Spacer(),
-                              AppGaps.gapMd,
-                              // Continue button pinned to the bottom dynamically
-                              AppButtons.primaryCTA(
-                                onPressed: _selectedRole == null
-                                    ? null
-                                    : _handleContinue,
-                                text: 'CONTINUE',
-                                backgroundColor: _selectedRole == null
-                                    ? const Color(0xFF4D5252)
-                                    : const Color(0xFFEEC200),
-                                foregroundColor: _selectedRole == null
-                                    ? const Color(0xFF919696)
-                                    : const Color(0xFF121414),
-                              ),
-                            ],
+                // Content area: top-aligned header, centered route options container
+                Expanded(
+                  child: MediaQuery.removePadding(
+                    context: context,
+                    removeTop: true,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.screenMargin,
                           ),
-                        ),
-                      ),
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: constraints.maxHeight,
+                            ),
+                            child: IntrinsicHeight(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    "Let's get started.",
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 34,
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFFF9FAFA),
+                                      height: 1.15,
+                                    ),
+                                  ),
+                                  AppGaps.headerTitleSubtitle,
+                                  Text(
+                                    "Tell us how you'll be using the platform so we can tailor your experience.",
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 15,
+                                      color: const Color(0xFF919696),
+                                      height: 1.4,
+                                    ),
+                                  ),
+
+                                  // Spacer to center the route options container
+                                  const SizedBox(height: 38),
+                                  const Spacer(),
+
+                                  // Centered route options container
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _buildRoleCard(
+                                        role: 'client',
+                                        title: 'I get tattoos',
+                                        description:
+                                            'Discover artists, book\nappointments, and build your\ncollection.',
+                                        icon: Icons.favorite,
+                                      ),
+                                      _buildRoleCard(
+                                        role: 'artist',
+                                        title: 'I make tattoos',
+                                        description:
+                                            'Manage bookings, showcase your\nportfolio, and connect with\nclients.',
+                                        icon: Icons.brush,
+                                      ),
+                                    ],
+                                  ),
+
+                                  // Spacer to balance the vertical negative space
+                                  const Spacer(),
+                                  const SizedBox(height: 12),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
+                  ),
+                ),
+
+                // Anchored bottom CTA button
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    AppSpacing.screenMargin,
+                    12,
+                    AppSpacing.screenMargin,
+                    MediaQuery.paddingOf(context).bottom +
+                        AppSpacing.ctaBottomPadding,
+                  ),
+                  child: AppButtons.primaryCTA(
+                    onPressed: _selectedRole == null ? null : _handleContinue,
+                    text: 'CONTINUE',
+                    backgroundColor: _selectedRole == null
+                        ? const Color(0xFF4D5252)
+                        : const Color(0xFFEEC200),
+                    foregroundColor: _selectedRole == null
+                        ? const Color(0xFF919696)
+                        : const Color(0xFF121414),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

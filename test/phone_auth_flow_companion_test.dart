@@ -204,37 +204,25 @@ void main() {
         await tester.pumpWidget(buildCompanionApp(authService: authService));
         await tester.pumpAndSettle();
 
-        // 1. Verify AccountCreationScreen is displayed
+        // 1. Verify AccountCreationScreen is displayed with unified input
         expect(find.byType(AccountCreationScreen), findsOneWidget);
-        expect(find.text('Continue with Phone'), findsOneWidget);
+        expect(find.byKey(const Key('unified_auth_input_field')), findsOneWidget);
+        expect(find.byKey(const Key('unified_auth_continue_button')), findsOneWidget);
 
-        // 2. Tap 'Continue with Phone' to open the modal bottom sheet
-        await tester.tap(find.text('Continue with Phone'));
-        await tester.pumpAndSettle();
-
-        // Verify bottom sheet modal is open
-        expect(find.text('Verify Phone Number'), findsOneWidget);
-        expect(
-          find.text('Enter your mobile number to receive a 6-digit verification code.'),
-          findsOneWidget,
-        );
-        expect(find.text('SEND VERIFICATION CODE'), findsOneWidget);
-
-        // 3. Enter valid 10-digit phone number
-        final phoneFieldFinder = find.byType(TextFormField);
+        // 2. Enter valid 10-digit phone number
+        final phoneFieldFinder = find.byKey(const Key('unified_auth_input_field'));
         await tester.enterText(phoneFieldFinder, '5550192834');
         await tester.pump();
 
-        // 4. Tap 'SEND VERIFICATION CODE'
-        await tester.tap(find.text('SEND VERIFICATION CODE'));
+        // 3. Tap 'CONTINUE'
+        await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
         await tester.pumpAndSettle();
 
-        // 5. Verify AuthService received verifyPhoneNumber with formatted number
+        // 4. Verify AuthService received verifyPhoneNumber with formatted number
         expect(authService.verifyPhoneCallCount, 1);
-        expect(authService.lastPhoneNumberVerified, '+1 5550192834');
+        expect(authService.lastPhoneNumberVerified, '+15550192834');
 
-        // 6. Verify bottom sheet modal is dismissed and UI transitioned to PhoneVerificationScreen
-        expect(find.text('Verify Phone Number'), findsNothing);
+        // 5. Verify UI transitioned to PhoneVerificationScreen
         expect(find.byType(PhoneVerificationScreen), findsOneWidget);
         expect(find.text('Security Check'), findsOneWidget);
         expect(find.text('Verify your number.'), findsOneWidget);
@@ -252,12 +240,12 @@ void main() {
         expect(authService.lastSmsCodeUsed, '123456');
         expect(authService.updateStatusCallCount, 1);
         expect(authService.lastUpdatedUid, 'companion_user_uid_999');
-        expect(authService.lastUpdatedPhone, '+1 5550192834');
+        expect(authService.lastUpdatedPhone, '+15550192834');
 
         // 9. Verify UI correctly transitioned to ProfileSetupScreen
         expect(find.byType(PhoneVerificationScreen), findsNothing);
         expect(find.byType(ProfileSetupScreen), findsOneWidget);
-        expect(find.text('Profile Setup'), findsOneWidget);
+        expect(find.text('Add a username'), findsOneWidget);
       },
     );
 
@@ -277,55 +265,48 @@ void main() {
         await tester.pumpWidget(buildCompanionApp(authService: authService));
         await tester.pumpAndSettle();
 
-        // 1. Open phone entry modal
-        await tester.tap(find.text('Continue with Phone'));
-        await tester.pumpAndSettle();
-        expect(find.text('Verify Phone Number'), findsOneWidget);
-
-        // 2. Enter phone number
-        final phoneFieldFinder = find.byType(TextFormField);
+        // 1. Enter phone number into unified field
+        final phoneFieldFinder = find.byKey(const Key('unified_auth_input_field'));
         await tester.enterText(phoneFieldFinder, '5550000000');
         await tester.pump();
 
-        // 3. Trigger SMS send
-        await tester.tap(find.text('SEND VERIFICATION CODE'));
+        // 2. Trigger SMS send
+        await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
         await tester.pumpAndSettle();
 
-        // 4. Verify AuthService was invoked
+        // 3. Verify AuthService was invoked
         expect(authService.verifyPhoneCallCount, 1);
 
-        // 5. Verify error is visibly displayed in UI:
-        // - Inline alert container in modal displays mapped error message
+        // 4. Verify error is visibly displayed in UI:
+        // - Inline alert container displays mapped error message
         expect(find.text('Please enter a valid phone number.'), findsWidgets);
         expect(find.byIcon(Icons.error_outline), findsWidgets);
         // - Error SnackBar is visible
         expect(find.byType(SnackBar), findsOneWidget);
 
-        // 6. Verify modal REMAINS OPEN
-        expect(find.text('Verify Phone Number'), findsOneWidget);
-        expect(find.text('SEND VERIFICATION CODE'), findsOneWidget);
-        expect(find.text('5550000000'), findsOneWidget);
+        // 5. Verify AccountCreationScreen REMAINS OPEN
+        expect(find.byType(AccountCreationScreen), findsOneWidget);
+        expect(find.byKey(const Key('unified_auth_continue_button')), findsOneWidget);
 
-        // 7. Verify UI does NOT navigate to PhoneVerificationScreen or ProfileSetupScreen
+        // 6. Verify UI does NOT navigate to PhoneVerificationScreen or ProfileSetupScreen
         expect(find.byType(PhoneVerificationScreen), findsNothing);
         expect(find.byType(ProfileSetupScreen), findsNothing);
 
-        // 8. Verify Error Recovery: user fixes phone number, failure cleared, can progress
+        // 7. Verify Error Recovery: user fixes phone number, failure cleared, can progress
         authService.failVerifyPhone = false;
         await tester.enterText(phoneFieldFinder, '5550192834');
         await tester.pump();
 
-        await tester.tap(find.text('SEND VERIFICATION CODE'));
+        await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
         await tester.pumpAndSettle();
 
-        // Now modal dismissed and navigated to PhoneVerificationScreen
-        expect(find.text('Verify Phone Number'), findsNothing);
+        // Now navigated to PhoneVerificationScreen
         expect(find.byType(PhoneVerificationScreen), findsOneWidget);
       },
     );
 
     testWidgets(
-      'Branch B Variant: Simulated quota-exceeded SMS failure displays specific error and retains modal state',
+      'Branch B Variant: Simulated quota-exceeded SMS failure displays specific error and retains screen state',
       (WidgetTester tester) async {
         await tester.binding.setSurfaceSize(const Size(800, 1200));
         addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -336,14 +317,11 @@ void main() {
         await tester.pumpWidget(buildCompanionApp(authService: authService));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Continue with Phone'));
-        await tester.pumpAndSettle();
-
-        final phoneFieldFinder = find.byType(TextFormField);
+        final phoneFieldFinder = find.byKey(const Key('unified_auth_input_field'));
         await tester.enterText(phoneFieldFinder, '5551234567');
         await tester.pump();
 
-        await tester.tap(find.text('SEND VERIFICATION CODE'));
+        await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
         await tester.pumpAndSettle();
 
         // Mapped error message must be visibly surfaced
@@ -352,7 +330,7 @@ void main() {
           findsWidgets,
         );
         expect(find.byIcon(Icons.error_outline), findsWidgets);
-        expect(find.text('Verify Phone Number'), findsOneWidget);
+        expect(find.byType(AccountCreationScreen), findsOneWidget);
         expect(find.byType(PhoneVerificationScreen), findsNothing);
       },
     );
@@ -370,15 +348,12 @@ void main() {
         await tester.pumpWidget(buildCompanionApp(authService: authService));
         await tester.pumpAndSettle();
 
-        // Navigate through phone entry to PhoneVerificationScreen
-        await tester.tap(find.text('Continue with Phone'));
-        await tester.pumpAndSettle();
-
-        final phoneFieldFinder = find.byType(TextFormField);
+        // Navigate through unified input to PhoneVerificationScreen
+        final phoneFieldFinder = find.byKey(const Key('unified_auth_input_field'));
         await tester.enterText(phoneFieldFinder, '5550192834');
         await tester.pump();
 
-        await tester.tap(find.text('SEND VERIFICATION CODE'));
+        await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
         await tester.pumpAndSettle();
 
         expect(find.byType(PhoneVerificationScreen), findsOneWidget);
@@ -395,11 +370,8 @@ void main() {
         expect(authService.lastSmsCodeUsed, '999999');
 
         // 3. Verify error is visibly displayed in UI:
-        // - Red floating SnackBar with mapped error message
-        final snackBarFinder = find.byType(SnackBar);
-        expect(snackBarFinder, findsOneWidget);
-        final SnackBar snackBarWidget = tester.widget(snackBarFinder);
-        expect(snackBarWidget.backgroundColor, const Color(0xFFEF4444));
+        // - Inline error banner inside verification card displays mapped error message
+        expect(find.byKey(const Key('phone_verification_error_banner')), findsOneWidget);
         expect(
           find.text('Verification failed: The verification code entered is invalid.'),
           findsOneWidget,
@@ -427,7 +399,7 @@ void main() {
         expect(authService.updateStatusCallCount, 1);
         expect(find.byType(PhoneVerificationScreen), findsNothing);
         expect(find.byType(ProfileSetupScreen), findsOneWidget);
-        expect(find.text('Profile Setup'), findsOneWidget);
+        expect(find.text('Add a username'), findsOneWidget);
       },
     );
 
@@ -443,14 +415,11 @@ void main() {
         await tester.pumpWidget(buildCompanionApp(authService: authService));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Continue with Phone'));
-        await tester.pumpAndSettle();
-
-        final phoneFieldFinder = find.byType(TextFormField);
+        final phoneFieldFinder = find.byKey(const Key('unified_auth_input_field'));
         await tester.enterText(phoneFieldFinder, '5550192834');
         await tester.pump();
 
-        await tester.tap(find.text('SEND VERIFICATION CODE'));
+        await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
         await tester.pumpAndSettle();
 
         expect(find.byType(PhoneVerificationScreen), findsOneWidget);
@@ -485,14 +454,11 @@ void main() {
         await tester.pumpWidget(buildCompanionApp(authService: authService));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Continue with Phone'));
-        await tester.pumpAndSettle();
-
-        final phoneFieldFinder = find.byType(TextFormField);
+        final phoneFieldFinder = find.byKey(const Key('unified_auth_input_field'));
         await tester.enterText(phoneFieldFinder, '5550192834');
         await tester.pump();
 
-        await tester.tap(find.text('SEND VERIFICATION CODE'));
+        await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
         await tester.pumpAndSettle();
 
         expect(find.byType(PhoneVerificationScreen), findsOneWidget);

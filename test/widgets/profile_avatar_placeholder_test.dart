@@ -39,11 +39,8 @@ void main() {
       );
       expect(dashedCircleFinder, findsOneWidget);
 
-      // Verify CustomPaint with AvatarSilhouettePainter is present
-      final silhouetteFinder = find.byWidgetPredicate(
-        (w) => w is CustomPaint && w.painter is AvatarSilhouettePainter,
-      );
-      expect(silhouetteFinder, findsOneWidget);
+      // Verify camera icon placeholder is present
+      expect(find.byIcon(Icons.camera_alt_outlined), findsOneWidget);
 
       // Verify Plus badge is present
       expect(find.byIcon(Icons.add), findsOneWidget);
@@ -54,9 +51,7 @@ void main() {
       expect(tappedBadge, isTrue);
 
       // Tap avatar area
-      await tester.tap(find.byWidgetPredicate(
-        (w) => w is CustomPaint && w.painter is AvatarSilhouettePainter,
-      ));
+      await tester.tap(find.byIcon(Icons.camera_alt_outlined));
       await tester.pump();
       expect(tappedAvatar, isTrue);
     });

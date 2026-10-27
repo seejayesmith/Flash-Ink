@@ -119,6 +119,7 @@ class _PhotoCropScreenState extends State<PhotoCropScreen> {
         ],
       ),
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             const SizedBox(height: 12),
@@ -185,7 +186,12 @@ class _PhotoCropScreenState extends State<PhotoCropScreen> {
 
             // Bottom control bar
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                16,
+                20,
+                MediaQuery.paddingOf(context).bottom + 12,
+              ),
               decoration: const BoxDecoration(
                 color: AppTheme.onyxSurface,
                 border: Border(

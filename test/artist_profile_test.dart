@@ -7,6 +7,9 @@ import 'package:flash_ink/screens/artist_profile_screen.dart';
 import 'package:flash_ink/screens/custom_request_screen.dart';
 import 'package:flash_ink/screens/flash_details_screen.dart';
 import 'package:flash_ink/features/artist/presentation/widgets/flash_piece_card.dart';
+import 'package:flash_ink/models/artist_dashboard_data.dart';
+import 'package:flash_ink/screens/booking/flash_booking_screen.dart';
+import 'package:flash_ink/services/booking_sync_service.dart';
 import 'package:flash_ink/theme/app_theme.dart';
 import 'package:flash_ink/widgets/artist_card.dart';
 
@@ -607,6 +610,177 @@ void main() {
 
       // In available tab, 1-of-1 pieces have EXCLUSIVE badge
       expect(find.text('EXCLUSIVE'), findsWidgets);
+    });
+
+    testWidgets('Claiming and booking an exclusive piece navigates back to ArtistProfileScreen when closing confirmation and piece disappears', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      ArtistDashboardRepository.resetMockData();
+      BookingSyncService.resetSyncState();
+
+      final artist = Artist.mockArtists.first;
+      final exclusivePiece = artist.flashArtworks.firstWhere((p) => p.isExclusive);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistProfileScreen(artist: artist),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Piece is initially present on artist page
+      expect(find.text(exclusivePiece.title), findsOneWidget);
+
+      // Tap the exclusive flash piece
+      await tester.tap(find.text(exclusivePiece.title));
+      await tester.pumpAndSettle();
+
+      // Verify on FlashDetailsScreen
+      expect(find.byType(FlashDetailsScreen), findsOneWidget);
+
+      // Tap CLAIM & BOOK FLASH
+      await tester.tap(find.text('CLAIM & BOOK FLASH'));
+      await tester.pumpAndSettle();
+
+      // Verify on FlashBookingScreen step 1
+      expect(find.byType(FlashBookingScreen), findsOneWidget);
+      expect(find.text('SELECT DATE'), findsOneWidget);
+
+      // Step 1 -> Step 2
+      await tester.tap(find.text('CONTINUE TO DETAILS'));
+      await tester.pumpAndSettle();
+
+      // Step 2 -> Step 3
+      await tester.tap(find.text('CONTINUE TO PAYMENT'));
+      await tester.pumpAndSettle();
+
+      // Step 3 -> Pay
+      await tester.tap(find.textContaining('DEPOSIT & CONFIRM'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1000));
+      await tester.pumpAndSettle();
+
+      // Verify confirmation screen (Step 4)
+      expect(find.text('Flash Claimed & Booked!'), findsOneWidget);
+      expect(find.text('DONE'), findsOneWidget);
+
+      // Close confirmation screen via DONE button
+      await tester.ensureVisible(find.text('DONE'));
+      await tester.tap(find.text('DONE'));
+      await tester.pumpAndSettle();
+
+      // Verify navigated back to ArtistProfileScreen
+      expect(find.byType(ArtistProfileScreen), findsOneWidget);
+      expect(find.byType(FlashDetailsScreen), findsNothing);
+      expect(find.byType(FlashBookingScreen), findsNothing);
+
+      // Verify the exclusive flash piece has disappeared from the artist page
+      expect(find.text(exclusivePiece.title), findsNothing);
+
+      // Switch to Completed tab and verify it has also disappeared from artist page
+      await tester.tap(find.text('Completed'));
+      await tester.pumpAndSettle();
+      expect(find.text(exclusivePiece.title), findsNothing);
+    });
+
+    testWidgets('Closing confirmation screen via close icon navigates back to ArtistProfileScreen and exclusive piece disappears', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      ArtistDashboardRepository.resetMockData();
+      BookingSyncService.resetSyncState();
+
+      final artist = Artist.mockArtists.first;
+      final exclusivePiece = artist.flashArtworks.firstWhere((p) => p.isExclusive);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistProfileScreen(artist: artist),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap the exclusive flash piece
+      await tester.tap(find.text(exclusivePiece.title));
+      await tester.pumpAndSettle();
+
+      // Tap CLAIM & BOOK FLASH
+      await tester.tap(find.text('CLAIM & BOOK FLASH'));
+      await tester.pumpAndSettle();
+
+      // Step 1 -> Step 2 -> Step 3 -> Pay
+      await tester.tap(find.text('CONTINUE TO DETAILS'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('CONTINUE TO PAYMENT'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('DEPOSIT & CONFIRM'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1000));
+      await tester.pumpAndSettle();
+
+      // Verify confirmation screen
+      expect(find.text('Flash Claimed & Booked!'), findsOneWidget);
+
+      // Close confirmation screen via AppBar close icon
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+
+      // Verify back on ArtistProfileScreen and exclusive piece disappeared
+      expect(find.byType(ArtistProfileScreen), findsOneWidget);
+      expect(find.byType(FlashDetailsScreen), findsNothing);
+      expect(find.text(exclusivePiece.title), findsNothing);
+    });
+
+    testWidgets('Claiming and booking a repeatable flash piece navigates back to ArtistProfileScreen and piece remains visible', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      ArtistDashboardRepository.resetMockData();
+      BookingSyncService.resetSyncState();
+
+      final artist = Artist.mockArtists.first;
+      final repeatablePiece = artist.flashArtworks.firstWhere((p) => !p.isExclusive);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistProfileScreen(artist: artist),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap the repeatable flash piece
+      await tester.tap(find.text(repeatablePiece.title));
+      await tester.pumpAndSettle();
+
+      // Tap CLAIM & BOOK FLASH
+      await tester.tap(find.text('CLAIM & BOOK FLASH'));
+      await tester.pumpAndSettle();
+
+      // Step 1 -> Step 2 -> Step 3 -> Pay
+      await tester.tap(find.text('CONTINUE TO DETAILS'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('CONTINUE TO PAYMENT'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('DEPOSIT & CONFIRM'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1000));
+      await tester.pumpAndSettle();
+
+      // Close confirmation screen
+      await tester.ensureVisible(find.text('DONE'));
+      await tester.tap(find.text('DONE'));
+      await tester.pumpAndSettle();
+
+      // Verify back on ArtistProfileScreen
+      expect(find.byType(ArtistProfileScreen), findsOneWidget);
+      expect(find.byType(FlashDetailsScreen), findsNothing);
+
+      // Repeatable piece is STILL visible on the artist page
+      expect(find.text(repeatablePiece.title), findsOneWidget);
     });
   });
 }

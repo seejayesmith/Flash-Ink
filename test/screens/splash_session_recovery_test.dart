@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -35,7 +34,6 @@ class TestMockUser extends Fake implements User {
 
 class TestAuthService extends AuthService {
   User? mockUser;
-  final StreamController<User?> _controller = StreamController<User?>.broadcast();
 
   TestAuthService({this.mockUser});
 

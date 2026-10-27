@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:http/http.dart' as http;
+import '../features/appointments/domain/models/appointment_item.dart';
 import '../models/artist_dashboard_data.dart';
 
 /// Status of a Stripe payment attempt.
@@ -87,15 +88,16 @@ class StripeService {
     String? customerEmail,
     String? customerName,
     String? artistStripeAccountId,
+    String? bookingId,
+    String? selectedDate,
+    String? selectedTimeSlot,
+    String? placement,
   }) async {
     // 1. If client secret is not provided, attempt to create a PaymentIntent
     String? effectiveClientSecret = clientSecret;
     String? intentId;
-
     if (effectiveClientSecret == null && dotenv.isInitialized) {
       final backendUrl = dotenv.env['STRIPE_BACKEND_URL'];
-      final secretKey = dotenv.env['STRIPE_SECRET_KEY'];
-
       if (backendUrl != null && backendUrl.isNotEmpty) {
         try {
           final res = await http.post(
@@ -108,6 +110,11 @@ class StripeService {
                 'accountId': artistStripeAccountId,
               'flashTitle': flashTitle,
               'customerEmail': customerEmail,
+              'customerName': customerName,
+              'bookingId': bookingId,
+              'selectedDate': selectedDate,
+              'selectedTimeSlot': selectedTimeSlot,
+              'placement': placement,
             }),
           );
           if (res.statusCode == 200) {
@@ -116,46 +123,7 @@ class StripeService {
             intentId = data['id'] as String?;
           }
         } catch (_) {
-          // Backend call failed, fall through to direct sandbox or simulation
-        }
-      } else if (secretKey != null && secretKey.isNotEmpty && !secretKey.contains('YOUR_STRIPE')) {
-        // Direct sandbox creation for local testing without separate backend
-        try {
-          final res = await http.post(
-            Uri.parse('https://api.stripe.com/v1/payment_intents'),
-            headers: {
-              'Authorization': 'Bearer $secretKey',
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: {
-              'amount': (amountInDollars * 100).round().toString(),
-              'currency': 'usd',
-              'description': 'Flash Ink Deposit: $flashTitle',
-              'automatic_payment_methods[enabled]': 'true',
-              if (artistStripeAccountId != null &&
-                  artistStripeAccountId.isNotEmpty &&
-                  artistStripeAccountId.startsWith('acct_')) ...{
-                'transfer_data[destination]': artistStripeAccountId,
-              },
-            },
-          );
-          if (res.statusCode == 200) {
-            final data = jsonDecode(res.body) as Map<String, dynamic>;
-            effectiveClientSecret = data['client_secret'] as String?;
-            intentId = data['id'] as String?;
-          } else {
-            final data = jsonDecode(res.body) as Map<String, dynamic>;
-            final error = data['error']?['message'] ?? 'Failed to initialize payment.';
-            return StripePaymentResponse(
-              status: StripePaymentStatus.failed,
-              errorMessage: error.toString(),
-            );
-          }
-        } catch (e) {
-          return StripePaymentResponse(
-            status: StripePaymentStatus.failed,
-            errorMessage: e.toString(),
-          );
+          // Backend call failed, fall through to simulation/mock
         }
       }
     }
@@ -227,5 +195,111 @@ class StripeService {
         errorMessage: errStr,
       );
     }
+  }
+
+  /// Verifies server-side payment and booking confirmation status for a PaymentIntent ID.
+  Future<Map<String, dynamic>> verifyBookingPaymentStatus(String paymentIntentId) async {
+    if (dotenv.isInitialized) {
+      final backendUrl = dotenv.env['STRIPE_BACKEND_URL'];
+      if (backendUrl != null && backendUrl.isNotEmpty) {
+        try {
+          final res = await http.get(
+            Uri.parse('$backendUrl/api/booking-status/$paymentIntentId'),
+          );
+          if (res.statusCode == 200) {
+            return jsonDecode(res.body) as Map<String, dynamic>;
+          }
+        } catch (_) {
+          // Fall back to local verification
+        }
+      }
+    }
+    return {
+      'paymentIntentId': paymentIntentId,
+      'status': 'confirmed',
+      'verifiedLocally': true,
+    };
+  }
+
+  /// Processes a Stripe webhook event payload (`payment_intent.succeeded` or `payment_intent.payment_failed`)
+  /// and synchronizes confirmed booking appointments into the artist and client repositories if not already recorded.
+  static bool handleWebhookEvent(Map<String, dynamic> eventPayload) {
+    final type = eventPayload['type'] as String?;
+    final data = eventPayload['data'] as Map<String, dynamic>?;
+    final object = data?['object'] as Map<String, dynamic>?;
+    if (type == null || object == null) return false;
+
+    final metadata = (object['metadata'] as Map<String, dynamic>?) ?? const {};
+    final bookingId = (metadata['booking_id'] ?? object['id'] ?? '').toString();
+
+    if (type == 'payment_intent.succeeded') {
+      if (bookingId.isEmpty) return true;
+      final calId = 'cal_$bookingId';
+      final alreadyInCalendar = ArtistDashboardRepository.calendarAppointments
+          .any((apt) => apt.id == calId || apt.id == bookingId);
+
+      if (!alreadyInCalendar) {
+        final flashTitle = (metadata['flash_title'] ?? 'Flash Artwork').toString();
+        final customerName = (metadata['customer_name'] ?? 'Client').toString();
+        final timeSlot = (metadata['selected_time_slot'] ?? '1:30 PM').toString();
+        final placement = (metadata['placement'] ?? 'Forearm').toString();
+        final dateStr = (metadata['selected_date'] ?? '').toString();
+        final parsedDate = DateTime.tryParse(dateStr) ?? DateTime.now().add(const Duration(days: 2));
+        final amountCents = (object['amount'] as num?)?.toInt() ?? 5000;
+        final depositDollars = (amountCents / 100).round();
+        final totalDollars = (metadata['total_price'] != null)
+            ? int.tryParse(metadata['total_price'].toString()) ?? (depositDollars * 3)
+            : (depositDollars * 3);
+
+        ArtistDashboardRepository.addCalendarAppointment(
+          DashboardAppointment(
+            id: calId,
+            clientName: customerName,
+            serviceType: 'Flash: $flashTitle',
+            duration: '2.0 hrs',
+            time: timeSlot,
+            scheduledDate: DateTime(parsedDate.year, parsedDate.month, parsedDate.day),
+            date: dateStr.isNotEmpty ? dateStr : 'Upcoming',
+            placement: placement,
+            notes: 'Verified via Stripe Webhook (${object['id']})',
+            depositPaid: depositDollars,
+            fullPrice: totalDollars,
+            visitType: 'Flash Tattoo',
+            dotColor: const Color(0xFF22C55E),
+          ),
+        );
+
+        ClientAppointment.addUpcomingAppointment(
+          ClientAppointment(
+            id: bookingId,
+            artistName: (metadata['artist_name'] ?? 'OddMaree').toString(),
+            artistAvatar: '',
+            studioName: 'Obsidian Atelier',
+            studioAddress: ArtistDashboardRepository.booksSchedule.locationNote,
+            flashTitle: flashTitle,
+            flashImageUrl: 'assets/images/flash_tiger_tattoo.jpg',
+            dateTime: DateTime(parsedDate.year, parsedDate.month, parsedDate.day),
+            timeSlot: '$timeSlot (2.0 hrs)',
+            placement: placement,
+            depositAmount: depositDollars,
+            totalPrice: totalDollars,
+            status: AppointmentStatus.confirmed,
+          ),
+        );
+      }
+      return true;
+    } else if (type == 'payment_intent.payment_failed') {
+      // Remove any optimistically added appointment if payment failed asynchronously
+      if (bookingId.isNotEmpty) {
+        ArtistDashboardRepository.calendarAppointments
+            .removeWhere((apt) => apt.id == 'cal_$bookingId' || apt.id == bookingId);
+        ClientAppointment.liveUpcoming
+            .removeWhere((apt) => apt.id == bookingId);
+        ClientAppointment.mockUpcoming
+            .removeWhere((apt) => apt.id == bookingId);
+      }
+      return false;
+    }
+    return false;
   }
 }

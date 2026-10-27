@@ -1,3 +1,6 @@
+import '../../../../core/mock/mock_fixtures.dart';
+import '../../../../models/artist.dart';
+
 /// Strongly typed tattoo studio model for the Explore directory.
 class ExploreStudio {
   final String id;
@@ -24,58 +27,45 @@ class ExploreStudio {
     this.isVerified = true,
   });
 
-  static const List<ExploreStudio> mockStudios = [
-    ExploreStudio(
-      id: 'studio_1',
-      name: 'Obsidian Atelier',
-      address: '742 S Santa Fe Ave',
-      city: 'Los Angeles, CA',
-      imageUrl:
-          'https://images.unsplash.com/photo-1598371839696-5c5bb00bdc28?auto=format&fit=crop&w=600&q=80',
-      rating: 4.9,
-      reviewCount: 184,
-      residentArtistsCount: 6,
-      styles: ['Blackwork', 'Dark Surrealism', 'Fine Line'],
-      isVerified: true,
-    ),
-    ExploreStudio(
-      id: 'studio_2',
-      name: 'Void & Bloom Tattoo Studio',
-      address: '1280 E 1st St',
-      city: 'Los Angeles, CA',
-      imageUrl:
-          'https://images.unsplash.com/photo-1611501275019-9b5cda994e8d?auto=format&fit=crop&w=600&q=80',
-      rating: 4.8,
-      reviewCount: 142,
-      residentArtistsCount: 4,
-      styles: ['Japanese Traditional', 'Neo-Traditional', 'Floral'],
-      isVerified: true,
-    ),
-    ExploreStudio(
-      id: 'studio_3',
-      name: 'Velvet Needle Parlor',
-      address: '310 Sunset Blvd',
-      city: 'Venice, CA',
-      imageUrl:
-          'https://images.unsplash.com/photo-1562962230-16e4623d36e6?auto=format&fit=crop&w=600&q=80',
-      rating: 5.0,
-      reviewCount: 96,
-      residentArtistsCount: 5,
-      styles: ['Fine Line', 'Micro-Realism', 'Ornamental'],
-      isVerified: true,
-    ),
-    ExploreStudio(
-      id: 'studio_4',
-      name: 'Iron & Oak Collective',
-      address: '420 N Fairfax Ave',
-      city: 'West Hollywood, CA',
-      imageUrl:
-          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80',
-      rating: 4.7,
-      reviewCount: 210,
-      residentArtistsCount: 8,
-      styles: ['American Traditional', 'Illustrative', 'Lettering'],
-      isVerified: true,
-    ),
-  ];
+  /// Builds a privacy-safe live studio card from an onboarded [Artist].
+  factory ExploreStudio.fromArtist(
+    Artist artist, {
+    int residentArtistsCount = 1,
+  }) {
+    final studioInfo = artist.studioInformation;
+    final studioTitle = artist.studioName.isNotEmpty
+        ? artist.studioName
+        : (studioInfo?.name.isNotEmpty == true
+            ? studioInfo!.name
+            : '${artist.name} Studio');
+    final isPrivate =
+        artist.isPrivateStudio || (studioInfo?.isPrivateStudio ?? true);
+    final cityLabel = studioInfo?.displayLocation.isNotEmpty == true
+        ? studioInfo!.displayLocation
+        : artist.location;
+    final safeAddress = isPrivate
+        ? 'Private Studio'
+        : (studioInfo?.formattedAddress.isNotEmpty == true
+            ? studioInfo!.formattedAddress
+            : cityLabel);
+    final coverImage = artist.flashArtworks.isNotEmpty
+        ? artist.flashArtworks.first.imageUrl
+        : (artist.images.isNotEmpty ? artist.images.first : artist.avatarUrl);
+
+    return ExploreStudio(
+      id: 'studio_${artist.id}',
+      name: studioTitle,
+      address: safeAddress,
+      city: cityLabel,
+      imageUrl: coverImage,
+      rating: artist.rating,
+      reviewCount: artist.availablePieces,
+      residentArtistsCount: residentArtistsCount,
+      styles: artist.tags,
+      isVerified: artist.isVerifiedStudio,
+    );
+  }
+
+  /// Quarantined mock studio fixtures preserved in [MockFixtures.studios].
+  static const List<ExploreStudio> mockStudios = MockFixtures.studios;
 }

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:add_2_calendar/add_2_calendar.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/flash_image.dart';
 import '../../domain/models/message_thread.dart';
@@ -39,7 +40,7 @@ class BookingReceiptMessageTile extends StatelessWidget {
         width: MediaQuery.of(context).size.width * 0.85,
         decoration: BoxDecoration(
           color: AppTheme.onyxContainer,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.radiusLg),
           border: Border.all(color: AppTheme.goldBorder, width: 1.5),
           boxShadow: [
             BoxShadow(
@@ -84,7 +85,7 @@ class BookingReceiptMessageTile extends StatelessWidget {
                   // Thumbnail
                   if (message.flashImageUrl != null)
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                       child: SizedBox(
                         width: 60,
                         height: 60,
@@ -154,7 +155,7 @@ class BookingReceiptMessageTile extends StatelessWidget {
                     side: const BorderSide(color: AppTheme.goldBorder),
                     minimumSize: const Size.fromHeight(44),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                     ),
                   ),
                 ),

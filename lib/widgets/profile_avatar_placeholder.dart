@@ -170,7 +170,7 @@ class ProfileAvatarPlaceholder extends StatelessWidget {
                 ),
               ),
 
-              // Inner avatar circle with wireframe silhouette
+              // Inner avatar circle with camera icon placeholder
               Container(
                 width: diameter,
                 height: diameter,
@@ -189,11 +189,11 @@ class ProfileAvatarPlaceholder extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: CustomPaint(
-                  size: Size(diameter, diameter),
-                  painter: const AvatarSilhouettePainter(
-                    strokeColor: Color(0xFF8C9191),
-                  ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.camera_alt_outlined,
+                  size: 56,
+                  color: Color(0xFF8C9191),
                 ),
               ),
 

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_buttons.dart';
+import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/adaptive_glass_container.dart';
 import '../../../../widgets/flash_image.dart';
+import '../../../../widgets/flash_snack_bar.dart';
 import '../../domain/models/appointment_item.dart';
 
 /// Comprehensive modal sheet displaying complete appointment session breakdown.
@@ -42,7 +44,7 @@ class AppointmentDetailModal extends StatelessWidget {
       unselectedBorderColor: AppTheme.goldBorder,
       selectedBorderWidth: 1.2,
       unselectedBorderWidth: 1.2,
-      topRadius: 24.0,
+      topRadius: AppRadius.radiusSheet,
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.spaceLg,
         AppSpacing.spaceMd,
@@ -61,7 +63,7 @@ class AppointmentDetailModal extends StatelessWidget {
                 height: 4,
                 decoration: BoxDecoration(
                   color: AppTheme.darkBorder,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(AppRadius.dragHandle),
                 ),
               ),
             ),
@@ -86,7 +88,7 @@ class AppointmentDetailModal extends StatelessWidget {
                     color: appointment.status == AppointmentStatus.confirmed
                         ? const Color(0xFF1E2E20)
                         : AppTheme.onyxSurface,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                     border: Border.all(
                       color: appointment.status == AppointmentStatus.confirmed
                           ? const Color(0xFF4ADE80)
@@ -114,13 +116,13 @@ class AppointmentDetailModal extends StatelessWidget {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: AppTheme.cardBackground,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                 border: Border.all(color: AppTheme.cardBorder),
               ),
               child: Row(
                 children: [
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                     child: SizedBox(
                       width: 58,
                       height: 58,
@@ -171,7 +173,13 @@ class AppointmentDetailModal extends StatelessWidget {
             _buildInfoRow(Icons.calendar_today_outlined, 'Date & Time',
                 '${_formatDate(appointment.dateTime)} at ${appointment.timeSlot}'),
             const SizedBox(height: 10),
-            _buildInfoRow(Icons.location_on_outlined, 'Studio Address', appointment.studioAddress),
+            _buildInfoRow(
+              appointment.isExactLocationUnlocked()
+                  ? Icons.location_on_outlined
+                  : Icons.lock_clock_outlined,
+              'Studio Address',
+              appointment.effectiveStudioAddress(),
+            ),
             const SizedBox(height: 10),
             _buildInfoRow(Icons.pan_tool_outlined, 'Placement', appointment.placement),
             if (appointment.isSilentAppointment) ...[
@@ -185,7 +193,7 @@ class AppointmentDetailModal extends StatelessWidget {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: AppTheme.cardBackground,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                 border: Border.all(color: AppTheme.darkBorder),
               ),
               child: Column(
@@ -216,11 +224,13 @@ class AppointmentDetailModal extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: () {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Opening maps to ${appointment.studioAddress}...'),
-                          duration: const Duration(seconds: 2),
-                        ),
+                      final unlocked = appointment.isExactLocationUnlocked();
+                      FlashSnackBar.showInfo(
+                        context,
+                        unlocked
+                            ? 'Opening maps to ${appointment.studioAddress}...'
+                            : 'Exact studio address unlocks 24 hours before your confirmed session.',
+                        duration: const Duration(seconds: 2),
                       );
                     },
                     icon: const Icon(Icons.directions, color: AppTheme.gold, size: 18),
@@ -235,7 +245,7 @@ class AppointmentDetailModal extends StatelessWidget {
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: AppTheme.goldBorder),
                       minimumSize: const Size.fromHeight(42),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.radiusMd)),
                     ),
                   ),
                 ),
@@ -244,11 +254,10 @@ class AppointmentDetailModal extends StatelessWidget {
                   child: AppButtons.primaryCTA(
                     onPressed: () {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Message sent to ${appointment.artistName} regarding reschedule.'),
-                          duration: const Duration(seconds: 2),
-                        ),
+                      FlashSnackBar.showInfo(
+                        context,
+                        'Message sent to ${appointment.artistName} regarding reschedule.',
+                        duration: const Duration(seconds: 2),
                       );
                     },
                     text: 'CONTACT',

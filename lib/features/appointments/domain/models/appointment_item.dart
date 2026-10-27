@@ -1,3 +1,6 @@
+import '../../../../core/mock/mock_data_config.dart';
+import '../../../../core/mock/mock_fixtures.dart';
+
 enum AppointmentStatus {
   confirmed('Confirmed'),
   pending('Deposit Pending'),
@@ -28,6 +31,31 @@ class ClientAppointment {
 
   int get balanceDue => totalPrice - depositAmount;
 
+  /// Staged Location Disclosure Guard:
+  /// Exact private studio street address and suite details are only unlocked when
+  /// the booking deposit is confirmed AND the session is within 24 hours (up to 12h after start).
+  bool isExactLocationUnlocked({DateTime? now}) {
+    if (status == AppointmentStatus.completed) {
+      return true;
+    }
+    if (status != AppointmentStatus.confirmed) {
+      return false;
+    }
+    final currentTime = now ?? DateTime.now();
+    final unlockTime = dateTime.subtract(const Duration(hours: 24));
+    final expireTime = dateTime.add(const Duration(hours: 12));
+    return !currentTime.isBefore(unlockTime) && !currentTime.isAfter(expireTime);
+  }
+
+  /// Returns the exact studio address if within the 24-hour confirmed window,
+  /// or a privacy-safe redacted notice otherwise.
+  String effectiveStudioAddress({DateTime? now}) {
+    if (isExactLocationUnlocked(now: now)) {
+      return studioAddress;
+    }
+    return 'Private Studio • Exact address unlocks 24h before session';
+  }
+
   const ClientAppointment({
     required this.id,
     required this.artistName,
@@ -46,64 +74,38 @@ class ClientAppointment {
     this.notes,
   });
 
-  static List<ClientAppointment> mockUpcoming = [
-    ClientAppointment(
-      id: 'APT-84021',
-      artistName: 'OddMaree',
-      artistAvatar:
-          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-      studioName: 'Obsidian Atelier',
-      studioAddress: '742 S Santa Fe Ave, Los Angeles, CA',
-      flashTitle: 'Sacred Serpent & Peony',
-      flashImageUrl:
-          'https://images.unsplash.com/photo-1598371839696-5c5bb00bdc28?auto=format&fit=crop&w=500&q=80',
-      dateTime: DateTime(2026, 10, 14, 14, 0),
-      timeSlot: '2:00 PM (3.0 hrs)',
-      placement: 'Right Forearm',
-      depositAmount: 75,
-      totalPrice: 280,
-      status: AppointmentStatus.confirmed,
-      isSilentAppointment: true,
-      notes: 'Inner forearm placement, black & grey shading preferred.',
-    ),
-    ClientAppointment(
-      id: 'APT-77291',
-      artistName: 'Maree Raven',
-      artistAvatar:
-          'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80',
-      studioName: 'Void & Bloom Tattoo',
-      studioAddress: '1280 E 1st St, Los Angeles, CA',
-      flashTitle: 'Lunar Moth & Geometry',
-      flashImageUrl:
-          'https://images.unsplash.com/photo-1611501275019-9b5cda994e8d?auto=format&fit=crop&w=500&q=80',
-      dateTime: DateTime(2026, 11, 2, 11, 30),
-      timeSlot: '11:30 AM (2.5 hrs)',
-      placement: 'Upper Arm / Bicep',
-      depositAmount: 50,
-      totalPrice: 200,
-      status: AppointmentStatus.confirmed,
-      isSilentAppointment: false,
-    ),
-  ];
+  /// Quarantined mock upcoming appointments preserved in [MockFixtures].
+  static List<ClientAppointment> mockUpcoming =
+      MockFixtures.createUpcomingAppointments();
 
-  static List<ClientAppointment> mockPast = [
-    ClientAppointment(
-      id: 'APT-51092',
-      artistName: 'Kora Sol',
-      artistAvatar:
-          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
-      studioName: 'Velvet Needle Parlor',
-      studioAddress: '310 Sunset Blvd, Venice, CA',
-      flashTitle: 'Chrysanthemum Silhouette',
-      flashImageUrl:
-          'https://images.unsplash.com/photo-1562962230-16e4623d36e6?auto=format&fit=crop&w=500&q=80',
-      dateTime: DateTime(2026, 7, 18, 15, 0),
-      timeSlot: '3:00 PM (3.5 hrs)',
-      placement: 'Left Thigh',
-      depositAmount: 80,
-      totalPrice: 320,
-      status: AppointmentStatus.completed,
-      isSilentAppointment: true,
-    ),
-  ];
+  /// Quarantined mock past appointments preserved in [MockFixtures].
+  static List<ClientAppointment> mockPast =
+      MockFixtures.createPastAppointments();
+
+  /// Live session appointments created during the active authenticated session.
+  static final List<ClientAppointment> liveUpcoming = [];
+  static final List<ClientAppointment> livePast = [];
+
+  /// Active upcoming appointments for the current runtime mode.
+  static List<ClientAppointment> get activeUpcoming =>
+      MockDataConfig.isEnabled ? mockUpcoming : liveUpcoming;
+
+  /// Active past appointments for the current runtime mode.
+  static List<ClientAppointment> get activePast =>
+      MockDataConfig.isEnabled ? mockPast : livePast;
+
+  /// Adds a new booked appointment to the active session list (and mock list when sandboxed).
+  static void addUpcomingAppointment(ClientAppointment appointment) {
+    if (MockDataConfig.isEnabled) {
+      mockUpcoming.insert(0, appointment);
+    } else {
+      liveUpcoming.insert(0, appointment);
+    }
+  }
+
+  /// Clears session-scoped appointments upon sign-out.
+  static void clearSessionAppointments() {
+    liveUpcoming.clear();
+    livePast.clear();
+  }
 }

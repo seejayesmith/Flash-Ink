@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist_dashboard_data.dart';
+import '../../models/booking.dart';
 import '../../widgets/flash_image.dart';
+import '../../widgets/flash_snack_bar.dart';
+import '../../widgets/pinned_bottom_action_scaffold.dart';
 
 /// Full-screen view presenting comprehensive booking request details and actions.
-class BookingRequestDetailScreen extends StatelessWidget {
+class BookingRequestDetailScreen extends StatefulWidget {
   final BookingRequest request;
 
   const BookingRequestDetailScreen({
@@ -13,9 +16,246 @@ class BookingRequestDetailScreen extends StatelessWidget {
   });
 
   @override
+  State<BookingRequestDetailScreen> createState() => _BookingRequestDetailScreenState();
+}
+
+class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen> {
+  late DateTime _selectedDate;
+  late String _selectedTimeSlot;
+  late int _estimatedPrice;
+  late int _deposit;
+
+  @override
+  void initState() {
+    super.initState();
+    _estimatedPrice = widget.request.estimatedPrice;
+    _deposit = widget.request.deposit;
+
+    DateTime candidate = widget.request.preferredDate ??
+        DateTime.now().add(const Duration(days: 3));
+    int guard = 0;
+    while (!ArtistDashboardRepository.booksSchedule.isWorkingDay(candidate) &&
+        guard < 14) {
+      candidate = candidate.add(const Duration(days: 1));
+      guard++;
+    }
+    _selectedDate = DateTime(candidate.year, candidate.month, candidate.day);
+
+    final slots = ArtistDashboardRepository.booksSchedule.generateTimeSlots();
+    if (widget.request.preferredTimeSlot != null &&
+        widget.request.preferredTimeSlot!.isNotEmpty) {
+      _selectedTimeSlot = widget.request.preferredTimeSlot!;
+    } else {
+      final firstOpen = slots.firstWhere(
+        (s) => !ArtistDashboardRepository.isTimeSlotBooked(
+          date: _selectedDate,
+          timeSlot: s.time,
+        ),
+        orElse: () => const BookingTimeSlot(time: '1:30 PM', period: 'Afternoon'),
+      );
+      _selectedTimeSlot = firstOpen.time;
+    }
+  }
+
+  String _formatShortDate(DateTime date) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return '${days[date.weekday % 7]}, ${months[date.month - 1]} ${date.day}';
+  }
+
+  List<DateTime> _getUpcomingWorkingDays({int count = 6}) {
+    final List<DateTime> result = [];
+    DateTime cursor = DateTime.now().add(const Duration(days: 1));
+    int attempts = 0;
+    while (result.length < count && attempts < 30) {
+      if (ArtistDashboardRepository.booksSchedule.isWorkingDay(cursor)) {
+        result.add(DateTime(cursor.year, cursor.month, cursor.day));
+      }
+      cursor = cursor.add(const Duration(days: 1));
+      attempts++;
+    }
+    if (result.isEmpty) {
+      result.add(_selectedDate);
+    }
+    return result;
+  }
+
+  void _openProposeTimeModal() {
+    final workingDays = _getUpcomingWorkingDays();
+    DateTime tempDate = _selectedDate;
+    String tempSlot = _selectedTimeSlot;
+    int tempPrice = _estimatedPrice;
+    int tempDeposit = _deposit;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF171A1A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (modalContext) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final slots = ArtistDashboardRepository.booksSchedule.generateTimeSlots();
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                20,
+                20,
+                MediaQuery.viewInsetsOf(ctx).bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Propose Session Time & Quote',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Select an open studio slot and finalize quote for ${widget.request.clientName}.',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFF8C9191),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'SELECT WORKING DAY',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFEEC200),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: workingDays.map((day) {
+                      final isSelected = day.year == tempDate.year &&
+                          day.month == tempDate.month &&
+                          day.day == tempDate.day;
+                      return ChoiceChip(
+                        label: Text(_formatShortDate(day)),
+                        selected: isSelected,
+                        showCheckmark: false,
+                        selectedColor: const Color(0xFFEEC200),
+                        backgroundColor: const Color(0xFF1E2121),
+                        labelStyle: GoogleFonts.plusJakartaSans(
+                          color: isSelected ? const Color(0xFF121414) : Colors.white,
+                          fontSize: 12,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        ),
+                        onSelected: (val) {
+                          if (val) {
+                            setModalState(() => tempDate = day);
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'SELECT TIME SLOT',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFEEC200),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: slots.map((slot) {
+                      final isBooked = ArtistDashboardRepository.isTimeSlotBooked(
+                        date: tempDate,
+                        timeSlot: slot.time,
+                      );
+                      final isSelected = !isBooked && tempSlot == slot.time;
+                      return ChoiceChip(
+                        label: Text(isBooked ? '${slot.time} (Booked)' : slot.time),
+                        selected: isSelected,
+                        showCheckmark: false,
+                        selectedColor: const Color(0xFFEEC200),
+                        backgroundColor: const Color(0xFF1E2121),
+                        disabledColor: const Color(0xFF141616),
+                        labelStyle: GoogleFonts.plusJakartaSans(
+                          color: isBooked
+                              ? const Color(0xFF555A5A)
+                              : (isSelected ? const Color(0xFF121414) : Colors.white),
+                          fontSize: 12,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        ),
+                        onSelected: isBooked
+                            ? null
+                            : (val) {
+                                if (val) {
+                                  setModalState(() => tempSlot = slot.time);
+                                }
+                              },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      key: const Key('confirm_proposal_button'),
+                      onPressed: () {
+                        setState(() {
+                          _selectedDate = tempDate;
+                          _selectedTimeSlot = tempSlot;
+                          _estimatedPrice = tempPrice;
+                          _deposit = tempDeposit;
+                        });
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        Navigator.pop(modalContext);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFEEC200),
+                        foregroundColor: const Color(0xFF121414),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                      ),
+                      child: Text(
+                        'Apply Proposed Slot',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final request = widget.request;
+    return PinnedBottomActionScaffold(
       backgroundColor: const Color(0xFF121414),
+      inlineCTA: true,
       appBar: AppBar(
         backgroundColor: const Color(0xFF121414),
         elevation: 0,
@@ -34,13 +274,26 @@ class BookingRequestDetailScreen extends StatelessWidget {
         ),
         centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Client Header Card
+      ctaKey: const Key('accept_request_button'),
+      ctaText: 'Accept Request',
+      onCtaPressed: () {
+        ArtistDashboardRepository.acceptBookingRequest(
+          request,
+          scheduledDate: _selectedDate,
+          timeSlot: _selectedTimeSlot,
+          customPrice: _estimatedPrice,
+          customDeposit: _deposit,
+        );
+        FlashSnackBar.showSuccess(
+          context,
+          'Booking request from ${request.clientName} accepted!',
+        );
+        Navigator.pop(context, true);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Client Header Card
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
@@ -202,6 +455,27 @@ class BookingRequestDetailScreen extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
+                        'Scheduled Slot',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFF919696),
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        '${_formatShortDate(_selectedDate)} • $_selectedTimeSlot',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
                         'Estimated Service Price',
                         style: GoogleFonts.plusJakartaSans(
                           color: const Color(0xFF919696),
@@ -209,7 +483,7 @@ class BookingRequestDetailScreen extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '\$${request.estimatedPrice}',
+                        '\$$_estimatedPrice',
                         style: GoogleFonts.plusJakartaSans(
                           color: Colors.white,
                           fontSize: 16,
@@ -230,7 +504,7 @@ class BookingRequestDetailScreen extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '\$${request.deposit}',
+                        '\$$_deposit',
                         style: GoogleFonts.plusJakartaSans(
                           color: const Color(0xFFEEC200),
                           fontSize: 16,
@@ -244,50 +518,18 @@ class BookingRequestDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 32),
 
-            // Decision Actions
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                key: const Key('accept_request_button'),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Booking request from ${request.clientName} accepted!'),
-                      backgroundColor: const Color(0xFF22C55E),
-                    ),
-                  );
-                  Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFEEC200),
-                  foregroundColor: const Color(0xFF121414),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(26),
-                  ),
-                ),
-                child: Text(
-                  'Accept Request',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
+            // Secondary Actions
             SizedBox(
               width: double.infinity,
               height: 50,
               child: OutlinedButton(
                 key: const Key('propose_time_button'),
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Proposal modal opened.'),
-                      backgroundColor: Color(0xFF262929),
-                    ),
+                  FlashSnackBar.showInfo(
+                    context,
+                    'Proposal modal opened.',
                   );
+                  _openProposeTimeModal();
                 },
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Color(0xFF383C3C), width: 1.5),
@@ -310,13 +552,12 @@ class BookingRequestDetailScreen extends StatelessWidget {
               child: TextButton(
                 key: const Key('decline_request_button'),
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Declined request from ${request.clientName}.'),
-                      backgroundColor: const Color(0xFFEF4444),
-                    ),
+                  ArtistDashboardRepository.declineBookingRequest(request.id);
+                  FlashSnackBar.showError(
+                    context,
+                    'Declined request from ${request.clientName}.',
                   );
-                  Navigator.pop(context);
+                  Navigator.pop(context, true);
                 },
                 child: Text(
                   'Decline Request',
@@ -328,10 +569,8 @@ class BookingRequestDetailScreen extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 32),
           ],
         ),
-      ),
     );
   }
 

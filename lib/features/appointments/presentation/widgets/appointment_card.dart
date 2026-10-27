@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/flash_image.dart';
 import '../../domain/models/appointment_item.dart';
@@ -35,7 +36,7 @@ class AppointmentCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppTheme.cardBackground,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(AppRadius.radiusLg),
           border: Border.all(
             color: isConfirmed ? AppTheme.goldBorder : AppTheme.cardBorder,
             width: 1.2,
@@ -73,7 +74,7 @@ class AppointmentCard extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: isConfirmed ? const Color(0xFF1E2E20) : AppTheme.onyxContainer,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                     border: Border.all(
                       color: isConfirmed ? const Color(0xFF4ADE80) : AppTheme.darkBorder,
                     ),
@@ -96,7 +97,7 @@ class AppointmentCard extends StatelessWidget {
             Row(
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                   child: SizedBox(
                     width: 52,
                     height: 52,

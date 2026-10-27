@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../providers/app_providers.dart';
 import '../../../../screens/custom_request_screen.dart';
 import '../../../../screens/flash_details_screen.dart';
 import '../../../../widgets/guest_auth_prompt_bottom_sheet.dart';
+import '../../../../services/booking_sync_service.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
@@ -27,7 +30,11 @@ enum ArtistShowcaseTab {
 /// Refactored Artist Profile Screen implementing the updated visual design
 /// specification with modular sliver architecture, pixel-perfect fidelity,
 /// and strict design token adherence.
-class ArtistProfileScreen extends StatefulWidget {
+///
+/// Reactively binds to [artistDetailWithDistanceProvider] and
+/// [effectiveClientCoordinatesProvider] so live Firestore artist updates and
+/// live Haversine distance calculations update dynamically.
+class ArtistProfileScreen extends StatelessWidget {
   final ArtistProfile artist;
   final bool isVipEarlyAccess;
 
@@ -38,10 +45,34 @@ class ArtistProfileScreen extends StatefulWidget {
   });
 
   @override
-  State<ArtistProfileScreen> createState() => _ArtistProfileScreenState();
+  Widget build(BuildContext context) {
+    final content = _ArtistProfileContent(
+      artist: artist,
+      isVipEarlyAccess: isVipEarlyAccess,
+    );
+    final hasScope = context.findAncestorWidgetOfExactType<ProviderScope>() !=
+            null ||
+        context.findAncestorWidgetOfExactType<UncontrolledProviderScope>() !=
+            null;
+    return hasScope ? content : ProviderScope(child: content);
+  }
 }
 
-class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
+class _ArtistProfileContent extends ConsumerStatefulWidget {
+  final ArtistProfile artist;
+  final bool isVipEarlyAccess;
+
+  const _ArtistProfileContent({
+    required this.artist,
+    required this.isVipEarlyAccess,
+  });
+
+  @override
+  ConsumerState<_ArtistProfileContent> createState() =>
+      _ArtistProfileContentState();
+}
+
+class _ArtistProfileContentState extends ConsumerState<_ArtistProfileContent> {
   late bool _isFavorited;
   ArtistShowcaseTab _selectedTab = ArtistShowcaseTab.available;
   int _visibleFlashCount = 6;
@@ -74,37 +105,62 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
     });
   }
 
-  List<FlashPiece> _getFilteredPieces() {
-    final rawPieces = widget.artist.flashArtworks.isNotEmpty
-        ? widget.artist.flashArtworks
+  bool _isClaimedPiece(String id) =>
+      _claimedPieceIds.contains(id) ||
+      BookingSyncService.claimedFlashPieceIds.contains(id);
+
+  int _claimedExclusiveCountFor(ArtistProfile artist) {
+    final rawPieces = artist.flashArtworks.isNotEmpty
+        ? artist.flashArtworks
         : List.generate(
-            widget.artist.images.length,
+            artist.images.length,
             (index) => FlashPiece(
-              id: 'flash_${widget.artist.id}_$index',
-              artistId: widget.artist.id,
-              artistName: widget.artist.name,
+              id: 'flash_${artist.id}_$index',
+              artistId: artist.id,
+              artistName: artist.name,
               title: 'Kiku & Serpent Half...',
-              imageUrl: widget.artist.images[index],
+              imageUrl: artist.images[index],
               location: 'Arm / Thigh',
               dimensions: '6" × 12"',
-              deposit: widget.artist.minDeposit * 3,
+              deposit: artist.minDeposit * 3,
+              status: index.isEven ? FlashStatus.available : FlashStatus.claimed,
+            ),
+          );
+    return rawPieces.where((p) => p.isExclusive && _isClaimedPiece(p.id)).length;
+  }
+
+  List<FlashPiece> _getFilteredPieces(ArtistProfile artist) {
+    final rawPieces = artist.flashArtworks.isNotEmpty
+        ? artist.flashArtworks
+        : List.generate(
+            artist.images.length,
+            (index) => FlashPiece(
+              id: 'flash_${artist.id}_$index',
+              artistId: artist.id,
+              artistName: artist.name,
+              title: 'Kiku & Serpent Half...',
+              imageUrl: artist.images[index],
+              location: 'Arm / Thigh',
+              dimensions: '6" × 12"',
+              deposit: artist.minDeposit * 3,
               status: index.isEven ? FlashStatus.available : FlashStatus.claimed,
             ),
           );
 
-    final allPieces = rawPieces.map((p) {
-      if (_claimedPieceIds.contains(p.id)) {
-        return p.copyWith(status: FlashStatus.claimed);
+    final activePieces = rawPieces.where((p) {
+      final claimed = _isClaimedPiece(p.id);
+      if (claimed && p.isExclusive) {
+        return false;
       }
-      return p;
+      return true;
     }).toList();
 
     if (_selectedTab == ArtistShowcaseTab.available) {
-      return allPieces
+      return activePieces
           .where((p) => p.status != FlashStatus.claimed)
           .toList();
     } else {
-      return allPieces
+      return activePieces
           .where((p) => p.status == FlashStatus.claimed)
           .toList();
     }
@@ -129,7 +185,16 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filteredPieces = _getFilteredPieces();
+    final liveArtistAsync =
+        ref.watch(artistDetailWithDistanceProvider(widget.artist.id));
+    final clientCoords = ref.watch(effectiveClientCoordinatesProvider);
+    final effectiveArtist = liveArtistAsync.maybeWhen(
+      data: (live) => live ?? widget.artist.withLiveDistanceFrom(clientCoords),
+      orElse: () => widget.artist.withLiveDistanceFrom(clientCoords),
+    );
+
+    final claimedExclusiveCount = _claimedExclusiveCountFor(effectiveArtist);
+    final filteredPieces = _getFilteredPieces(effectiveArtist);
     final visiblePieces = filteredPieces.take(_visibleFlashCount).toList();
     final hasMore = visiblePieces.length < filteredPieces.length;
     final bottomInset = MediaQuery.of(context).padding.bottom;
@@ -147,26 +212,33 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
           statusBarIconBrightness: Brightness.light,
           statusBarBrightness: Brightness.dark,
         ),
+        leadingWidth: AppSpacing.screenGutter + 44.0,
         leading: Padding(
-          padding: const EdgeInsets.all(AppSpacing.spaceXs),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => Navigator.of(context).maybePop(),
-              borderRadius: BorderRadius.circular(AppRadius.radiusFull),
-              child: Ink(
-                decoration: BoxDecoration(
-                  color: AppTheme.actionButtonBackground.withAlpha(160),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: AppTheme.actionButtonBorder,
-                    width: 0.8,
+          padding: const EdgeInsets.only(left: AppSpacing.screenGutter),
+          child: Center(
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => Navigator.of(context).maybePop(),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusFull),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      color: AppTheme.actionButtonBackground.withAlpha(160),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppTheme.actionButtonBorder,
+                        width: 0.8,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.arrow_back,
+                      color: AppTheme.textPrimary,
+                      size: 20,
+                    ),
                   ),
-                ),
-                child: const Icon(
-                  Icons.arrow_back,
-                  color: AppTheme.textPrimary,
-                  size: 20,
                 ),
               ),
             ),
@@ -179,7 +251,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
           // 1. Flexible Hero Header (Banner, Avatar, Name, Bio, Fun Facts)
           SliverToBoxAdapter(
             child: ArtistHeaderSection(
-              artist: widget.artist,
+              artist: effectiveArtist,
               isFavorited: _isFavorited,
               onToggleFavorite: _toggleFavorite,
               onBack: () => Navigator.of(context).maybePop(),
@@ -193,7 +265,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
           if (widget.isVipEarlyAccess) ...[
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
                 child: Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -245,32 +317,33 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
             ),
           ],
 
-          // 2. Key Metrics Row (Rating, Avail Pieces, Min Deposit)
+          // 2. Key Metrics Row (Distance, Avail Pieces, Min Deposit)
           SliverToBoxAdapter(
             child: ArtistStatsRow(
-              artist: _claimedPieceIds.isEmpty
-                  ? widget.artist
-                  : widget.artist.copyWith(
-                      availablePieces: (widget.artist.availablePieces - _claimedPieceIds.length).clamp(0, 999),
+              artist: claimedExclusiveCount == 0
+                  ? effectiveArtist
+                  : effectiveArtist.copyWith(
+                      availablePieces:
+                          (effectiveArtist.availablePieces - claimedExclusiveCount)
+                              .clamp(0, 999),
                     ),
             ),
           ),
 
-          const SliverToBoxAdapter(
-            child: SizedBox(height: AppSpacing.spaceMd),
-          ),
-
           // 3. Mid-page CTA: Submit a Custom Request
-          if (widget.artist.customRequestAvailable) ...[
+          if (effectiveArtist.customRequestAvailable) ...[
+            const SliverToBoxAdapter(
+              child: SizedBox(height: AppSpacing.spaceMd),
+            ),
             SliverToBoxAdapter(
               child: CustomRequestBanner(
-                artist: widget.artist,
+                artist: effectiveArtist,
                 onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => CustomRequestScreen(
-                        artist: widget.artist,
+                        artist: effectiveArtist,
                       ),
                     ),
                   );
@@ -278,7 +351,11 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
               ),
             ),
             const SliverToBoxAdapter(
-              child: SizedBox(height: AppSpacing.spaceMd),
+              child: SizedBox(height: AppSpacing.spaceXs),
+            ),
+          ] else ...[
+            const SliverToBoxAdapter(
+              child: SizedBox(height: AppSpacing.spaceXs),
             ),
           ],
 
@@ -297,7 +374,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   vertical: AppSpacing.spaceXxl,
-                  horizontal: AppSpacing.spaceLg,
+                  horizontal: AppSpacing.screenGutter,
                 ),
                 child: Center(
                   child: Text(
@@ -314,7 +391,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
@@ -333,7 +410,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
                           MaterialPageRoute(
                             builder: (context) => FlashDetailsScreen(
                               flash: item,
-                              artist: widget.artist,
+                              artist: effectiveArtist,
                             ),
                           ),
                         );
@@ -357,7 +434,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
             ),
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
                 child: OutlinedButton(
                   onPressed: _isLoadingMore
                       ? null
@@ -401,7 +478,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
           // 7. Studio Policies & House Rules Card
           SliverToBoxAdapter(
             child: StudioPoliciesCard(
-              artist: widget.artist,
+              artist: effectiveArtist,
             ),
           ),
 
@@ -416,7 +493,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
 
   Widget _buildSegmentedTabBar() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
       child: Row(
         children: [
           Expanded(
@@ -447,7 +524,10 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.spaceSm),
+            padding: const EdgeInsets.only(
+              top: AppSpacing.spaceXs,
+              bottom: 6.0,
+            ),
             child: Text(
               tab.label,
               style: AppTypography.bodyMedBold.copyWith(
@@ -461,7 +541,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
             width: double.infinity,
             decoration: BoxDecoration(
               color: isSelected ? AppTheme.textPrimary : AppTheme.darkBorder,
-              borderRadius: BorderRadius.circular(1),
+              borderRadius: BorderRadius.circular(AppRadius.radiusXs),
             ),
           ),
         ],

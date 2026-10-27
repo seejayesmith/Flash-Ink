@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'app_spacing.dart';
 import 'app_typography.dart';
 
 /// Centralized design tokens and theme constants for Flash.Ink.
@@ -80,21 +81,9 @@ class AppTheme {
   /// Shimmer base color for image placeholders.
   static const Color shimmerBase = Color(0xFF1E2020);
 
-  /// Shimmer highlight color for image placeholders.
-  static const Color shimmerHighlight = Color(0xFF2E3232);
-
   // ---------------------------------------------------------------------------
   // Glassmorphic Surface Tokens (Figma Spec)
   // ---------------------------------------------------------------------------
-
-  /// Gradient top tint for liquid glass refraction (-45° light angle).
-  static const Color glassTopTint = Color(0xFF1E2222);
-
-  /// Gradient bottom tint for dark refraction contrast.
-  static const Color glassBottomTint = Color(0xFF0F1111);
-
-  /// Default alpha channel for liquid glass backdrop.
-  static const int glassBaseTintAlpha = 175;
 
   /// Default blur radius for silky background diffusion.
   static const double glassBlurSigma = 20.0;
@@ -116,7 +105,7 @@ class AppTheme {
   static const double navBarBorderRadius = 36.0;
 
   /// Horizontal margin from screen edge for floating positioning.
-  static const double navBarHorizontalMargin = 20.0;
+  static const double navBarHorizontalMargin = AppSpacing.screenGutter;
 
   /// Vertical margin above the system navigation / home bar safe area.
   static const double navBarBottomMargin = 12.0;
@@ -134,16 +123,14 @@ class AppTheme {
   );
 
   /// Corner radius for active destination indicator pill.
-  static const double navItemBorderRadius = 20.0;
+  /// Concentric math: navBarBorderRadius (36.0) - navBarPadding / vertical margin (4.0) = 32.0.
+  static const double navItemBorderRadius = 32.0;
 
   /// Icon size for navigation destinations.
   static const double navIconSize = 22.0;
 
   /// Spacing between destination icon and text label.
   static const double navIconLabelSpacing = 2.0;
-
-  /// Minimum touch target size meeting accessibility standards (48x48dp).
-  static const Size navItemMinTouchTarget = Size(48.0, 48.0);
 
   /// Animation duration for active destination state transitions.
   static const Duration navAnimationDuration = Duration(milliseconds: 280);
@@ -209,6 +196,20 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.0),
+        ),
+        showCloseIcon: true,
+        closeIconColor: Colors.white,
+        backgroundColor: onyxContainer,
+        contentTextStyle: GoogleFonts.plusJakartaSans(
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+          fontSize: 14.0,
+        ),
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {

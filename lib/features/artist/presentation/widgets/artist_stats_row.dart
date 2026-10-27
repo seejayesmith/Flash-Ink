@@ -18,7 +18,7 @@ class ArtistStatsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
       child: Container(
         decoration: BoxDecoration(
           color: AppTheme.cardBackground,
@@ -40,7 +40,11 @@ class ArtistStatsRow extends StatelessWidget {
                 context,
                 icon: Icons.location_on_outlined,
                 iconColor: AppTheme.navInactive,
-                value: artist.distance,
+                value: artist.distance.isNotEmpty
+                    ? artist.distance
+                    : (artist.location.isNotEmpty
+                        ? artist.location
+                        : 'Location set'),
                 label: 'DISTANCE',
                 valueColor: AppTheme.textPrimary,
               ),

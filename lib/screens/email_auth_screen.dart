@@ -3,13 +3,18 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../config/dev_config.dart';
+import '../features/auth/presentation/screens/account_recovery_hub_screen.dart';
+import '../features/auth/presentation/screens/auth_lockout_screen.dart';
+import '../features/auth/presentation/sheets/account_collision_sheet.dart';
 import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_radius.dart';
-import '../theme/app_buttons.dart';
 import '../widgets/adaptive_glass_container.dart';
+import '../widgets/fade_page_route.dart';
+import '../widgets/flash_glass_app_bar.dart';
 import '../widgets/flash_logo.dart';
-import '../widgets/skip_pill_button.dart';
+import '../widgets/flash_snack_bar.dart';
+import '../widgets/pinned_bottom_action_scaffold.dart';
 import 'artist_onboarding/artist_info_screen.dart';
 import 'auth_routing.dart';
 import 'email_verification_screen.dart';
@@ -19,12 +24,14 @@ class EmailAuthScreen extends StatefulWidget {
   final String role;
   final AuthService? authService;
   final bool initialIsSignUp;
+  final String? initialEmail;
 
   const EmailAuthScreen({
     super.key,
     required this.role,
     this.authService,
     this.initialIsSignUp = true,
+    this.initialEmail,
   });
 
   @override
@@ -34,12 +41,18 @@ class EmailAuthScreen extends StatefulWidget {
 class _EmailAuthScreenState extends State<EmailAuthScreen> {
   late final AuthService _authService = widget.authService ?? AuthService();
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  late final TextEditingController _emailController;
   final _passwordController = TextEditingController();
 
   late bool _isSignUp = widget.initialIsSignUp;
   bool _isLoading = false;
   String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController = TextEditingController(text: widget.initialEmail ?? '');
+  }
 
   @override
   void dispose() {
@@ -50,17 +63,7 @@ class _EmailAuthScreenState extends State<EmailAuthScreen> {
 
   void _showErrorSnackBar(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message.replaceAll('Exception: ', ''),
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: const Color(0xFFEF4444),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: AppBorderRadius.md),
-      ),
-    );
+    FlashSnackBar.showError(context, message);
   }
 
   Future<void> _submit() async {
@@ -117,6 +120,23 @@ class _EmailAuthScreenState extends State<EmailAuthScreen> {
     } catch (e) {
       final errorMsg = e.toString().replaceAll('Exception: ', '');
       if (mounted) {
+        if (errorMsg.contains('too-many-requests') || errorMsg.contains('Too many attempts')) {
+          Navigator.push(
+            context,
+            FadePageRoute(builder: (_) => const AuthLockoutScreen()),
+          );
+          return;
+        }
+        if (e is FirebaseAuthException && e.code == 'account-exists-with-different-credential') {
+          AccountCollisionSheet.show(
+            context: context,
+            email: e.email ?? _emailController.text.trim(),
+            existingProvider: 'Existing Account',
+            newProvider: 'Email',
+            pendingCredential: e.credential,
+          );
+          return;
+        }
         setState(() {
           _errorMessage = errorMsg;
         });
@@ -160,32 +180,14 @@ class _EmailAuthScreenState extends State<EmailAuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PinnedBottomActionScaffold(
       extendBodyBehindAppBar: true,
-      backgroundColor: const Color(0xFF121414),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFFF9FAFA)),
-          onPressed: () => Navigator.pop(context),
-        ),
+      appBar: FlashGlassAppBar(
         title: const FlashLogo(fontSize: 28),
-        centerTitle: true,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: Center(
-              child: SkipPillButton(
-                onPressed: _handleSkip,
-              ),
-            ),
-          ),
-        ],
+        onSkipPressed: _handleSkip,
       ),
-      body: Stack(
+      background: Stack(
         children: [
-          // Background tattoo setup image texture
           Positioned.fill(
             child: Image.asset(
               'assets/images/tattoo_setup.png',
@@ -210,212 +212,225 @@ class _EmailAuthScreenState extends State<EmailAuthScreen> {
               ),
             ),
           ),
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.spaceLg,
-                  vertical: AppSpacing.spaceMd,
+        ],
+      ),
+      centerContent: false,
+      ctaText: _isSignUp ? 'CREATE ACCOUNT' : 'SIGN IN',
+      onCtaPressed: _submit,
+      isCtaLoading: _isLoading,
+      secondaryAction: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _isSignUp = !_isSignUp;
+                _errorMessage = null;
+              });
+            },
+            child: Text(
+              _isSignUp
+                  ? 'Already have an account? Sign In'
+                  : "Don't have an account? Create One",
+              style: const TextStyle(
+                color: Color(0xFF919696),
+                fontSize: 13,
+              ),
+            ),
+          ),
+          TextButton(
+            key: const Key('email_auth_trouble_link'),
+            onPressed: () {
+              Navigator.push(
+                context,
+                FadePageRoute(
+                  builder: (_) => const AccountRecoveryHubScreen(),
                 ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 480),
-                  child: AdaptiveGlassContainer(
-                    useGradient: false,
-                    borderRadius: 24.0,
-                    padding: const EdgeInsets.all(AppSpacing.spaceLg),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Center(
-                            child: Container(
-                              padding: const EdgeInsets.all(AppSpacing.spaceSm),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEEC200).withAlpha(25),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.mail_outline,
-                                color: Color(0xFFEEC200),
-                                size: 36,
-                              ),
-                            ),
-                          ),
-                          AppGaps.gapMd,
-                          Center(
-                            child: Text(
-                              _isSignUp ? 'Create with Email' : 'Sign in with Email',
-                              style: GoogleFonts.plusJakartaSans(
-                                color: const Color(0xFFF9FAFA),
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          AppGaps.gapXs,
-                          Center(
-                            child: Text(
-                              _isSignUp
-                                  ? (widget.role == 'artist'
-                                      ? 'Sign up with your studio email to showcase your flash.'
-                                      : 'Sign up to discover and book flash tattoos.')
-                                  : 'Enter your email and password to access your account.',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.plusJakartaSans(
-                                color: const Color(0xFF919696),
-                                fontSize: 13,
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
-                          AppGaps.gapLg,
-                          Text(
-                            'Email Address',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: const Color(0xFFF9FAFA),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          AppGaps.gapXs,
-                          TextFormField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            style: const TextStyle(color: Color(0xFFF9FAFA)),
-                            validator: (v) => (v == null || !v.contains('@'))
-                                ? 'Enter a valid email'
-                                : null,
-                            decoration: InputDecoration(
-                              hintText: 'you@example.com',
-                              hintStyle: const TextStyle(color: Color(0xFF4D5252)),
-                              prefixIcon: const Icon(
-                                Icons.email_outlined,
-                                color: Color(0xFFEEC200),
-                                size: 20,
-                              ),
-                              filled: true,
-                              fillColor: const Color(0xFF121414),
-                              border: OutlineInputBorder(
-                                borderRadius: AppBorderRadius.md,
-                                borderSide: const BorderSide(color: Color(0xFF262929)),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: AppBorderRadius.md,
-                                borderSide: const BorderSide(color: Color(0xFFEEC200)),
-                              ),
-                            ),
-                          ),
-                          AppGaps.gapMd,
-                          Text(
-                            'Password',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: const Color(0xFFF9FAFA),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          AppGaps.gapXs,
-                          TextFormField(
-                            controller: _passwordController,
-                            obscureText: true,
-                            style: const TextStyle(color: Color(0xFFF9FAFA)),
-                            validator: (v) => (v == null || v.length < 6)
-                                ? 'Password must be at least 6 characters'
-                                : null,
-                            decoration: InputDecoration(
-                              hintText: '••••••••',
-                              hintStyle: const TextStyle(color: Color(0xFF4D5252)),
-                              prefixIcon: const Icon(
-                                Icons.lock_outline,
-                                color: Color(0xFFEEC200),
-                                size: 20,
-                              ),
-                              filled: true,
-                              fillColor: const Color(0xFF121414),
-                              border: OutlineInputBorder(
-                                borderRadius: AppBorderRadius.md,
-                                borderSide: const BorderSide(color: Color(0xFF262929)),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: AppBorderRadius.md,
-                                borderSide: const BorderSide(color: Color(0xFFEEC200)),
-                              ),
-                            ),
-                          ),
-                          if (_errorMessage != null) ...[
-                            AppGaps.gapMd,
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.spaceMd,
-                                vertical: AppSpacing.spaceSm,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEF4444).withAlpha(30),
-                                borderRadius: AppBorderRadius.md,
-                                border: Border.all(color: const Color(0xFFEF4444)),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.error_outline,
-                                    color: Color(0xFFEF4444),
-                                    size: 18,
-                                  ),
-                                  AppGaps.gapSm,
-                                  Expanded(
-                                    child: Text(
-                                      _errorMessage!,
-                                      style: GoogleFonts.plusJakartaSans(
-                                        color: const Color(0xFFEF4444),
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                          AppGaps.gapLg,
-                          AppButtons.primaryCTA(
-                            isLoading: _isLoading,
-                            onPressed: _submit,
-                            text: _isSignUp ? 'CREATE ACCOUNT' : 'SIGN IN',
-                          ),
-                          AppGaps.gapSm,
-                          Center(
-                            child: TextButton(
-                              onPressed: () {
-                                setState(() {
-                                  _isSignUp = !_isSignUp;
-                                  _errorMessage = null;
-                                });
-                              },
-                              child: Text(
-                                _isSignUp
-                                    ? 'Already have an account? Sign In'
-                                    : "Don't have an account? Create One",
-                                style: const TextStyle(
-                                  color: Color(0xFF919696),
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+              );
+            },
+            child: Text(
+              'Trouble signing in?',
+              style: GoogleFonts.plusJakartaSans(
+                color: const Color(0xFF8C9191),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.underline,
+                decorationColor: const Color(0xFF8C9191),
               ),
             ),
           ),
         ],
       ),
-    );
-  }
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: AdaptiveGlassContainer(
+          useGradient: false,
+          borderRadius: 24.0,
+          padding: const EdgeInsets.all(AppSpacing.spaceLg),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(AppSpacing.spaceSm),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEC200).withAlpha(25),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.mail_outline,
+                      color: Color(0xFFEEC200),
+                      size: 36,
+                    ),
+                  ),
+                ),
+                AppGaps.gapMd,
+                Center(
+                  child: Text(
+                    _isSignUp ? 'Create with Email' : 'Sign in with Email',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFF9FAFA),
+                      fontSize: 34,
+                      fontWeight: FontWeight.w800,
+                      height: 1.15,
+                    ),
+                  ),
+                ),
+                AppGaps.gapXs,
+                Center(
+                  child: Text(
+                    _isSignUp
+                        ? (widget.role == 'artist'
+                            ? 'Sign up with your studio email to showcase your flash.'
+                            : 'Sign up to discover and book flash tattoos.')
+                        : 'Enter your email and password to access your account.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFF919696),
+                      fontSize: 15,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+                AppGaps.gapLg,
+                Text(
+                  'Email Address',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFFF9FAFA),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                AppGaps.gapXs,
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  style: const TextStyle(color: Color(0xFFF9FAFA)),
+                  validator: (v) => (v == null || !v.contains('@'))
+                      ? 'Enter a valid email'
+                      : null,
+                  decoration: InputDecoration(
+                    hintText: 'you@example.com',
+                    hintStyle: const TextStyle(color: Color(0xFF4D5252)),
+                    prefixIcon: const Icon(
+                      Icons.email_outlined,
+                      color: Color(0xFFEEC200),
+                      size: 20,
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFF121414),
+                    border: OutlineInputBorder(
+                      borderRadius: AppBorderRadius.md,
+                      borderSide: const BorderSide(color: Color(0xFF262929)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: AppBorderRadius.md,
+                      borderSide: const BorderSide(color: Color(0xFFEEC200)),
+                    ),
+                  ),
+                ),
+                AppGaps.gapMd,
+                Text(
+                  'Password',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFFF9FAFA),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                AppGaps.gapXs,
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  style: const TextStyle(color: Color(0xFFF9FAFA)),
+                  validator: (v) => (v == null || v.length < 6)
+                      ? 'Password must be at least 6 characters'
+                      : null,
+                  decoration: InputDecoration(
+                    hintText: '••••••••',
+                    hintStyle: const TextStyle(color: Color(0xFF4D5252)),
+                    prefixIcon: const Icon(
+                      Icons.lock_outline,
+                      color: Color(0xFFEEC200),
+                      size: 20,
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFF121414),
+                    border: OutlineInputBorder(
+                      borderRadius: AppBorderRadius.md,
+                      borderSide: const BorderSide(color: Color(0xFF262929)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: AppBorderRadius.md,
+                      borderSide: const BorderSide(color: Color(0xFFEEC200)),
+                    ),
+                  ),
+                ),
+                if (_errorMessage != null) ...[
+                  AppGaps.gapSm,
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.spaceMd,
+                      vertical: AppSpacing.spaceSm,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withAlpha(30),
+                      borderRadius: AppBorderRadius.md,
+                      border: Border.all(color: const Color(0xFFEF4444)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          color: Color(0xFFEF4444),
+                          size: 18,
+                        ),
+                        AppGaps.gapSm,
+                        Expanded(
+                          child: Text(
+                            _errorMessage!,
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFFEF4444),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
 }

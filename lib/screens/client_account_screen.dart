@@ -3,12 +3,17 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import '../config/dev_config.dart';
+import '../features/appointments/domain/models/appointment_item.dart';
+import '../providers/app_providers.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_spacing.dart';
+import '../widgets/flash_snack_bar.dart';
 import '../widgets/flash_switch.dart';
 import '../widgets/tattoo_machine_icon.dart';
 import '../widgets/photo_source_bottom_sheet.dart';
+import '../widgets/reauthentication_bottom_sheet.dart';
 import 'client_edit_profile_screen.dart';
 import 'client_aesthetics_screen.dart';
 import 'app_info_screen.dart';
@@ -34,14 +39,13 @@ class ClientAccountScreen extends StatefulWidget {
 class _ClientAccountScreenState extends State<ClientAccountScreen> {
   late final AuthService _authService = widget.authService ?? AuthService();
 
-  final bool _isLoading = false;
   bool _isDeleting = false;
   bool _isUploadingPhoto = false;
 
   // Profile fields
   String _username = 'flashclient';
   String _email = 'client@flash.ink';
-  String _phoneNumber = '+1 (555) 234-5678';
+  String _phoneNumber = '(555) 234-5678';
   bool _phoneVerified = true;
   String? _photoUrl;
   List<String> _aesthetics = ['traditional', 'fineline', 'blackwork'];
@@ -85,11 +89,14 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
             if (data['email'] != null) {
               _email = data['email'] as String;
             }
-            if (data['photoURL'] != null && (data['photoURL'] as String).isNotEmpty) {
-              _photoUrl = data['photoURL'] as String;
+            final photo = data['photoURL'] ?? data['photoUrl'] ?? data['avatarUrl'];
+            if (photo is String && photo.isNotEmpty) {
+              _photoUrl = photo;
+            } else if (photo == null && (user.photoURL == null || user.photoURL!.isEmpty)) {
+              _photoUrl = null;
             }
             if (data['phoneNumber'] != null) {
-              _phoneNumber = data['phoneNumber'] as String;
+              _phoneNumber = AuthService.formatDisplayPhoneNumber(data['phoneNumber'] as String);
             }
             if (data['phoneVerified'] != null) {
               _phoneVerified = data['phoneVerified'] as bool;
@@ -132,8 +139,13 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
         } catch (_) {}
 
         await user.updatePhotoURL(null);
+        try {
+          await user.reload();
+        } catch (_) {}
         await _updateFirestoreUser(user.uid, {
+          'uid': user.uid,
           'photoURL': null,
+          'photoUrl': null,
         });
 
         if (mounted) {
@@ -141,16 +153,12 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
             _photoUrl = null;
             _isUploadingPhoto = false;
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Profile photo removed')),
-          );
+          FlashSnackBar.showSuccess(context, 'Profile photo removed');
         }
       } catch (e) {
         if (mounted) {
           setState(() => _isUploadingPhoto = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to remove photo: $e')),
-          );
+          FlashSnackBar.showError(context, 'Failed to remove photo: $e');
         }
       }
       return;
@@ -159,20 +167,34 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
     if (result.croppedBytes != null) {
       setState(() => _isUploadingPhoto = true);
       try {
-        final storageRef = FirebaseStorage.instance
-            .ref()
-            .child('user_profiles')
-            .child('${user.uid}.png');
+        String downloadUrl;
+        try {
+          final storageRef = FirebaseStorage.instance
+              .ref()
+              .child('user_profiles')
+              .child('${user.uid}.png');
 
-        await storageRef.putData(
-          result.croppedBytes!,
-          SettableMetadata(contentType: 'image/png'),
-        );
-        final downloadUrl = await storageRef.getDownloadURL();
+          await storageRef.putData(
+            result.croppedBytes!,
+            SettableMetadata(contentType: 'image/png'),
+          );
+          downloadUrl = await storageRef.getDownloadURL();
+        } catch (storageErr) {
+          if (kEnableDevBypass || user is DevMockUser) {
+            downloadUrl = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
+          } else {
+            rethrow;
+          }
+        }
 
         await user.updatePhotoURL(downloadUrl);
+        try {
+          await user.reload();
+        } catch (_) {}
         await _updateFirestoreUser(user.uid, {
+          'uid': user.uid,
           'photoURL': downloadUrl,
+          'photoUrl': downloadUrl,
         });
 
         if (mounted) {
@@ -180,16 +202,12 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
             _photoUrl = downloadUrl;
             _isUploadingPhoto = false;
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Profile photo updated successfully')),
-          );
+          FlashSnackBar.showSuccess(context, 'Profile photo updated successfully');
         }
       } catch (e) {
         if (mounted) {
           setState(() => _isUploadingPhoto = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to update photo: $e')),
-          );
+          FlashSnackBar.showError(context, 'Failed to update photo: $e');
         }
       }
     }
@@ -197,11 +215,17 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
 
   Future<void> _updateFirestoreUser(String uid, Map<String, dynamic> data) async {
     try {
+      final payload = <String, dynamic>{
+        'uid': uid,
+        ...data,
+      };
+      final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
+      final timeoutDuration = isTest ? const Duration(milliseconds: 500) : const Duration(seconds: 10);
       await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
-          .set(data, SetOptions(merge: true))
-          .timeout(const Duration(milliseconds: 500));
+          .set(payload, SetOptions(merge: true))
+          .timeout(timeoutDuration);
     } catch (_) {
       // Graceful fallback for offline, widget tests, or unmocked Firestore
     }
@@ -259,6 +283,7 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
     if (shouldSignOut == true) {
       await _authService.signOut();
       if (mounted) {
+        invalidateUserSessionFromContext(context);
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const SplashScreen()),
@@ -342,43 +367,64 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
       try {
         await _authService.deleteAccount();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Account deleted. A confirmation email has been sent.',
-                style: GoogleFonts.plusJakartaSans(color: Colors.white),
-              ),
-              backgroundColor: const Color(0xFF1E2020),
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 4),
-            ),
-          );
-
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => const SplashScreen()),
-            (route) => false,
-          );
+          _onAccountDeletedSuccessfully();
         }
       } catch (e) {
         if (mounted) {
           setState(() => _isDeleting = false);
+          final isRequiresRecentLogin = e is RequiresRecentLoginException ||
+              (e is FirebaseAuthException && e.code == 'requires-recent-login') ||
+              e.toString().toLowerCase().contains('requires recent authentication') ||
+              e.toString().toLowerCase().contains('requires-recent-login');
+
           final errorMsg = e is FirebaseAuthException
               ? _authService.handleFirebaseAuthException(e).toString().replaceFirst('Exception: ', '')
               : e.toString().replaceFirst('Exception: ', '');
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                errorMsg,
-                style: GoogleFonts.plusJakartaSans(color: Colors.white),
-              ),
-              backgroundColor: const Color(0xFFEF4444),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+          if (isRequiresRecentLogin) {
+            _showReauthenticationSheet();
+          } else {
+            FlashSnackBar.showError(context, errorMsg);
+          }
         }
       }
+    }
+  }
+
+  void _onAccountDeletedSuccessfully() {
+    if (!mounted) return;
+    invalidateUserSessionFromContext(context);
+    FlashSnackBar.showSuccess(
+      context,
+      'Account deleted. A confirmation email has been sent.',
+      duration: const Duration(seconds: 4),
+    );
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const SplashScreen()),
+      (route) => false,
+    );
+  }
+
+  Future<void> _showReauthenticationSheet() async {
+    final deleted = await ReauthenticationBottomSheet.show(
+      context: context,
+      authService: _authService,
+    );
+
+    if (deleted == true && mounted) {
+      _onAccountDeletedSuccessfully();
+    } else if (mounted) {
+      FlashSnackBar.showError(
+        context,
+        'This action requires recent authentication. Please log in again before deleting your account.',
+        action: SnackBarAction(
+          label: 'Verify',
+          textColor: AppTheme.gold,
+          onPressed: () => _showReauthenticationSheet(),
+        ),
+      );
     }
   }
 
@@ -407,12 +453,10 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
       setState(() {
         _username = result['username'] ?? _username;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile updated successfully'),
-          backgroundColor: Color(0xFF22C55E),
-          duration: Duration(seconds: 2),
-        ),
+      FlashSnackBar.showSuccess(
+        context,
+        'Profile updated successfully',
+        duration: const Duration(seconds: 2),
       );
     }
   }
@@ -440,12 +484,10 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
       setState(() {
         _aesthetics = result;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Aesthetic preferences updated'),
-          backgroundColor: Color(0xFF22C55E),
-          duration: Duration(seconds: 2),
-        ),
+      FlashSnackBar.showSuccess(
+        context,
+        'Aesthetic preferences updated',
+        duration: const Duration(seconds: 2),
       );
     }
   }
@@ -652,7 +694,7 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
               ),
             ),
 
-            SizedBox(height: bottomInset + 32),
+            SizedBox(height: bottomInset + 16),
           ],
         ),
       ),
@@ -837,9 +879,12 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildStatPillar('2', 'Upcoming Bookings'),
+              _buildStatPillar(
+                '${ClientAppointment.activeUpcoming.length}',
+                'Upcoming Bookings',
+              ),
               Container(width: 1, height: 26, color: AppTheme.statDivider),
-              _buildStatPillar('8', 'Saved Pieces'),
+              _buildStatPillar('0', 'Saved Pieces'),
               Container(width: 1, height: 26, color: AppTheme.statDivider),
               _buildStatPillar('${_aesthetics.length}', 'Aesthetics'),
             ],

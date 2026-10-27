@@ -5,6 +5,7 @@ import '../../../../models/artist_dashboard_data.dart';
 import '../../../../models/waitlist_entry.dart';
 import '../../../../screens/artist_profile_screen.dart';
 import '../../../../screens/custom_request_screen.dart';
+import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../widgets/flash_image.dart';
 import '../../../../widgets/guest_auth_prompt_bottom_sheet.dart';
@@ -29,8 +30,8 @@ class VipWaitlistInvitationCard extends StatelessWidget {
         : 'Limited Time';
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(AppSpacing.spaceLg, 12, AppSpacing.spaceLg, 12),
-      padding: const EdgeInsets.all(18),
+      margin: const EdgeInsets.fromLTRB(AppSpacing.screenGutter, 12, AppSpacing.screenGutter, 12),
+      padding: const EdgeInsets.all(AppSpacing.cardPadding),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
@@ -40,7 +41,7 @@ class VipWaitlistInvitationCard extends StatelessWidget {
             Color(0xFF161818),
           ],
         ),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(AppRadius.radiusXl),
         border: Border.all(
           color: const Color(0xFFEEC200),
           width: 1.5,
@@ -63,7 +64,7 @@ class VipWaitlistInvitationCard extends StatelessWidget {
                 padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
                   color: const Color(0xFFEEC200).withAlpha(35),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                 ),
                 child: const Icon(Icons.stars_rounded, color: Color(0xFFEEC200), size: 18),
               ),
@@ -82,7 +83,7 @@ class VipWaitlistInvitationCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
                   color: const Color(0xFF121414),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusXs),
                   border: Border.all(color: const Color(0xFFEEC200).withAlpha(100)),
                 ),
                 child: Text(
@@ -149,12 +150,12 @@ class VipWaitlistInvitationCard extends StatelessWidget {
 
           const SizedBox(height: 12),
 
-          // Waitlist Concept Spec Box
+          // Waitlist Concept Spec Box (concentric: outer radiusXl 20 - cardPadding 16 = radiusXs 4)
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: const Color(0xFF141616),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.radiusXs),
               border: Border.all(color: const Color(0xFF262A2A)),
             ),
             child: Column(
@@ -244,7 +245,7 @@ class VipWaitlistInvitationCard extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                     ),
                   ),
                   child: Text(
@@ -276,7 +277,7 @@ class VipWaitlistInvitationCard extends StatelessWidget {
                     foregroundColor: const Color(0xFFEEC200),
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                     ),
                   ),
                   child: Text(

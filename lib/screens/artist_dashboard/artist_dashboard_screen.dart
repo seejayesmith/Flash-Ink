@@ -1,12 +1,16 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/mock/mock_data_config.dart';
 import '../../core/widgets/flash_bottom_nav_bar.dart';
+import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../models/artist.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/tattoo_machine_icon.dart';
 import '../../widgets/flash_image.dart';
+import '../../widgets/flash_snack_bar.dart';
 import 'appointment_detail_screen.dart';
 import 'artist_account_screen.dart';
 import 'artist_books_screen.dart';
@@ -33,12 +37,52 @@ class ArtistDashboardScreen extends StatefulWidget {
 class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   late final AuthService _authService = widget.authService ?? AuthService();
   int _selectedTabIndex = 0;
+  Artist? _liveArtist;
 
-  late DashboardAppointment _nextAppointment;
-  late List<DashboardAppointment> _todaySchedule;
-  late List<BookingRequest> _pendingRequests;
-  late ArtistDashboardStats _stats;
+  DashboardAppointment get _nextAppointment => ArtistDashboardRepository.nextAppointment;
+  List<DashboardAppointment> get _todaySchedule => ArtistDashboardRepository.todaySchedule;
+  List<BookingRequest> get _pendingRequests => ArtistDashboardRepository.pendingRequests;
+  ArtistDashboardStats get _stats => ArtistDashboardRepository.stats;
   final Set<String> _expandedAppointmentIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    ArtistDashboardRepository.pendingRequestsNotifier.addListener(_onRepositoryUpdated);
+    if (widget.artist == null) {
+      _loadLiveArtistProfile();
+    }
+  }
+
+  Future<void> _loadLiveArtistProfile() async {
+    try {
+      final uid = _authService.currentUser?.uid;
+      if (uid == null || uid.isEmpty) return;
+      final doc = await FirebaseFirestore.instance
+          .collection('artists')
+          .doc(uid)
+          .get();
+      if (doc.exists && doc.data() != null && mounted) {
+        setState(() {
+          _liveArtist = Artist.fromMap(doc.data()!, doc.id);
+        });
+      }
+    } catch (_) {
+      // Safe fallback in offline or widget test environments
+    }
+  }
+
+  @override
+  void dispose() {
+    ArtistDashboardRepository.pendingRequestsNotifier.removeListener(_onRepositoryUpdated);
+    super.dispose();
+  }
+
+  void _onRepositoryUpdated() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
 
   void _toggleAppointmentExpanded(String id) {
     setState(() {
@@ -50,31 +94,36 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
     });
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _nextAppointment = ArtistDashboardRepository.nextAppointment;
-    _todaySchedule = List.from(ArtistDashboardRepository.todaySchedule);
-    _pendingRequests = List.from(ArtistDashboardRepository.pendingRequests);
-    _stats = ArtistDashboardRepository.stats;
-  }
+  Artist? get _resolvedArtist => _liveArtist ?? widget.artist;
 
   String get _artistDisplayName {
-    if (widget.artist != null && widget.artist!.name.isNotEmpty) {
-      return widget.artist!.name;
+    final resolved = _resolvedArtist;
+    if (resolved != null && resolved.name.isNotEmpty) {
+      return resolved.name;
     }
-    final user = _authService.currentUser;
-    if (user != null && user.displayName != null && user.displayName!.isNotEmpty) {
-      return user.displayName!;
-    }
-    return 'OddMaree';
+    try {
+      final user = _authService.currentUser;
+      if (user != null && user.displayName != null && user.displayName!.isNotEmpty) {
+        return user.displayName!;
+      }
+    } catch (_) {}
+    return MockDataConfig.isEnabled ? 'OddMaree' : 'Artist';
   }
 
   String get _avatarUrl {
-    if (widget.artist != null && widget.artist!.avatarUrl.isNotEmpty) {
-      return widget.artist!.avatarUrl;
+    final resolved = _resolvedArtist;
+    if (resolved != null && resolved.avatarUrl.isNotEmpty) {
+      return resolved.avatarUrl;
     }
-    return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
+    try {
+      final user = _authService.currentUser;
+      if (user?.photoURL != null && user!.photoURL!.isNotEmpty) {
+        return user.photoURL!;
+      }
+    } catch (_) {}
+    return MockDataConfig.isEnabled
+        ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'
+        : '';
   }
 
   String _formatCurrentDate() {
@@ -135,14 +184,12 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => ArtistAccountScreen(
-          artist: widget.artist,
+          artist: _resolvedArtist,
           authService: _authService,
         ),
       ),
     );
   }
-
-  void _showProfileSettingsModal() => _navigateToAccountScreen();
 
   @override
   Widget build(BuildContext context) {
@@ -161,8 +208,8 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
             ],
           ),
           Positioned(
-            left: AppTheme.navBarHorizontalMargin,
-            right: AppTheme.navBarHorizontalMargin,
+            left: AppSpacing.screenGutter,
+            right: AppSpacing.screenGutter,
             bottom: MediaQuery.paddingOf(context).bottom + AppTheme.navBarBottomMargin,
             child: FlashBottomNavBar(
               currentIndex: _selectedTabIndex,
@@ -178,9 +225,15 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   /// Primary Artist Dashboard Content (Tab 0: Bookings)
   Widget _buildDashboardContent() {
     return SafeArea(
+      bottom: false,
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.screenGutter,
+          12,
+          AppSpacing.screenGutter,
+          MediaQuery.paddingOf(context).bottom + 80,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -216,7 +269,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
         ),
         GestureDetector(
           key: avatarKey,
-          onTap: _showProfileSettingsModal,
+          onTap: _navigateToAccountScreen,
           child: Container(
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
@@ -854,11 +907,9 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
                   child: OutlinedButton.icon(
                     key: Key('expanded_message_${item.id}'),
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Opening chat with ${item.clientName}...'),
-                          backgroundColor: const Color(0xFF1E2020),
-                        ),
+                      FlashSnackBar.showInfo(
+                        context,
+                        'Opening chat with ${item.clientName}...',
                       );
                     },
                     style: OutlinedButton.styleFrom(
@@ -892,9 +943,20 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
     );
   }
 
+  Future<void> _openBookingRequestDetail(BookingRequest request) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BookingRequestDetailScreen(request: request),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {});
+  }
+
   /// Pending Requests section with right-aligned request counter and cards
   Widget _buildPendingRequestsSection() {
-    final count = _stats.pendingCount;
+    final count = _pendingRequests.length;
     final countText = count == 1 ? '1 request' : '$count requests';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -922,7 +984,31 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
           ],
         ),
         const SizedBox(height: 16),
-        ..._pendingRequests.map((req) => _buildPendingRequestCard(req)),
+        if (_pendingRequests.isEmpty)
+          Container(
+            key: const Key('no_pending_requests_empty_state'),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E2121),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0xFF282C2C),
+                width: 1.0,
+              ),
+            ),
+            child: Text(
+              'No pending requests',
+              style: GoogleFonts.plusJakartaSans(
+                color: AppTheme.navInactiveAlt,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          )
+        else
+          ..._pendingRequests.map((req) => _buildPendingRequestCard(req)),
       ],
     );
   }
@@ -941,69 +1027,73 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
       ),
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          InkWell(
+            onTap: () => _openBookingRequestDetail(request),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          request.clientName,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          request.conceptDescription,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFFB0B5B5),
+                            fontSize: 12,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        request.clientName,
+                        request.timeAgo,
                         style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF8C9191),
+                          fontSize: 11,
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        request.conceptDescription,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFFB0B5B5),
-                          fontSize: 12,
-                          height: 1.35,
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          width: 54,
+                          height: 54,
+                          color: const Color(0xFF2A2E2E),
+                          child: FlashImage(
+                            urlOrPath: request.sketchImageUrl,
+                            fit: BoxFit.cover,
+                            errorWidget: const Icon(
+                              Icons.brush,
+                              color: Color(0xFF8C9191),
+                              size: 24,
+                            ),
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      request.timeAgo,
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFF8C9191),
-                        fontSize: 11,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        width: 54,
-                        height: 54,
-                        color: const Color(0xFF2A2E2E),
-                        child: FlashImage(
-                          urlOrPath: request.sketchImageUrl,
-                          fit: BoxFit.cover,
-                          errorWidget: const Icon(
-                            Icons.brush,
-                            color: Color(0xFF8C9191),
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           const Divider(
@@ -1012,14 +1102,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
           ),
           InkWell(
             key: Key('view_details_link_${request.id}'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => BookingRequestDetailScreen(request: request),
-                ),
-              );
-            },
+            onTap: () => _openBookingRequestDetail(request),
             borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
             child: Container(
               width: double.infinity,
@@ -1051,9 +1134,15 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
 
   Widget _buildMessagesPlaceholder() {
     return SafeArea(
+      bottom: false,
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          12,
+          20,
+          MediaQuery.paddingOf(context).bottom + 80,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1123,11 +1212,14 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
         children: [
           CircleAvatar(
             backgroundColor: const Color(0xFF262929),
-            child: Text(
-              name[0],
-              style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFFEEC200),
-                fontWeight: FontWeight.bold,
+            child: Center(
+              child: Text(
+                name.isNotEmpty ? name[0] : '',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFFEEC200),
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),

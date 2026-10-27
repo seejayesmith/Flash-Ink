@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../services/auth_service.dart';
-import '../../widgets/adaptive_glass_container.dart';
+import '../../theme/app_spacing.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/tattoo_machine_icon.dart';
 import 'appointment_detail_screen.dart';
@@ -18,6 +18,7 @@ class ArtistCalendarScreen extends StatefulWidget {
   final AuthService? authService;
   final bool isEmbeddedInTab;
   final VoidCallback? onBack;
+  final DateTime? initialDate;
 
   const ArtistCalendarScreen({
     super.key,
@@ -25,6 +26,7 @@ class ArtistCalendarScreen extends StatefulWidget {
     this.authService,
     this.isEmbeddedInTab = false,
     this.onBack,
+    this.initialDate,
   });
 
   @override
@@ -34,7 +36,7 @@ class ArtistCalendarScreen extends StatefulWidget {
 class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
   late final AuthService _authService = widget.authService ?? AuthService();
 
-  // Active viewing month and selected date (defaults to September 9, 2026 per mockup)
+  // Active viewing month and selected date
   late DateTime _activeMonth;
   late DateTime _selectedDate;
   bool _isPickingMonth = false;
@@ -54,9 +56,9 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
   @override
   void initState() {
     super.initState();
-    // Default to September 9, 2026 to match the visual design
-    _activeMonth = DateTime(2026, 9, 1);
-    _selectedDate = DateTime(2026, 9, 9);
+    final baseDate = widget.initialDate ?? DateTime.now();
+    _activeMonth = DateTime(baseDate.year, baseDate.month, 1);
+    _selectedDate = DateTime(baseDate.year, baseDate.month, baseDate.day);
   }
 
   String get _artistDisplayName {
@@ -122,10 +124,6 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
   }
 
   int _getFirstWeekdayOffset(int year, int month) {
-    // Design spec alignment: September 2026 starts on Monday (1 under Mo, 9 under Tu)
-    if (year == 2026 && month == 9) {
-      return 1;
-    }
     final weekday = DateTime(year, month, 1).weekday; // Mon=1, Sun=7
     return weekday % 7; // Sun=0, Mon=1, etc.
   }
@@ -140,8 +138,11 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
   }
 
   String get _scheduleSectionTitle {
-    if (_isToday(_selectedDate) ||
-        (_selectedDate.year == 2026 && _selectedDate.month == 9 && _selectedDate.day == 9)) {
+    final isExplicitInitial = widget.initialDate != null &&
+        _selectedDate.year == widget.initialDate!.year &&
+        _selectedDate.month == widget.initialDate!.month &&
+        _selectedDate.day == widget.initialDate!.day;
+    if (_isToday(_selectedDate) || isExplicitInitial) {
       return "Today's Schedule";
     }
     final month = _monthShortNames[_selectedDate.month - 1];
@@ -150,7 +151,7 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = widget.isEmbeddedInTab ? 100.0 : 32.0;
+    final bottomPadding = MediaQuery.paddingOf(context).bottom + (widget.isEmbeddedInTab ? 80.0 : 16.0);
 
     return Scaffold(
       backgroundColor: const Color(0xFF121414),
@@ -158,7 +159,7 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
         bottom: false,
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(20, 12, 20, bottomPadding),
+          padding: EdgeInsets.fromLTRB(AppSpacing.screenGutter, 12, AppSpacing.screenGutter, bottomPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -212,7 +213,7 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
           ),
         GestureDetector(
           key: const Key('calendar_artist_avatar_button'),
-          onTap: _showProfileSettingsModal,
+          onTap: _navigateToAccountScreen,
           child: Container(
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
@@ -1094,151 +1095,6 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
     );
   }
 
-  /// Bottom sheet listing all scheduled appointments across dates
-  void _showAllAppointmentsSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        final allAppointments = ArtistDashboardRepository.calendarAppointments;
-
-        return DraggableScrollableSheet(
-          initialChildSize: 0.75,
-          minChildSize: 0.5,
-          maxChildSize: 0.95,
-          expand: false,
-          builder: (_, scrollController) {
-            return AdaptiveGlassContainer.bottomSheet(
-              glassEnabled: false,
-              androidSurfaceColor: const Color(0xFF191B1B),
-              topRadius: 24.0,
-              child: Column(
-              children: [
-                const SizedBox(height: 12),
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF383C3C),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'All Scheduled Sessions',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Color(0xFF8C9191)),
-                        onPressed: () => Navigator.pop(sheetContext),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(color: Color(0xFF262929), height: 1),
-                Expanded(
-                  child: ListView.separated(
-                    controller: scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    itemCount: allAppointments.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (_, index) {
-                      final item = allAppointments[index];
-                      return ListTile(
-                        key: Key('all_appointments_sheet_item_${item.id}'),
-                        tileColor: const Color(0xFF141616),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: const BorderSide(color: Color(0xFF262929)),
-                        ),
-                        leading: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            width: 48,
-                            height: 48,
-                            color: const Color(0xFF222525),
-                            child: item.artworkImageUrl.isNotEmpty
-                                ? FlashImage(
-                                    urlOrPath: item.artworkImageUrl,
-                                    fit: BoxFit.cover,
-                                    errorWidget: _buildThumbnailFallback(item),
-                                  )
-                                : _buildThumbnailFallback(item),
-                          ),
-                        ),
-                        title: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                item.clientName,
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            _buildVisitTypeBadge(item),
-                          ],
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '${item.date} • ${item.time} • ${item.duration}',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    color: const Color(0xFF8C9191),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                '\$${item.fullPrice}',
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: const Color(0xFFEEC200),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        trailing: const Icon(Icons.chevron_right, color: Color(0xFF8C9191), size: 18),
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => AppointmentDetailScreen(appointment: item),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-        );
-      },
-    );
-  }
-
   /// Profile Settings Navigation to ArtistAccountScreen
   void _navigateToAccountScreen() {
     Navigator.push(
@@ -1251,6 +1107,4 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
       ),
     );
   }
-
-  void _showProfileSettingsModal() => _navigateToAccountScreen();
 }

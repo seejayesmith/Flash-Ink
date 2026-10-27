@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../models/artist_dashboard_data.dart';
 import '../../../../models/waitlist_entry.dart';
+import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
 import '../../domain/models/message_thread.dart';
@@ -24,14 +25,10 @@ class MessagesScreen extends StatefulWidget {
 
 class _MessagesScreenState extends State<MessagesScreen> {
   final _searchController = TextEditingController();
-  late List<MessageThread> _threads;
   String _query = '';
 
-  @override
-  void initState() {
-    super.initState();
-    _threads = widget.mockThreads ?? List.from(MessageThread.mockThreads);
-  }
+  List<MessageThread> get _threads =>
+      widget.mockThreads ?? MessageThread.activeThreads;
 
   @override
   void dispose() {
@@ -63,7 +60,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
         backgroundColor: AppTheme.onyxBackground,
         elevation: 0,
         scrolledUnderElevation: 0,
-        titleSpacing: AppSpacing.spaceLg,
+        titleSpacing: AppSpacing.screenGutter,
         title: Row(
           children: [
             Text(
@@ -80,7 +77,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: AppTheme.gold,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusFull),
                 ),
                 child: Text(
                   '$_totalUnreadCount NEW',
@@ -102,12 +99,12 @@ class _MessagesScreenState extends State<MessagesScreen> {
           children: [
             // Search Input
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
               child: Container(
                 height: 42,
                 decoration: BoxDecoration(
                   color: AppTheme.cardBackground,
-                  borderRadius: BorderRadius.circular(21),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusFull),
                   border: Border.all(color: AppTheme.cardBorder),
                 ),
                 child: TextField(
@@ -167,9 +164,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
                     )
                   : ListView.builder(
                       padding: EdgeInsets.fromLTRB(
-                        AppSpacing.spaceLg,
+                        AppSpacing.screenGutter,
                         0,
-                        AppSpacing.spaceLg,
+                        AppSpacing.screenGutter,
                         AppSpacing.spaceXxl + AppTheme.navBarHeight + bottomInset,
                       ),
                       itemCount: filtered.length,

@@ -67,12 +67,17 @@ void main() {
       binding.platformDispatcher.views.first.resetDevicePixelRatio();
     });
 
-    Widget buildCalendarTestWidget({Artist? artist, bool isEmbedded = false}) {
+    Widget buildCalendarTestWidget({
+      Artist? artist,
+      bool isEmbedded = false,
+      DateTime? initialDate,
+    }) {
       return MaterialApp(
         home: ArtistCalendarScreen(
           artist: artist,
           authService: fakeAuth,
           isEmbeddedInTab: isEmbedded,
+          initialDate: initialDate ?? DateTime(2026, 9, 9),
         ),
       );
     }

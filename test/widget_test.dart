@@ -135,7 +135,7 @@ void main() {
       expect(find.text('Please enter a valid 6-digit verification code'), findsOneWidget);
     });
 
-    testWidgets('Displays error SnackBar on invalid verification code failure', (WidgetTester tester) async {
+    testWidgets('Displays error banner on invalid verification code failure', (WidgetTester tester) async {
       final fakeAuth = FakeAuthService()..failSignInWithPhone = true;
 
       await tester.pumpWidget(
@@ -151,7 +151,7 @@ void main() {
       await tester.enterText(find.byType(TextField), '000000');
       await tester.pump();
 
-      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.byKey(const Key('phone_verification_error_banner')), findsOneWidget);
       expect(find.textContaining('The verification code entered is invalid'), findsOneWidget);
       expect(find.byType(PhoneVerificationScreen), findsOneWidget);
     });
@@ -192,21 +192,17 @@ void main() {
         ),
       );
 
-      // Tap 'Continue with Phone'
-      await tester.tap(find.text('Continue with Phone'));
-      await tester.pumpAndSettle();
-
-      // Enter phone number
-      await tester.enterText(find.byType(TextFormField), '5550192834');
+      // Enter phone number in unified input field
+      await tester.enterText(find.byKey(const Key('unified_auth_input_field')), '5550192834');
       await tester.pump();
 
-      // Tap 'SEND VERIFICATION CODE'
-      await tester.tap(find.text('SEND VERIFICATION CODE'));
+      // Tap 'CONTINUE'
+      await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
       await tester.pumpAndSettle();
 
-      // Error should be displayed and modal should remain open
+      // Error should be displayed and screen should remain on AccountCreationScreen
       expect(find.textContaining('Please enter a valid phone number.'), findsWidgets);
-      expect(find.text('Verify Phone Number'), findsOneWidget);
+      expect(find.byType(AccountCreationScreen), findsOneWidget);
     });
 
     testWidgets('Navigates to PhoneVerificationScreen when phone verification succeeds', (WidgetTester tester) async {
@@ -221,16 +217,12 @@ void main() {
         ),
       );
 
-      // Tap 'Continue with Phone'
-      await tester.tap(find.text('Continue with Phone'));
-      await tester.pumpAndSettle();
-
-      // Enter phone number
-      await tester.enterText(find.byType(TextFormField), '5550192834');
+      // Enter phone number in unified input field
+      await tester.enterText(find.byKey(const Key('unified_auth_input_field')), '5550192834');
       await tester.pump();
 
-      // Tap 'SEND VERIFICATION CODE'
-      await tester.tap(find.text('SEND VERIFICATION CODE'));
+      // Tap 'CONTINUE'
+      await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
       await tester.pumpAndSettle();
 
       // Should have navigated to PhoneVerificationScreen

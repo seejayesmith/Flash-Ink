@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/artist.dart';
-import '../theme/app_spacing.dart';
 import '../theme/app_buttons.dart';
+import '../theme/app_radius.dart';
+import '../theme/app_spacing.dart';
 import 'flash_image.dart';
 import 'animated_favorite_button.dart';
 
 /// Full artist showcase card for the "Browse Artists" feed.
 ///
 /// Features:
-/// 1. Top Section: 2x2 Artwork Grid showcasing 4 preview images of flash artwork/tattoos.
+/// 1. Top Section: Dynamic Artwork Area showcasing 0 to 4 preview images of flash artwork/tattoos
+///    (0: minimalist branded "F" logo placeholder, 1: full hero, 2: 2 vertical columns,
+///     3: 3 vertical columns, 4: 2x2 grid).
 /// 2. Middle Section: Overlapping circular artist avatar, display name, "Books open" tag,
 ///    and studio sub-details.
 /// 3. Stats Row: Contained 3-column pill for Distance, Available Flash Count, and Min Deposit.
@@ -28,22 +31,37 @@ class ArtistCard extends StatelessWidget {
     this.onClaimFlash,
   });
 
-  String _imageUrlAt(int index) {
+  /// Resolves the preview images to display on the card (up to 4 items).
+  ///
+  /// Priority:
+  /// 1. Available/repeatable artworks from [artist.flashArtworks].
+  /// 2. Fallback to [artist.previewImages] / [artist.images].
+  /// 3. Returns empty if [artist.availablePieces] is 0 or no images exist.
+  List<String> _getDisplayImages() {
+    if (artist.availablePieces == 0) {
+      return const [];
+    }
+
+    if (artist.flashArtworks.isNotEmpty) {
+      final availableArtworks = artist.flashArtworks
+          .where((f) => f.status != FlashStatus.claimed && f.imageUrl.isNotEmpty)
+          .map((f) => f.imageUrl)
+          .take(4)
+          .toList();
+      return availableArtworks;
+    }
+
     final list = artist.previewImages.isNotEmpty ? artist.previewImages : artist.images;
     if (list.isNotEmpty) {
-      final img = list[index % list.length];
-      if (img.isNotEmpty) return img;
+      return list.where((url) => url.isNotEmpty).take(4).toList();
     }
-    if (artist.flashArtworks.isNotEmpty) {
-      final img = artist.flashArtworks[index % artist.flashArtworks.length].imageUrl;
-      if (img.isNotEmpty) return img;
-    }
-    return 'assets/images/flash_traditional_dagger.jpg';
+
+    return const [];
   }
 
   @override
   Widget build(BuildContext context) {
-    const cardRadius = 24.0;
+    const cardRadius = AppRadius.radiusLg;
 
     return Container(
       decoration: BoxDecoration(
@@ -65,19 +83,19 @@ class ArtistCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Top Section: 2x2 Artwork Grid with Overlapping Circular Avatar
+          // 1. Top Section: Dynamic Artwork Area with Overlapping Circular Avatar
           Expanded(
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                // 2x2 Image Grid with top rounded corners
+                // Dynamic Artwork Area (0 to 4 pieces) with top rounded corners
                 Positioned.fill(
                   child: ClipRRect(
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(cardRadius - 1.5),
                       topRight: Radius.circular(cardRadius - 1.5),
                     ),
-                    child: _buildImageGrid(),
+                    child: _buildArtworkArea(),
                   ),
                 ),
 
@@ -138,7 +156,7 @@ class ArtistCard extends StatelessWidget {
               children: [
                 // Profile Details (aligned next to the overlapping avatar) with top-aligned Books open badge
                 Padding(
-                  padding: const EdgeInsets.only(left: 90.0, top: 10.0),
+                  padding: const EdgeInsets.only(left: 90.0),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -187,13 +205,10 @@ class ArtistCard extends StatelessWidget {
                       if (artist.isBooksOpen) ...[
                         const SizedBox(width: AppSpacing.spaceSm),
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
+                          padding: const EdgeInsets.fromLTRB(8, 2, 8, 3),
                           decoration: BoxDecoration(
                             color: const Color(0xFF1A1D16),
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(AppRadius.radiusXs),
                             border: Border.all(
                               color: const Color(0xFF8C7E55),
                               width: 1,
@@ -201,10 +216,18 @@ class ArtistCard extends StatelessWidget {
                           ),
                           child: Text(
                             'Books open',
+                            maxLines: 1,
+                            softWrap: false,
+                            textHeightBehavior: const TextHeightBehavior(
+                              leadingDistribution: TextLeadingDistribution.even,
+                            ),
                             style: GoogleFonts.plusJakartaSans(
                               color: const Color(0xFFEEC200),
                               fontSize: 10,
+                              height: 1.0,
                               fontWeight: FontWeight.w600,
+                            ).copyWith(
+                              leadingDistribution: TextLeadingDistribution.even,
                             ),
                           ),
                         ),
@@ -230,16 +253,96 @@ class ArtistCard extends StatelessWidget {
     );
   }
 
-  /// 2x2 Image Grid with 2px dividers showcasing 4 flash preview images
-  Widget _buildImageGrid() {
+  /// Dynamically builds the artwork display area according to the available flash count (0 to 4).
+  Widget _buildArtworkArea() {
+    final images = _getDisplayImages();
+    switch (images.length) {
+      case 0:
+        return _buildZeroState();
+      case 1:
+        return _buildSingleImageLayout(images[0]);
+      case 2:
+        return _buildTwoImageLayout(images);
+      case 3:
+        return _buildThreeImageLayout(images);
+      case 4:
+      default:
+        return _buildFourImageLayout(images);
+    }
+  }
+
+  /// Minimalist empty state when 0 flash pieces are available:
+  /// Dark gradient backdrop with a large stylized "F" brand logo in Kaushan Script.
+  Widget _buildZeroState() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF222626),
+            Color(0xFF151818),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Text(
+          'F',
+          style: GoogleFonts.kaushanScript(
+            fontSize: 78,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFFEEC200).withAlpha(140),
+            shadows: const [
+              Shadow(
+                color: Color(0x33EEC200),
+                blurRadius: 24,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Single full-bleed hero artwork
+  Widget _buildSingleImageLayout(String url) {
+    return _buildGridImage(url);
+  }
+
+  /// Two equal vertical side-by-side columns with a 2px gap
+  Widget _buildTwoImageLayout(List<String> images) {
+    return Row(
+      children: [
+        Expanded(child: _buildGridImage(images[0])),
+        const SizedBox(width: 2),
+        Expanded(child: _buildGridImage(images[1])),
+      ],
+    );
+  }
+
+  /// Three equal vertical side-by-side columns with 2px gaps
+  Widget _buildThreeImageLayout(List<String> images) {
+    return Row(
+      children: [
+        Expanded(child: _buildGridImage(images[0])),
+        const SizedBox(width: 2),
+        Expanded(child: _buildGridImage(images[1])),
+        const SizedBox(width: 2),
+        Expanded(child: _buildGridImage(images[2])),
+      ],
+    );
+  }
+
+  /// Standard 2x2 Image Grid with 2px dividers
+  Widget _buildFourImageLayout(List<String> images) {
     return Column(
       children: [
         Expanded(
           child: Row(
             children: [
-              Expanded(child: _buildGridImage(_imageUrlAt(0))),
+              Expanded(child: _buildGridImage(images[0])),
               const SizedBox(width: 2),
-              Expanded(child: _buildGridImage(_imageUrlAt(1))),
+              Expanded(child: _buildGridImage(images[1])),
             ],
           ),
         ),
@@ -247,9 +350,9 @@ class ArtistCard extends StatelessWidget {
         Expanded(
           child: Row(
             children: [
-              Expanded(child: _buildGridImage(_imageUrlAt(2))),
+              Expanded(child: _buildGridImage(images[2])),
               const SizedBox(width: 2),
-              Expanded(child: _buildGridImage(_imageUrlAt(3))),
+              Expanded(child: _buildGridImage(images[3])),
             ],
           ),
         ),
@@ -263,6 +366,8 @@ class ArtistCard extends StatelessWidget {
       child: FlashImage(
         urlOrPath: url,
         fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
       ),
     );
   }
@@ -273,7 +378,7 @@ class ArtistCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
       decoration: BoxDecoration(
         color: const Color(0xFF202323),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
         border: Border.all(
           color: const Color(0xFF2D3131),
           width: 1,
@@ -299,7 +404,11 @@ class ArtistCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 3),
                       Text(
-                        artist.distance,
+                        artist.distance.isNotEmpty
+                            ? artist.distance
+                            : (artist.location.isNotEmpty
+                                ? artist.location
+                                : 'Location set'),
                         style: GoogleFonts.plusJakartaSans(
                           color: const Color(0xFFF9FAFA),
                           fontSize: 15,

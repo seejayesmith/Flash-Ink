@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flash_ink/core/mock/mock_data_config.dart';
 import 'package:flash_ink/models/artist.dart';
 import 'package:flash_ink/screens/browse_artists_screen.dart';
 
 void main() {
+  setUp(() {
+    MockDataConfig.debugOverride = true;
+  });
+
+  tearDown(() {
+    MockDataConfig.resetDebugOverride();
+  });
+
   group('Artist Model Tests', () {
     test('Mock artists contains 4 pre-configured artists', () {
       expect(Artist.mockArtists.length, 4);

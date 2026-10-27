@@ -4,12 +4,13 @@ import 'package:google_fonts/google_fonts.dart';
 /// Centralized button geometry tokens and standard wrappers.
 class AppButtons {
   // Core Geometry Tokens
-  static const double ctaHeightPrimary = 42.0;
-  static const double buttonHeightSm = 32.0;
+  static const double ctaHeightPrimary = 52.0;
+  static const double ctaBorderRadius = 26.0;
 
   /// A standard primary Call-To-Action wrapper ensuring minimum tap target size,
   /// full width capability, strict pill shape, and non-shifting loading states.
   static Widget primaryCTA({
+    Key? key,
     required VoidCallback? onPressed,
     required String text,
     IconData? icon,
@@ -31,6 +32,7 @@ class AppButtons {
 
     if (isLoading) {
       return ElevatedButton(
+        key: key,
         onPressed: null,
         style: style,
         child: const SizedBox(
@@ -56,6 +58,7 @@ class AppButtons {
 
     if (icon != null) {
       return ElevatedButton.icon(
+        key: key,
         onPressed: onPressed,
         style: style,
         icon: Icon(icon, size: 24),
@@ -64,6 +67,7 @@ class AppButtons {
     }
 
     return ElevatedButton(
+      key: key,
       onPressed: onPressed,
       style: style,
       child: textWidget,

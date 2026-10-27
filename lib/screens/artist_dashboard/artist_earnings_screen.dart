@@ -4,10 +4,12 @@ import '../../core/widgets/flash_bottom_nav_bar.dart';
 import '../../models/artist.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../services/auth_service.dart';
-import '../../services/stripe_service.dart';
+import '../../theme/app_radius.dart';
+import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
+import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/tattoo_machine_icon.dart';
 import 'appointment_detail_screen.dart';
 import 'artist_account_screen.dart';
@@ -25,7 +27,6 @@ enum ArtistEarningsTab {
 class ArtistEarningsScreen extends StatefulWidget {
   final Artist? artist;
   final AuthService? authService;
-  final StripeService? stripeService;
   final bool isEmbeddedInTab;
   final VoidCallback? onBack;
   final ArtistEarningsData? earningsData;
@@ -34,7 +35,6 @@ class ArtistEarningsScreen extends StatefulWidget {
     super.key,
     this.artist,
     this.authService,
-    this.stripeService,
     this.isEmbeddedInTab = false,
     this.onBack,
     this.earningsData,
@@ -48,8 +48,6 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
   late final AuthService _authService = widget.authService ?? AuthService();
   late final ArtistEarningsData _earningsData =
       widget.earningsData ?? ArtistDashboardRepository.earningsData;
-  late final StripeService _stripeService =
-      widget.stripeService ?? StripeService(initialData: _earningsData);
 
   ArtistEarningsTab _selectedTab = ArtistEarningsTab.overview;
   final TextEditingController _searchController = TextEditingController();
@@ -118,247 +116,6 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
     );
   }
 
-  void _showProfileSettingsModal() => _navigateToAccountScreen();
-
-  void _showBookingReceiptModal(BuildContext context, PastBookingEarningsItem item) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return AdaptiveGlassContainer.bottomSheet(
-          glassEnabled: false,
-          androidSurfaceColor: const Color(0xFF1A1D1D),
-          topRadius: 24.0,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF383C3C),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Booking Receipt',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF22C55E).withAlpha(40),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        item.status.toUpperCase(),
-                        style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFF22C55E),
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  item.title,
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Date: ${item.dateString} • Payment: ${item.paymentMethod}',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFF8C9191),
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF121414),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF262929)),
-                  ),
-                  child: Column(
-                    children: [
-                      _buildReceiptRow('Session Subtotal', '\$${item.amount.toStringAsFixed(2)}'),
-                      const SizedBox(height: 8),
-                      _buildReceiptRow(
-                        'Platform Fee (5%)',
-                        item.fee > 0 ? '-\$${item.fee.toStringAsFixed(2)}' : '\$0.00',
-                        textColor: const Color(0xFF8C9191),
-                      ),
-                      const Divider(color: Color(0xFF282C2C), height: 20),
-                      _buildReceiptRow(
-                        'Net Deposit',
-                        '\$${item.netAmount.toStringAsFixed(2)}',
-                        isBold: true,
-                        textColor: const Color(0xFF00E676),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Receipt Reference: ${item.receiptId}',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFF8C9191),
-                        fontSize: 12,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(sheetContext);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Receipt #${item.receiptId} downloaded.'),
-                            backgroundColor: const Color(0xFF1E2121),
-                          ),
-                        );
-                      },
-                      child: Text(
-                        'Download PDF',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFFEEC200),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          );
-        },
-      );
-    }
-
-  Widget _buildReceiptRow(
-    String label,
-    String value, {
-    bool isBold = false,
-    Color textColor = Colors.white,
-  }) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.plusJakartaSans(
-            color: isBold ? Colors.white : const Color(0xFF8C9191),
-            fontSize: 14,
-            fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
-          ),
-        ),
-        Text(
-          value,
-          style: GoogleFonts.plusJakartaSans(
-            color: textColor,
-            fontSize: 14,
-            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showAllPastBookingsModal(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.8,
-          minChildSize: 0.5,
-          maxChildSize: 0.95,
-          expand: false,
-          builder: (_, scrollController) {
-            return AdaptiveGlassContainer.bottomSheet(
-              glassEnabled: false,
-              androidSurfaceColor: const Color(0xFF1A1D1D),
-              topRadius: 24.0,
-              child: Column(
-              children: [
-                const SizedBox(height: 14),
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF383C3C),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 18, 24, 12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Past Bookings & Payouts',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Color(0xFF8C9191)),
-                        onPressed: () => Navigator.pop(sheetContext),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(color: Color(0xFF282C2C), height: 1),
-                Expanded(
-                  child: ListView.separated(
-                    controller: scrollController,
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-                    itemCount: _earningsData.allPastBookings.length,
-                    separatorBuilder: (_, index) => const SizedBox(height: 12),
-                    itemBuilder: (_, index) {
-                      final item = _earningsData.allPastBookings[index];
-                      return _buildPastBookingCard(item, onTap: () {
-                        Navigator.pop(sheetContext);
-                        _showBookingReceiptModal(context, item);
-                      });
-                    },
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-        );
-      },
-    );
-  }
-
   void _showTaxDocsModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -368,7 +125,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
         return AdaptiveGlassContainer.bottomSheet(
           glassEnabled: false,
           androidSurfaceColor: const Color(0xFF1A1D1D),
-          topRadius: 24.0,
+          topRadius: AppRadius.radiusSheet,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -380,7 +137,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                     height: 4,
                     decoration: BoxDecoration(
                       color: const Color(0xFF383C3C),
-                      borderRadius: BorderRadius.circular(2),
+                      borderRadius: BorderRadius.circular(AppRadius.dragHandle),
                     ),
                   ),
                 ),
@@ -414,11 +171,9 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                   status: 'Available',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Downloading 2025 Form 1099-K PDF...'),
-                        backgroundColor: Color(0xFF1E2121),
-                      ),
+                    FlashSnackBar.showInfo(
+                      context,
+                      'Downloading 2025 Form 1099-K PDF...',
                     );
                   },
                 ),
@@ -429,11 +184,9 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                   status: 'Available',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Downloading 2025 Annual Statement...'),
-                        backgroundColor: Color(0xFF1E2121),
-                      ),
+                    FlashSnackBar.showInfo(
+                      context,
+                      'Downloading 2025 Annual Statement...',
                     );
                   },
                 ),
@@ -445,11 +198,9 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                   statusColor: const Color(0xFF22C55E),
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('W-9 is in good standing.'),
-                        backgroundColor: Color(0xFF1E2121),
-                      ),
+                    FlashSnackBar.showSuccess(
+                      context,
+                      'W-9 is in good standing.',
                     );
                   },
                 ),
@@ -474,7 +225,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: const Color(0xFF121414),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.radiusMd),
           border: Border.all(color: const Color(0xFF282C2C)),
         ),
         child: Row(
@@ -507,7 +258,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: statusColor.withAlpha(35),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(AppRadius.radiusSm),
               ),
               child: Text(
                 status,
@@ -533,7 +284,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
         return AdaptiveGlassContainer.bottomSheet(
           glassEnabled: false,
           androidSurfaceColor: const Color(0xFF1A1D1D),
-          topRadius: 24.0,
+          topRadius: AppRadius.radiusSheet,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -545,7 +296,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                     height: 4,
                     decoration: BoxDecoration(
                       color: const Color(0xFF383C3C),
-                      borderRadius: BorderRadius.circular(2),
+                      borderRadius: BorderRadius.circular(AppRadius.dragHandle),
                     ),
                   ),
                 ),
@@ -577,7 +328,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: const Color(0xFF121414),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                     border: Border.all(color: const Color(0xFF282C2C)),
                   ),
                   child: Row(
@@ -586,7 +337,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: const Color(0xFF1E2121),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                         ),
                         child: const Icon(Icons.account_balance, color: Colors.white, size: 24),
                       ),
@@ -623,7 +374,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: const Color(0xFF121414),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                     border: Border.all(color: const Color(0xFF282C2C)),
                   ),
                   child: Row(
@@ -650,18 +401,16 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                   child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(sheetContext);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Bank verification & routing tools are active.'),
-                          backgroundColor: Color(0xFF1E2121),
-                        ),
+                      FlashSnackBar.showInfo(
+                        context,
+                        'Bank verification & routing tools are active.',
                       );
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFEEC200),
                       foregroundColor: const Color(0xFF121414),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                       ),
                     ),
                     child: Text(
@@ -698,7 +447,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
         return AdaptiveGlassContainer.bottomSheet(
           glassEnabled: false,
           androidSurfaceColor: const Color(0xFF1A1D1D),
-          topRadius: 24.0,
+          topRadius: AppRadius.radiusSheet,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -710,7 +459,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                     height: 4,
                     decoration: BoxDecoration(
                       color: const Color(0xFF383C3C),
-                      borderRadius: BorderRadius.circular(2),
+                      borderRadius: BorderRadius.circular(AppRadius.dragHandle),
                     ),
                   ),
                 ),
@@ -721,7 +470,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: AppTheme.goldContainer,
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                         border: Border.all(color: AppTheme.goldBorder, width: 1),
                       ),
                       child: const Icon(
@@ -761,7 +510,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: const Color(0xFF121414),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusLg),
                     border: Border.all(color: const Color(0xFF282C2C)),
                   ),
                   child: Column(
@@ -839,7 +588,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
                     color: const Color(0xFF121414),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                     border: Border.all(color: const Color(0xFF282C2C)),
                   ),
                   child: Row(
@@ -860,7 +609,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: const Color(0xFF22C55E).withAlpha(35),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                         ),
                         child: Text(
                           'INSTANT',
@@ -882,22 +631,16 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                     key: const Key('confirm_instant_transfer_button'),
                     onPressed: () {
                       Navigator.pop(sheetContext);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Transfer of \$${netAmount.toStringAsFixed(2)} initiated via Stripe Direct Deposit.',
-                            style: GoogleFonts.plusJakartaSans(color: Colors.white),
-                          ),
-                          backgroundColor: const Color(0xFF1E2121),
-                          behavior: SnackBarBehavior.floating,
-                        ),
+                      FlashSnackBar.showSuccess(
+                        context,
+                        'Transfer of \$${netAmount.toStringAsFixed(2)} initiated via Stripe Direct Deposit.',
                       );
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.gold,
                       foregroundColor: const Color(0xFF121414),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                       ),
                     ),
                     child: Text(
@@ -914,15 +657,9 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                   child: TextButton.icon(
                     onPressed: () {
                       Navigator.pop(sheetContext);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Redirecting to Stripe Express Dashboard...',
-                            style: GoogleFonts.plusJakartaSans(color: Colors.white),
-                          ),
-                          backgroundColor: const Color(0xFF1E2121),
-                          behavior: SnackBarBehavior.floating,
-                        ),
+                      FlashSnackBar.showInfo(
+                        context,
+                        'Redirecting to Stripe Express Dashboard...',
                       );
                     },
                     icon: const Icon(Icons.open_in_new, size: 14, color: Color(0xFF8C9191)),
@@ -1055,10 +792,10 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
     return Container(
       key: const Key('earnings_segmented_tab_bar'),
       margin: const EdgeInsets.symmetric(vertical: 14),
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(AppSpacing.spaceXxs),
       decoration: BoxDecoration(
         color: const Color(0xFF191B1B),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.radiusFull),
         border: Border.all(color: const Color(0xFF262929)),
       ),
       child: Row(
@@ -1102,7 +839,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFF252828) : Colors.transparent,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: BorderRadius.circular(AppRadius.radiusFull),
           border: isSelected
               ? Border.all(color: const Color(0xFFEEC200).withAlpha(160), width: 1)
               : Border.all(color: Colors.transparent, width: 1),
@@ -1159,7 +896,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
                             color: const Color(0xFF1E2121),
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                             border: Border.all(color: const Color(0xFF282C2C)),
                           ),
                           child: Text(
@@ -1188,7 +925,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF1E2121),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.radiusFull),
         border: Border.all(color: const Color(0xFF282C2C)),
       ),
       child: TextField(
@@ -1235,7 +972,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
       padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
       decoration: BoxDecoration(
         color: const Color(0xFF191B1B),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.radiusLg),
         border: Border.all(color: const Color(0xFF262929)),
       ),
       child: Column(
@@ -1272,7 +1009,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: const Color(0xFF1E2121),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.radiusLg),
         border: Border.all(
           color: const Color(0xFF282C2C),
           width: 1.0,
@@ -1287,13 +1024,13 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
             ),
           );
         },
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.radiusLg),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                 child: SizedBox(
                   width: 54,
                   height: 54,
@@ -1338,7 +1075,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                           decoration: BoxDecoration(
                             color: const Color(0xFF262929),
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                           ),
                           child: Text(
                             item.effectiveVisitType.toUpperCase(),
@@ -1391,9 +1128,15 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
   @override
   Widget build(BuildContext context) {
     final content = SafeArea(
+      bottom: false,
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(20, 12, 20, widget.isEmbeddedInTab ? 100 : 28),
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.screenGutter,
+          12,
+          AppSpacing.screenGutter,
+          MediaQuery.paddingOf(context).bottom + (widget.isEmbeddedInTab ? 80 : 16),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1422,8 +1165,8 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
         children: [
           content,
           Positioned(
-            left: AppTheme.navBarHorizontalMargin,
-            right: AppTheme.navBarHorizontalMargin,
+            left: AppSpacing.screenGutter,
+            right: AppSpacing.screenGutter,
             bottom: MediaQuery.paddingOf(context).bottom + AppTheme.navBarBottomMargin,
             child: FlashBottomNavBar(
               currentIndex: 4,
@@ -1464,7 +1207,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
           ),
         GestureDetector(
           key: const Key('earnings_avatar_button'),
-          onTap: _showProfileSettingsModal,
+          onTap: _navigateToAccountScreen,
           child: Container(
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
@@ -1503,7 +1246,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
             Color(0xFF161818),
           ],
         ),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(AppRadius.radiusXl),
         border: Border.all(
           color: AppTheme.goldBorder,
           width: 1.5,
@@ -1564,7 +1307,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: const Color(0xFF15221B),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusFull),
                   border: Border.all(
                     color: const Color(0xFF22C55E).withAlpha(80),
                     width: 1.2,
@@ -1632,7 +1375,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: const Color(0xFF121414).withAlpha(180),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.radiusFull),
               border: Border.all(color: const Color(0xFF2A2E2E)),
             ),
             child: Row(
@@ -1668,7 +1411,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                 foregroundColor: const Color(0xFF121414),
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                 ),
               ),
               child: Row(
@@ -1699,7 +1442,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: const Color(0xFF141717),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(AppRadius.radiusMd),
               border: Border.all(color: const Color(0xFF282C2C)),
             ),
             child: Column(
@@ -1722,7 +1465,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: const Color(0xFF1E2121),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                       ),
                       child: Text(
                         'YTD ${_earningsData.ytdYear}',
@@ -1774,156 +1517,6 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
     );
   }
 
-  Widget _buildMetricCard({
-    required Key key,
-    required String tag,
-    required String timeframe,
-    required String amount,
-  }) {
-    return Container(
-      key: key,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E2121),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF282C2C)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                tag,
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF8C9191),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                ),
-              ),
-              Text(
-                timeframe,
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF8C9191),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            amount,
-            style: GoogleFonts.plusJakartaSans(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Past Bookings section with items and "View All" link
-  Widget _buildPastBookingsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Past Bookings',
-              style: GoogleFonts.plusJakartaSans(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            GestureDetector(
-              key: const Key('past_bookings_view_all_button'),
-              onTap: () => _showAllPastBookingsModal(context),
-              child: Text(
-                'View All',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFEEC200),
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        ..._earningsData.pastBookings.map((booking) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _buildPastBookingCard(booking, onTap: () {
-              _showBookingReceiptModal(context, booking);
-            }),
-          );
-        }),
-      ],
-    );
-  }
-
-  Widget _buildPastBookingCard(
-    PastBookingEarningsItem booking, {
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1E2121),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF282C2C)),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    booking.title,
-                    style: GoogleFonts.plusJakartaSans(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${booking.status} • ${booking.dateString}',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFF8C9191),
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '\$${booking.amount.toStringAsFixed(2)}',
-              style: GoogleFonts.plusJakartaSans(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   /// Action utility cards: Tax Docs and Bank Info
   Widget _buildUtilityActionsRow() {
     return Row(
@@ -1962,7 +1555,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
         padding: const EdgeInsets.symmetric(vertical: 22),
         decoration: BoxDecoration(
           color: const Color(0xFF1E2121),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.radiusLg),
           border: Border.all(
             color: const Color(0xFF383C3C),
             width: 1.2,

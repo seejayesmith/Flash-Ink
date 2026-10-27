@@ -2,12 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist.dart';
+import '../../models/artist_dashboard_data.dart';
 import '../../models/booking.dart';
+import '../../features/appointments/domain/models/appointment_item.dart';
 import '../../theme/app_buttons.dart';
+import '../../theme/app_radius.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
+import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/flash_switch.dart';
+import '../../widgets/keyboard_collapse_button.dart';
+import '../../services/booking_sync_service.dart';
 import '../../services/stripe_service.dart';
 
 
@@ -52,6 +58,10 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
   // Step 3 State: Payment
   String _selectedPaymentMethod = 'Apple Pay';
   bool _isProcessingPayment = false;
+  late final TextEditingController _cardNumberController;
+  late final TextEditingController _cardExpiryController;
+  late final TextEditingController _cardCvcController;
+  late final TextEditingController _cardZipController;
 
   // Step 4 State: Confirmation
   late final String _confirmationCode;
@@ -76,12 +86,24 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
   @override
   void initState() {
     super.initState();
-    // Default to tomorrow or next valid upcoming date in current/next month
+    // Default to next valid upcoming working date in current/next month
     final now = DateTime.now();
     _currentMonth = DateTime(now.year, now.month, 1);
     _selectedDate = now.add(const Duration(days: 2));
+    int workingDayGuard = 0;
+    while (!ArtistDashboardRepository.booksSchedule.isWorkingDay(_selectedDate) &&
+        workingDayGuard < 14) {
+      _selectedDate = _selectedDate.add(const Duration(days: 1));
+      workingDayGuard++;
+    }
     if (_selectedDate.month != _currentMonth.month) {
       _currentMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
+    }
+
+    final initialSlots = ArtistDashboardRepository.booksSchedule.generateTimeSlots();
+    if (initialSlots.isNotEmpty &&
+        !initialSlots.any((s) => s.time == _selectedTimeSlot)) {
+      _selectedTimeSlot = initialSlots.first.time;
     }
 
     _selectedPlacement = widget.flash.location.split('/').first.trim();
@@ -92,8 +114,31 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     final codeNum = (10000 + (_selectedDate.millisecondsSinceEpoch % 89999)).toString();
     _confirmationCode = 'INK-$codeNum';
 
+    _cardNumberController = TextEditingController(text: '4242 4242 4242 4242');
+    _cardExpiryController = TextEditingController(text: '12/28');
+    _cardCvcController = TextEditingController(text: '123');
+    _cardZipController = TextEditingController(text: '90210');
+    _cardNumberController.addListener(_onCardFieldChanged);
+    _cardExpiryController.addListener(_onCardFieldChanged);
+    _cardCvcController.addListener(_onCardFieldChanged);
+    _cardZipController.addListener(_onCardFieldChanged);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ScaffoldMessenger.maybeOf(context)?.clearSnackBars();
+    });
+  }
+
+  void _onCardFieldChanged() {
+    setState(() {});
+  }
+
+  void _autoFillTestCard() {
+    setState(() {
+      _selectedPaymentMethod = 'Credit Card (•••• 4242)';
+      _cardNumberController.text = '4242 4242 4242 4242';
+      _cardExpiryController.text = '12/28';
+      _cardCvcController.text = '123';
+      _cardZipController.text = '90210';
     });
   }
 
@@ -103,6 +148,14 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     _phoneController.dispose();
     _emailController.dispose();
     _notesController.dispose();
+    _cardNumberController.removeListener(_onCardFieldChanged);
+    _cardExpiryController.removeListener(_onCardFieldChanged);
+    _cardCvcController.removeListener(_onCardFieldChanged);
+    _cardZipController.removeListener(_onCardFieldChanged);
+    _cardNumberController.dispose();
+    _cardExpiryController.dispose();
+    _cardCvcController.dispose();
+    _cardZipController.dispose();
     super.dispose();
   }
 
@@ -150,6 +203,10 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       customerEmail: _emailController.text.trim(),
       customerName: _nameController.text.trim(),
       artistStripeAccountId: widget.artist?.id,
+      bookingId: _confirmationCode,
+      selectedDate: _selectedDate.toIso8601String(),
+      selectedTimeSlot: _selectedTimeSlot,
+      placement: _selectedPlacement,
     );
 
     if (!mounted) return;
@@ -159,19 +216,77 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     });
 
     if (paymentResult.isSuccess) {
+      BookingSyncService.claimedFlashPieceIds.add(widget.flash.id);
+
+      // 1. Instantiate domain FlashBooking record
+      final booking = FlashBooking(
+        id: _confirmationCode,
+        flash: widget.flash,
+        artist: widget.artist,
+        selectedDate: _selectedDate,
+        selectedTimeSlot: _selectedTimeSlot,
+        clientName: _nameController.text.trim(),
+        clientPhone: _phoneController.text.trim(),
+        clientEmail: _emailController.text.trim(),
+        placement: _selectedPlacement,
+        clientNotes: _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
+        isSilentAppointment: _isSilentSession,
+        depositAmount: widget.flash.deposit,
+        totalAmount: widget.flash.price,
+        paymentMethod: _selectedPaymentMethod,
+        createdAt: DateTime.now(),
+      );
+
+      // 2. Synchronize to Artist Calendar schedule
+      final calendarApt = DashboardAppointment(
+        id: 'cal_${booking.id}',
+        clientName: booking.clientName,
+        serviceType: 'Flash: ${widget.flash.title}',
+        duration: widget.flash.estimatedTime,
+        time: booking.selectedTimeSlot,
+        scheduledDate: booking.selectedDate,
+        date: _formatDate(booking.selectedDate),
+        placement: booking.placement,
+        notes: booking.clientNotes ?? (booking.isSilentAppointment ? 'Silent appointment requested.' : ''),
+        depositPaid: booking.depositAmount,
+        fullPrice: booking.totalAmount,
+        artworkImageUrl: widget.flash.imageUrl,
+        visitType: 'Flash Tattoo',
+        dotColor: const Color(0xFF22C55E),
+      );
+      ArtistDashboardRepository.addCalendarAppointment(calendarApt);
+
+      // 3. Synchronize to Client Upcoming Appointments list
+      final clientApt = ClientAppointment(
+        id: booking.id,
+        artistName: _artistName,
+        artistAvatar: widget.artist?.avatarUrl ?? '',
+        studioName: widget.artist?.studioType ?? 'Obsidian Atelier',
+        studioAddress: _artistLocation,
+        flashTitle: widget.flash.title,
+        flashImageUrl: widget.flash.imageUrl,
+        dateTime: DateTime(
+          booking.selectedDate.year,
+          booking.selectedDate.month,
+          booking.selectedDate.day,
+        ),
+        timeSlot: '${booking.selectedTimeSlot} (${widget.flash.estimatedTime})',
+        placement: booking.placement,
+        depositAmount: booking.depositAmount,
+        totalPrice: booking.totalAmount,
+        status: AppointmentStatus.confirmed,
+        isSilentAppointment: booking.isSilentAppointment,
+        notes: booking.clientNotes,
+      );
+      ClientAppointment.addUpcomingAppointment(clientApt);
+
       setState(() {
         _currentStep = 3;
       });
     } else if (!paymentResult.isCanceled) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            paymentResult.errorMessage ?? 'Payment failed. Please try again.',
-            style: GoogleFonts.plusJakartaSans(color: Colors.white),
-          ),
-          backgroundColor: const Color(0xFFEF4444),
-          behavior: SnackBarBehavior.floating,
-        ),
+      FlashSnackBar.showError(
+        context,
+        paymentResult.errorMessage ?? 'Payment failed. Please try again.',
       );
     }
   }
@@ -180,29 +295,47 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: true,
+      canPop: _currentStep == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_currentStep == 3) {
+          Navigator.of(context).pop(true);
+        } else if (_currentStep > 0) {
+          setState(() {
+            _currentStep--;
+          });
+        }
+      },
       child: Scaffold(
         backgroundColor: const Color(0xFF121414),
         appBar: _buildAppBar(),
         body: SafeArea(
+          bottom: false,
           child: Column(
             children: [
               // Top Progress Indicator
               _buildProgressStepper(),
 
-              // Step Content
+              // Step Content + Inline CTA
               Expanded(
                 child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.spaceLg,
+                    horizontal: AppSpacing.screenGutter,
                     vertical: AppSpacing.spaceMd,
                   ),
-                  child: _buildCurrentStepContent(),
+                  child: Column(
+                    children: [
+                      _buildCurrentStepContent(),
+                      if (_currentStep < 3) ...[
+                        const SizedBox(height: AppSpacing.spaceXl),
+                        _buildBottomActionBar(),
+                        const SizedBox(height: AppSpacing.spaceMd),
+                      ],
+                    ],
+                  ),
                 ),
               ),
-
-              // Bottom Action Bar
-              if (_currentStep < 3) _buildBottomActionBar(),
             ],
           ),
         ),
@@ -248,7 +381,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     final steps = ['Date & Time', 'Details', 'Payment', 'Confirmed'];
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter, vertical: 12),
       decoration: const BoxDecoration(
         color: Color(0xFF171A1A),
         border: Border(
@@ -273,7 +406,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
                           color: isPast || isCurrent
                               ? const Color(0xFFEEC200)
                               : const Color(0xFF2E3333),
-                          borderRadius: BorderRadius.circular(2),
+                          borderRadius: BorderRadius.circular(AppRadius.dragHandle),
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -397,13 +530,13 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFF171A1A),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
         border: Border.all(color: const Color(0xFF262929)),
       ),
       child: Row(
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(AppRadius.radiusSm),
             child: SizedBox(
               width: 58,
               height: 58,
@@ -464,7 +597,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF171A1A),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.radiusLg),
         border: Border.all(color: const Color(0xFF38352A), width: 1.2),
       ),
       child: Column(
@@ -535,12 +668,14 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
 
                     final cellDate = DateTime(_currentMonth.year, _currentMonth.month, dayNum);
                     final isPast = cellDate.isBefore(today);
+                    final isWorkingDay = ArtistDashboardRepository.booksSchedule.isWorkingDay(cellDate);
+                    final isDisabled = isPast || !isWorkingDay;
                     final isSelected = cellDate.year == _selectedDate.year &&
                         cellDate.month == _selectedDate.month &&
                         cellDate.day == _selectedDate.day;
 
                     return GestureDetector(
-                      onTap: isPast
+                      onTap: isDisabled
                           ? null
                           : () {
                               setState(() {
@@ -567,7 +702,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
                             style: GoogleFonts.plusJakartaSans(
                               color: isSelected
                                   ? const Color(0xFF121414)
-                                  : (isPast
+                                  : (isDisabled
                                       ? const Color(0xFF424747)
                                       : const Color(0xFFF9FAFA)),
                               fontSize: 13,
@@ -588,39 +723,54 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
   }
 
   Widget _buildTimeSlotsGrid() {
-    final slots = BookingTimeSlot.defaultSlots;
+    final slots = ArtistDashboardRepository.booksSchedule.generateTimeSlots();
 
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: slots.map((slot) {
-        final isSelected = _selectedTimeSlot == slot.time;
+        final isBooked = ArtistDashboardRepository.isTimeSlotBooked(
+          date: _selectedDate,
+          timeSlot: slot.time,
+          artistId: widget.artist?.id,
+        );
+        final isSelected = !isBooked && _selectedTimeSlot == slot.time;
 
         return ChoiceChip(
-          label: Text(slot.time),
+          label: Text(
+            isBooked ? '${slot.time} (Booked)' : slot.time,
+          ),
           selected: isSelected,
           showCheckmark: false,
-          onSelected: (selected) {
-            if (selected) {
-              setState(() {
-                _selectedTimeSlot = slot.time;
-              });
-            }
-          },
+          onSelected: isBooked
+              ? null
+              : (selected) {
+                  if (selected) {
+                    setState(() {
+                      _selectedTimeSlot = slot.time;
+                    });
+                  }
+                },
           selectedColor: const Color(0xFFEEC200),
-          backgroundColor: const Color(0xFF1E2020),
+          backgroundColor: isBooked ? const Color(0xFF141616) : const Color(0xFF1E2020),
+          disabledColor: const Color(0xFF141616),
           labelStyle: GoogleFonts.plusJakartaSans(
-            color: isSelected ? const Color(0xFF121414) : const Color(0xFFF9FAFA),
+            color: isBooked
+                ? const Color(0xFF555A5A)
+                : (isSelected ? const Color(0xFF121414) : const Color(0xFFF9FAFA)),
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+            decoration: isBooked ? TextDecoration.lineThrough : null,
           ),
           side: BorderSide(
-            color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF333737),
+            color: isSelected
+                ? const Color(0xFFEEC200)
+                : (isBooked ? const Color(0xFF222525) : const Color(0xFF333737)),
             width: 1,
           ),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(AppRadius.radiusFull),
           ),
         );
       }).toList(),
@@ -688,7 +838,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFF171A1A),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
         border: Border.all(color: const Color(0xFF262929)),
       ),
       child: Row(
@@ -860,11 +1010,11 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         filled: true,
         fillColor: const Color(0xFF171A1A),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.radiusSm),
           borderSide: const BorderSide(color: Color(0xFF262929)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.radiusSm),
           borderSide: const BorderSide(color: Color(0xFFEEC200), width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -884,7 +1034,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFF171A1A),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
         border: Border.all(color: const Color(0xFF2B2F2F)),
       ),
       child: Column(
@@ -930,7 +1080,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: const Color(0xFF171A1A),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AppRadius.radiusLg),
             border: Border.all(color: const Color(0xFF38352A), width: 1.2),
           ),
           child: Column(
@@ -939,7 +1089,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
               Row(
                 children: [
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                     child: SizedBox(
                       width: 50,
                       height: 50,
@@ -1008,7 +1158,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: const Color(0xFF1E2020),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(AppRadius.radiusMd),
             border: Border.all(color: const Color(0xFF2B2F2F)),
           ),
           child: Column(
@@ -1029,19 +1179,54 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         const SizedBox(height: 24),
 
         // Payment Method Selector
-        Text(
-          'SELECT PAYMENT METHOD',
-          style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFF919696),
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.8,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'SELECT PAYMENT METHOD',
+              style: GoogleFonts.plusJakartaSans(
+                color: const Color(0xFF919696),
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+              ),
+            ),
+            GestureDetector(
+              onTap: _autoFillTestCard,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEC200).withAlpha(30),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
+                  border: Border.all(color: const Color(0xFFEEC200), width: 1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.flash_on, color: Color(0xFFEEC200), size: 12),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Auto-fill Test Card',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFFEEC200),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
         _buildPaymentMethodTile('Apple Pay', Icons.phone_iphone),
         const SizedBox(height: 8),
         _buildPaymentMethodTile('Credit Card (•••• 4242)', Icons.credit_card),
+        if (_selectedPaymentMethod == 'Credit Card (•••• 4242)') ...[
+          const SizedBox(height: 8),
+          _buildCreditCardForm(),
+        ],
         const SizedBox(height: 8),
         _buildPaymentMethodTile('Cash App Pay', Icons.attach_money),
       ],
@@ -1108,7 +1293,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: const Color(0xFF171A1A),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.radiusMd),
           border: Border.all(
             color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF262929),
             width: isSelected ? 1.5 : 1,
@@ -1137,6 +1322,191 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildCreditCardForm() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF191C1C),
+        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
+        border: Border.all(color: const Color(0xFF38352A), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.credit_card, color: Color(0xFFEEC200), size: 16),
+                  const SizedBox(width: 6),
+                  Text(
+                    'CARD DETAILS',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFF9FAFA),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF22C55E).withAlpha(35),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusXs),
+                  border: Border.all(color: const Color(0xFF22C55E), width: 0.8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.check, color: Color(0xFF22C55E), size: 10),
+                    const SizedBox(width: 3),
+                    Text(
+                      'Test Card Ready',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF22C55E),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Card Number Field
+          _buildCardField(
+            label: 'CARD NUMBER',
+            controller: _cardNumberController,
+            hintText: 'Card number (16 digits)',
+            icon: Icons.lock_outline,
+            keyboardType: TextInputType.number,
+          ),
+          const SizedBox(height: 12),
+
+          // Expiry, CVC, Zip Row
+          Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: _buildCardField(
+                  label: 'EXPIRES',
+                  controller: _cardExpiryController,
+                  hintText: 'MM/YY',
+                  keyboardType: TextInputType.datetime,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: _buildCardField(
+                  label: 'CVC',
+                  controller: _cardCvcController,
+                  hintText: 'CVC',
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 3,
+                child: _buildCardField(
+                  label: 'ZIP',
+                  controller: _cardZipController,
+                  hintText: 'ZIP Code',
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Notice badge
+          Row(
+            children: [
+              const Icon(Icons.info_outline, color: Color(0xFF919696), size: 14),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Stripe mock test card auto-filled. You can proceed without actual charges.',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFF919696),
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCardField({
+    required String label,
+    required TextEditingController controller,
+    required String hintText,
+    IconData? icon,
+    TextInputType? keyboardType,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            color: const Color(0xFF919696),
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF141616),
+            borderRadius: BorderRadius.circular(AppRadius.radiusSm),
+            border: Border.all(color: const Color(0xFF2E3333)),
+          ),
+          child: Row(
+            children: [
+              if (icon != null) ...[
+                Icon(icon, color: const Color(0xFF919696), size: 16),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  keyboardType: keyboardType,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFFF9FAFA),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                    hintText: hintText,
+                    hintStyle: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFF6B7272),
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -1203,7 +1573,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: const Color(0xFF171A1A),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AppRadius.radiusLg),
             border: Border.all(color: const Color(0xFF262929)),
           ),
           child: Column(
@@ -1212,7 +1582,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
               Row(
                 children: [
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                     child: SizedBox(
                       width: 44,
                       height: 44,
@@ -1271,12 +1641,10 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         // Add to calendar action button
         OutlinedButton.icon(
           onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Appointment saved to your device calendar!'),
-                backgroundColor: Color(0xFF262929),
-                duration: Duration(seconds: 2),
-              ),
+            FlashSnackBar.showSuccess(
+              context,
+              'Appointment saved to your device calendar!',
+              duration: const Duration(seconds: 2),
             );
           },
           icon: const Icon(Icons.calendar_month, color: Color(0xFFEEC200), size: 18),
@@ -1292,7 +1660,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           style: OutlinedButton.styleFrom(
             side: const BorderSide(color: Color(0xFFEEC200)),
             minimumSize: const Size.fromHeight(44),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.radiusMd)),
           ),
         ),
         const SizedBox(height: 20),
@@ -1302,7 +1670,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: const Color(0xFF1A1D1D),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(AppRadius.radiusMd),
             border: Border.all(color: const Color(0xFF2A2E2E)),
           ),
           child: Column(
@@ -1393,25 +1761,24 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
             }
           : null;
     } else {
+      final isCardMethod = _selectedPaymentMethod == 'Credit Card (•••• 4242)';
+      final isCardValid = !isCardMethod ||
+          (_cardNumberController.text.trim().isNotEmpty &&
+              _cardExpiryController.text.trim().isNotEmpty &&
+              _cardCvcController.text.trim().isNotEmpty);
+
       buttonText = 'PAY \$${widget.flash.deposit} DEPOSIT & CONFIRM';
-      onPressed = _isProcessingPayment ? null : _processPaymentAndConfirm;
+      onPressed = (_isProcessingPayment || !isCardValid)
+          ? null
+          : _processPaymentAndConfirm;
     }
 
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.spaceLg),
-      decoration: const BoxDecoration(
-        color: Color(0xFF171A1A),
-        border: Border(
-          top: BorderSide(color: Color(0xFF262929), width: 1),
-        ),
-      ),
-      child: AppButtons.primaryCTA(
-        onPressed: onPressed,
-        text: buttonText,
-        isLoading: _isProcessingPayment,
-        backgroundColor: const Color(0xFFEEC200),
-        foregroundColor: const Color(0xFF121414),
-      ),
+    return AppButtons.primaryCTA(
+      onPressed: onPressed,
+      text: buttonText,
+      isLoading: _isProcessingPayment,
+      backgroundColor: const Color(0xFFEEC200),
+      foregroundColor: const Color(0xFF121414),
     );
   }
 }
@@ -1497,7 +1864,7 @@ class _PlacementSelectionBottomSheetState
       child: AdaptiveGlassContainer.bottomSheet(
         glassEnabled: true,
         androidSurfaceColor: const Color(0xFF171A1A),
-        topRadius: 24.0,
+        topRadius: AppRadius.radiusSheet,
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         child: SingleChildScrollView(
           child: Column(
@@ -1511,7 +1878,7 @@ class _PlacementSelectionBottomSheetState
                   height: 4,
                   decoration: BoxDecoration(
                     color: const Color(0xFF4D5252),
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.circular(AppRadius.dragHandle),
                   ),
                 ),
               ),
@@ -1529,16 +1896,26 @@ class _PlacementSelectionBottomSheetState
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  IconButton(
-                    key: const Key('close_placement_sheet'),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      color: Color(0xFF919696),
-                      size: 22,
-                    ),
-                    onPressed: () => Navigator.of(context).pop(),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const KeyboardCollapseButton(
+                        size: 22,
+                        padding: EdgeInsets.zero,
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        key: const Key('close_placement_sheet'),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Color(0xFF919696),
+                          size: 22,
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1635,13 +2012,13 @@ class _PlacementSelectionBottomSheetState
                                     vertical: 12,
                                   ),
                                   enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                                     borderSide: const BorderSide(
                                       color: Color(0xFF262929),
                                     ),
                                   ),
                                   focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                                     borderSide: const BorderSide(
                                       color: Color(0xFFEEC200),
                                       width: 1.5,
@@ -1660,7 +2037,7 @@ class _PlacementSelectionBottomSheetState
                                   backgroundColor: const Color(0xFFEEC200),
                                   foregroundColor: const Color(0xFF121414),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                                   ),
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 16,

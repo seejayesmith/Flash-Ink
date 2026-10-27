@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../models/artist.dart';
 import '../../../../screens/artist_profile_screen.dart';
 import '../../../../theme/app_buttons.dart';
+import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/flash_image.dart';
@@ -21,7 +22,7 @@ class FeaturedArtistSpotlight extends StatelessWidget {
     final previewPieces = artist.flashArtworks.take(3).toList();
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -38,7 +39,7 @@ class FeaturedArtistSpotlight extends StatelessWidget {
           Container(
             decoration: BoxDecoration(
               color: AppTheme.cardBackground,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(AppRadius.radiusXl),
               border: Border.all(color: AppTheme.goldBorder, width: 1.4),
               boxShadow: [
                 BoxShadow(
@@ -153,11 +154,11 @@ class FeaturedArtistSpotlight extends StatelessWidget {
                           ),
                           height: 90,
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                             border: Border.all(color: AppTheme.darkBorder),
                           ),
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                             child: FlashImage(
                               urlOrPath: piece.imageUrl,
                               fit: BoxFit.cover,

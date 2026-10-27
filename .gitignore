@@ -50,3 +50,7 @@ app.*.map.json
 *.xcuserdatad
 # Agents internal artifacts
 .agents/
+
+# Node / npm
+node_modules/
+

@@ -2,11 +2,13 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist.dart';
+import '../../models/studio_information.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/adaptive_glass_container.dart';
-import '../../widgets/artist_stepper_header.dart';
+import '../../widgets/fade_page_route.dart';
+import '../../widgets/keyboard_collapse_button.dart';
 import '../../widgets/tattoo_background_wrapper.dart';
-import '../../widgets/skip_pill_button.dart';
+import '../../features/onboarding/shared/onboarding_step_scaffold.dart';
 import 'artist_share_link_screen.dart';
 
 class ArtistChooseStyleScreen extends StatefulWidget {
@@ -18,6 +20,9 @@ class ArtistChooseStyleScreen extends StatefulWidget {
   final List<FlashArtwork> flashArtworks;
   final List<String> identityTags;
   final AuthService? authService;
+  final StudioInformation? studioInformation;
+  final String? artistBio;
+  final List<StudioPolicy>? policies;
 
   const ArtistChooseStyleScreen({
     super.key,
@@ -29,6 +34,9 @@ class ArtistChooseStyleScreen extends StatefulWidget {
     this.flashArtworks = const [],
     this.identityTags = const [],
     this.authService,
+    this.studioInformation,
+    this.artistBio,
+    this.policies,
   });
 
   @override
@@ -73,16 +81,32 @@ class _ArtistChooseStyleScreenState extends State<ArtistChooseStyleScreen> {
         return AlertDialog(
           backgroundColor: const Color(0xFF1E2121),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(
-            'Add a Style',
-            style: GoogleFonts.plusJakartaSans(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Add a Style',
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const KeyboardCollapseButton(
+                padding: EdgeInsets.zero,
+                size: 20,
+              ),
+            ],
           ),
           content: TextField(
             key: const Key('custom_style_input'),
             controller: textController,
+            keyboardType: TextInputType.text,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+            scrollPadding: EdgeInsets.only(
+              bottom: MediaQuery.viewInsetsOf(dialogContext).bottom + 24,
+            ),
             autofocus: true,
             style: GoogleFonts.plusJakartaSans(color: Colors.white),
             decoration: InputDecoration(
@@ -131,10 +155,11 @@ class _ArtistChooseStyleScreenState extends State<ArtistChooseStyleScreen> {
   }
 
   void _proceedToShareScreen([List<String>? stylesOverride]) {
+    FocusManager.instance.primaryFocus?.unfocus();
     final styles = stylesOverride ?? _selectedStyles.toList();
     Navigator.push(
       context,
-      MaterialPageRoute(
+      FadePageRoute(
         builder: (_) => ArtistShareLinkScreen(
           artistName: widget.artistName,
           photoBytes: widget.photoBytes,
@@ -145,6 +170,9 @@ class _ArtistChooseStyleScreenState extends State<ArtistChooseStyleScreen> {
           identityTags: widget.identityTags,
           styleTags: styles,
           authService: widget.authService,
+          studioInformation: widget.studioInformation,
+          artistBio: widget.artistBio,
+          policies: widget.policies,
         ),
       ),
     );
@@ -152,172 +180,108 @@ class _ArtistChooseStyleScreenState extends State<ArtistChooseStyleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      backgroundColor: const Color(0xFF121414),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: Center(
-              child: SkipPillButton(
-                key: const Key('skip_styles_button'),
-                onPressed: () => _proceedToShareScreen(const []),
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: TattooBackgroundWrapper(
-        child: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const ArtistStepperHeader(currentStep: 2),
-              const SizedBox(height: 24),
-
-              Text(
-                'Choose your\nstyle',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 34,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFFF9FAFA),
-                  height: 1.15,
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              Text(
-                'Pick the styles you specialize in so clients searching for your specific aesthetic can easily find your profile and flash',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 15,
-                  color: const Color(0xFF919696),
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 28),
-
-              // Styles Chips Container
-              AdaptiveGlassContainer(
-                borderRadius: 16,
-                padding: const EdgeInsets.all(16),
-                child: Wrap(
-                  spacing: 10,
-                  runSpacing: 12,
-                  children: [
-                  ..._availableStyles.map((style) {
-                    final isSelected = _selectedStyles.contains(style);
-                    return InkWell(
-                      key: Key('style_$style'),
-                      onTap: () => _toggleStyle(style),
-                      borderRadius: BorderRadius.circular(20),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: isSelected ? const Color(0xFF262312) : const Color(0xFF1A1C1C),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF2E3232),
-                            width: isSelected ? 1.5 : 1.0,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (isSelected) ...[
-                              const Icon(Icons.check, size: 14, color: Color(0xFFEEC200)),
-                              const SizedBox(width: 6),
-                            ],
-                            Text(
-                              style,
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 13,
-                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                color: isSelected ? const Color(0xFFEEC200) : const Color(0xFFE2E4E4),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
-
-                  // "+ Add a style" button
-                  InkWell(
-                    key: const Key('add_custom_style_trigger'),
-                    onTap: _showAddStyleDialog,
+    return OnboardingStepScaffold(
+      currentStep: 8,
+      totalSteps: 9,
+      onBack: Navigator.canPop(context)
+          ? () {
+              FocusManager.instance.primaryFocus?.unfocus();
+              Navigator.pop(context);
+            }
+          : null,
+      onSkip: () => _proceedToShareScreen(const []),
+      skipKey: const Key('skip_styles_button'),
+      skipText: 'Skip',
+      title: 'Choose your\nstyle',
+      subtitle: 'Pick the styles you specialize in so clients searching for your specific aesthetic can easily find your profile and flash',
+      ctaText: 'DONE',
+      ctaKey: const Key('done_styles_button'),
+      onCtaPressed: () => _proceedToShareScreen(),
+      backgroundOverlay: const TattooBackgroundWrapper(child: SizedBox.expand()),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Styles Chips Container
+          AdaptiveGlassContainer(
+            useGradient: false,
+            borderRadius: 16,
+            padding: const EdgeInsets.all(16),
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 12,
+              children: [
+                ..._availableStyles.map((style) {
+                  final isSelected = _selectedStyles.contains(style);
+                  return InkWell(
+                    key: Key('style_$style'),
+                    onTap: () => _toggleStyle(style),
                     borderRadius: BorderRadius.circular(20),
-                    child: Container(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1A1C1C),
+                        color: isSelected ? const Color(0xFF262312) : const Color(0xFF1A1C1C),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFF2E3232)),
+                        border: Border.all(
+                          color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF2E3232),
+                          width: isSelected ? 1.5 : 1.0,
+                        ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.add, size: 14, color: Color(0xFF919696)),
-                          const SizedBox(width: 6),
+                          if (isSelected) ...[
+                            const Icon(Icons.check, size: 14, color: Color(0xFFEEC200)),
+                            const SizedBox(width: 6),
+                          ],
                           Text(
-                            'Add a style',
+                            style,
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: const Color(0xFF919696),
+                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                              color: isSelected ? const Color(0xFFEEC200) : const Color(0xFFE2E4E4),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 36),
+                  );
+                }),
 
-              // DONE Button
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  key: const Key('done_styles_button'),
-                  onPressed: () => _proceedToShareScreen(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEEC200),
-                    foregroundColor: const Color(0xFF121414),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(26),
+                // "+ Add a style" button
+                InkWell(
+                  key: const Key('add_custom_style_trigger'),
+                  onTap: _showAddStyleDialog,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1C1C),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFF2E3232)),
                     ),
-                  ),
-                  child: Text(
-                    'DONE',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.add, size: 14, color: Color(0xFF919696)),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Add a style',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF919696),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ),
-
-              const SizedBox(height: 32),
-            ],
+              ],
+            ),
           ),
-        ),
+        ],
       ),
-    ),
-  );
-}
+    );
+  }
 }

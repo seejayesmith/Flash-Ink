@@ -172,6 +172,37 @@ void main() {
       );
       expect(containerFinder, findsOneWidget);
     });
+
+    testWidgets('AdaptiveGlassContainer defaults to useGradient: false and renders with no gradient', (tester) async {
+      const widget = AdaptiveGlassContainer(
+        child: Text('Test'),
+      );
+      expect(widget.useGradient, isFalse);
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AdaptiveGlassContainer(
+              glassEnabled: true,
+              child: Text('Content'),
+            ),
+          ),
+        ),
+      );
+
+      final containerFinder = find.descendant(
+        of: find.byType(AdaptiveGlassContainer),
+        matching: find.byType(Container),
+      );
+      final containers = tester.widgetList<Container>(containerFinder);
+      final decoratedContainer = containers.firstWhere(
+        (c) => c.decoration is BoxDecoration && (c.decoration as BoxDecoration).color != null,
+      );
+      final decoration = decoratedContainer.decoration as BoxDecoration;
+      expect(decoration.gradient, isNull);
+      expect(decoration.color, isNotNull);
+    });
   });
 }
+
 

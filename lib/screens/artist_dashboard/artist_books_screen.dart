@@ -6,8 +6,10 @@ import '../../models/artist.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../models/waitlist_entry.dart';
 import '../../services/auth_service.dart';
+import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/flash_image.dart';
+import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/flash_switch.dart';
 import '../../widgets/tattoo_machine_icon.dart';
 import 'add_waitlist_entry_sheet.dart';
@@ -215,38 +217,24 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
     if (!mounted) return;
     setState(() => _isSaving = false);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Color(0xFFEEC200), size: 18),
-            const SizedBox(width: 8),
-            Text(
-              'Books schedule saved successfully!',
-              style: GoogleFonts.plusJakartaSans(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF1E2121),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Color(0xFFEEC200), width: 1),
-        ),
-      ),
+    FlashSnackBar.showSuccess(
+      context,
+      'Books schedule saved successfully!',
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final content = SafeArea(
+      bottom: false,
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 110),
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.screenGutter,
+          12,
+          AppSpacing.screenGutter,
+          MediaQuery.paddingOf(context).bottom + (widget.isEmbeddedInTab ? 80 : 16),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -267,7 +255,7 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
             _buildLocationCard(),
             const SizedBox(height: 24),
             _buildWaitlistSectionCard(),
-            const SizedBox(height: 32),
+            const SizedBox(height: 20),
             _buildSaveButton(),
           ],
         ),
@@ -284,8 +272,8 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
         children: [
           content,
           Positioned(
-            left: AppTheme.navBarHorizontalMargin,
-            right: AppTheme.navBarHorizontalMargin,
+            left: AppSpacing.screenGutter,
+            right: AppSpacing.screenGutter,
             bottom: MediaQuery.paddingOf(context).bottom + AppTheme.navBarBottomMargin,
             child: FlashBottomNavBar(
               currentIndex: 3,
@@ -558,11 +546,9 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
                     onPressed: () {
                       ArtistDashboardRepository.openBooksPublicly();
                       setState(() {});
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Books opened to public!'),
-                          backgroundColor: Color(0xFF22C55E),
-                        ),
+                      FlashSnackBar.showSuccess(
+                        context,
+                        'Books opened to public!',
                       );
                     },
                     style: ElevatedButton.styleFrom(

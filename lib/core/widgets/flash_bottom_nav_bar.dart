@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/nav_destination_item.dart';
+import '../../theme/app_radius.dart';
 import '../../theme/app_theme.dart';
 
 /// A unified, reusable floating liquid glassmorphic bottom navigation bar.
@@ -118,7 +119,7 @@ class FlashBottomNavBar extends StatelessWidget {
                   child: Container(
                     decoration: BoxDecoration(
                       borderRadius: radius,
-                      color: backgroundColor ?? AppTheme.onyxBackground.withAlpha(85), // ~33% opacity for high transparency
+                      color: backgroundColor ?? AppTheme.onyxBackground.withAlpha(65), // ~25% opacity for slightly higher transparency
                     ),
                   ),
                 ),
@@ -265,7 +266,7 @@ class _FlashNavDestinationButton extends StatelessWidget {
                                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                                   decoration: BoxDecoration(
                                     color: activeColor,
-                                    borderRadius: BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                                   ),
                                   constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
                                   child: Text(

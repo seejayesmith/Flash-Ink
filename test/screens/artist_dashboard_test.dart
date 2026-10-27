@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_core_platform_interface/test.dart';
 
 import 'package:flash_ink/models/artist.dart';
+import 'package:flash_ink/models/artist_dashboard_data.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_dashboard_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_account_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/appointment_detail_screen.dart';
@@ -54,6 +55,7 @@ void main() {
     late FakeDashboardAuthService fakeAuth;
 
     setUp(() {
+      ArtistDashboardRepository.resetMockData();
       fakeAuth = FakeDashboardAuthService();
       final binding = TestWidgetsFlutterBinding.ensureInitialized();
       binding.platformDispatcher.views.first.physicalSize = const Size(1080, 2400);
@@ -111,7 +113,7 @@ void main() {
 
       // 6. Pending Requests section
       expect(find.text('Pending Requests'), findsOneWidget);
-      expect(find.text('12 requests'), findsOneWidget);
+      expect(find.text('4 requests'), findsOneWidget);
       expect(find.text('Neo-traditional panther head on outer thigh. Looking for heavy blackwork.'), findsOneWidget);
 
       // 7. Bottom Navigation bar
@@ -304,6 +306,70 @@ void main() {
 
       expect(find.byType(ArtistDashboardScreen), findsOneWidget);
       expect(find.text('OddMaree'), findsOneWidget);
+    });
+
+    testWidgets('Pending request amount indicator reflects real-time request data when requests are cleared or added', (tester) async {
+      ArtistDashboardRepository.resetMockData();
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      // Initially shows 4 requests
+      expect(find.text('Pending Requests'), findsOneWidget);
+      expect(find.text('4 requests'), findsOneWidget);
+      expect(find.byKey(const Key('no_pending_requests_empty_state')), findsNothing);
+
+      // Tap first pending request to view details
+      final firstPendingLink = find.byKey(const Key('view_details_link_req_sarah_1'));
+      await tester.ensureVisible(firstPendingLink);
+      await tester.pumpAndSettle();
+      await tester.tap(firstPendingLink);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BookingRequestDetailScreen), findsOneWidget);
+
+      // Decline the request via UI detail screen
+      final declineBtn = find.byKey(const Key('decline_request_button'));
+      await tester.ensureVisible(declineBtn);
+      await tester.tap(declineBtn);
+      await tester.pumpAndSettle();
+
+      // Return to dashboard - count updates to 3 requests in real time
+      expect(find.byType(ArtistDashboardScreen), findsOneWidget);
+      expect(find.text('3 requests'), findsOneWidget);
+
+      // Clear all remaining pending requests by declining them
+      for (final req in List.from(ArtistDashboardRepository.pendingRequests)) {
+        ArtistDashboardRepository.declineBookingRequest(req.id);
+      }
+      await tester.pump();
+
+      // Now pending request amount indicator accurately reflects 0 requests (not 8 requests!)
+      expect(find.text('0 requests'), findsOneWidget);
+      expect(find.byKey(const Key('no_pending_requests_empty_state')), findsOneWidget);
+      expect(find.text('No pending requests'), findsOneWidget);
+
+      // Add a new custom request in real time
+      const newCustomReq = BookingRequest(
+        id: 'req_new_incoming_1',
+        clientName: 'Alex Rivera',
+        timeAgo: 'Just now',
+        conceptDescription: 'Small fine line sparrow on inner forearm.',
+        placement: 'Inner Forearm',
+        category: 'Fine Line',
+        sketchImageUrl: 'assets/images/flash_traditional_panther.jpg',
+        estimatedPrice: 200,
+        deposit: 50,
+      );
+      ArtistDashboardRepository.addPendingRequest(newCustomReq);
+      await tester.pump();
+
+      // Real-time indicator reflects 1 request with card visible
+      expect(find.text('1 request'), findsOneWidget);
+      expect(find.text('Alex Rivera'), findsOneWidget);
+      expect(find.byKey(const Key('no_pending_requests_empty_state')), findsNothing);
+
+      // Reset mock data for test isolation
+      ArtistDashboardRepository.resetMockData();
     });
   });
 }

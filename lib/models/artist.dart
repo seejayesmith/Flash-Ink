@@ -1,3 +1,7 @@
+import '../core/mock/mock_fixtures.dart';
+import '../core/utils/distance_calculator.dart';
+import 'studio_information.dart';
+
 enum FlashStatus {
   available('Available'),
   claimed('Claimed'),
@@ -49,9 +53,8 @@ class FlashArtwork {
     int? deposit,
     this.category = 'Flash',
     this.artistName,
-    bool? isExclusive,
-  })  : _isExclusive = isExclusive,
-        price = price ?? fullPrice ?? (deposit != null ? deposit * 3 : 150),
+    this._isExclusive,
+  })  : price = price ?? fullPrice ?? (deposit != null ? deposit * 3 : 150),
         dimensions = dimensions ?? size ?? '5" x 7"',
         deposit = deposit ?? 50;
 
@@ -92,12 +95,41 @@ class FlashArtwork {
     );
   }
 
-  static List<FlashArtwork> get mockFlashPieces {
-    final pieces = <FlashArtwork>[];
-    for (final artist in Artist.mockArtists) {
-      pieces.addAll(artist.flashArtworks);
-    }
-    return pieces;
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'artistId': artistId,
+      'title': title,
+      'imageUrl': imageUrl,
+      'price': price,
+      'status': status.name,
+      'dimensions': dimensions,
+      'estimatedTime': estimatedTime,
+      'location': location,
+      'deposit': deposit,
+      'category': category,
+      'artistName': artistName,
+      'isExclusive': _isExclusive,
+    };
+  }
+
+  factory FlashArtwork.fromMap(Map<String, dynamic> map, {String? defaultArtistId, String? defaultArtistName}) {
+    return FlashArtwork(
+      id: map['id']?.toString() ?? '',
+      artistId: map['artistId']?.toString() ?? defaultArtistId ?? '',
+      title: map['title']?.toString() ?? 'Flash Artwork',
+      imageUrl: map['imageUrl']?.toString() ?? 'assets/images/flash_traditional_panther.jpg',
+      price: (map['price'] is num) ? (map['price'] as num).toInt() : null,
+      fullPrice: (map['fullPrice'] is num) ? (map['fullPrice'] as num).toInt() : null,
+      status: FlashStatus.fromString(map['status']?.toString() ?? 'available'),
+      dimensions: map['dimensions']?.toString() ?? map['size']?.toString(),
+      estimatedTime: map['estimatedTime']?.toString() ?? '2.5 hrs',
+      location: map['location']?.toString() ?? 'Forearm / Calf',
+      deposit: (map['deposit'] is num) ? (map['deposit'] as num).toInt() : null,
+      category: map['category']?.toString() ?? 'Flash',
+      artistName: map['artistName']?.toString() ?? defaultArtistName,
+      isExclusive: map['isExclusive'] as bool?,
+    );
   }
 }
 
@@ -105,28 +137,73 @@ class ArtistFunFact {
   final String label;
   final String value;
   const ArtistFunFact({required this.label, required this.value});
+
+  Map<String, dynamic> toMap() => {'label': label, 'value': value};
+
+  factory ArtistFunFact.fromMap(Map<String, dynamic> map) => ArtistFunFact(
+    label: map['label']?.toString() ?? '',
+    value: map['value']?.toString() ?? '',
+  );
 }
 
 class StudioPolicy {
   final String title;
   final String description;
   final String iconKey;
+  final bool isEnabled;
 
   const StudioPolicy({
     required this.title,
     required this.description,
     this.iconKey = 'deposit',
+    this.isEnabled = true,
   });
+
+  Map<String, dynamic> toMap() => {
+    'title': title,
+    'description': description,
+    'iconKey': iconKey,
+    'isEnabled': isEnabled,
+  };
+
+  factory StudioPolicy.fromMap(Map<String, dynamic> map) => StudioPolicy(
+    title: map['title']?.toString() ?? '',
+    description: map['description']?.toString() ?? '',
+    iconKey: map['iconKey']?.toString() ?? 'deposit',
+    isEnabled: map['isEnabled'] != false,
+  );
+
+  StudioPolicy copyWith({
+    String? title,
+    String? description,
+    String? iconKey,
+    bool? isEnabled,
+  }) {
+    return StudioPolicy(
+      title: title ?? this.title,
+      description: description ?? this.description,
+      iconKey: iconKey ?? this.iconKey,
+      isEnabled: isEnabled ?? this.isEnabled,
+    );
+  }
 }
 
 class Artist {
   final String id;
   final String name;
+  final String username;
+  final String instagramHandle;
+  final String studioName;
   final String avatarUrl;
   final bool isBooksOpen;
   final String location;
   final String studioType;
+  final bool isPrivateStudio;
   final String distance;
+  final double? distanceMiles;
+  final double? latitude;
+  final double? longitude;
+  final bool profileCompleted;
   final double rating;
   final int availablePieces;
   final int minDeposit;
@@ -139,6 +216,7 @@ class Artist {
   final List<StudioPolicy> policies;
   final bool isVerifiedStudio;
   final bool customRequestAvailable;
+  final StudioInformation? studioInformation;
 
   /// Array of 4 preview image URLs for the 2x2 artist showcase card.
   List<String> get previewImages => images;
@@ -146,11 +224,19 @@ class Artist {
   const Artist({
     required this.id,
     required this.name,
+    this.username = '',
+    this.instagramHandle = '',
+    this.studioName = '',
     required this.avatarUrl,
     this.isBooksOpen = true,
     required this.location,
     required this.studioType,
-    this.distance = '1.2 mi',
+    this.isPrivateStudio = false,
+    this.distance = '',
+    this.distanceMiles,
+    this.latitude,
+    this.longitude,
+    this.profileCompleted = true,
     required this.rating,
     required this.availablePieces,
     required this.minDeposit,
@@ -161,40 +247,45 @@ class Artist {
     this.flashArtworks = const [],
     this.bio =
         'A safe, inclusive space for all bodies. Silent appointments are always available upon request.',
-    this.funFacts = const [
-      ArtistFunFact(label: 'Experience', value: '7+ Years'),
-      ArtistFunFact(label: 'Current Obsession', value: 'Elden Ring'),
-      ArtistFunFact(label: 'Current Goal', value: 'Japan Guest Spot'),
-    ],
-    this.policies = const [
-      StudioPolicy(
-        title: 'Deposits & Cancellations',
-        description:
-            'Non-refundable deposits applied toward final piece. Minimum 48-hour notice required to reschedule your appointment.',
-        iconKey: 'deposit',
-      ),
-      StudioPolicy(
-        title: 'Health & Day-of Prep',
-        description:
-            'Valid 18+ government photo ID required. Be well rested, nourished, and hydrated. No alcohol or blood thinners 24 hours prior.',
-        iconKey: 'health',
-      ),
-      StudioPolicy(
-        title: 'Studio Etiquette & Guests',
-        description:
-            '1 support guest is welcome. Silent appointments are gladly honored upon request at booking.',
-        iconKey: 'etiquette',
-      ),
-      StudioPolicy(
-        title: 'Touch-ups',
-        description:
-            'Free touch-up within 6 months of healing (excluding high-friction placements such as hands and feet).',
-        iconKey: 'touchup',
-      ),
-    ],
+    this.funFacts = MockFixtures.defaultFunFacts,
+    this.policies = MockFixtures.defaultStudioPolicies,
     this.isVerifiedStudio = true,
     this.customRequestAvailable = true,
+    this.studioInformation,
   }) : images = previewImages ?? images ?? const [];
+
+  /// Discovery-safe coordinates for distance calculation.
+  GeoPointCoords? get discoveryCoordinates {
+    final lat = latitude ?? studioInformation?.latitude;
+    final lng = longitude ?? studioInformation?.longitude;
+    if (lat == null || lng == null) return null;
+    final coords = GeoPointCoords(
+      latitude: lat,
+      longitude: lng,
+      resolvedLabel: location,
+    );
+    return coords.isValid ? coords : null;
+  }
+
+  /// Returns a copy of this [Artist] with live Haversine distance calculated
+  /// from [clientCoords]. Preserves existing [distance] when either coordinate
+  /// is unavailable.
+  Artist withLiveDistanceFrom(GeoPointCoords? clientCoords) {
+    final artistCoords = discoveryCoordinates;
+    if (clientCoords == null || !clientCoords.isValid || artistCoords == null) {
+      return this;
+    }
+    final miles = DistanceCalculator.calculateMiles(
+      startLatitude: clientCoords.latitude,
+      startLongitude: clientCoords.longitude,
+      endLatitude: artistCoords.latitude,
+      endLongitude: artistCoords.longitude,
+    );
+    return copyWith(
+      distanceMiles: miles,
+      distance: DistanceCalculator.formatMilesAway(miles),
+    );
+  }
 
   FlashArtwork get featuredFlash =>
       flashArtworks.isNotEmpty
@@ -204,7 +295,9 @@ class Artist {
               artistId: id,
               artistName: name,
               title: '$name Signature Flash',
-              imageUrl: images.isNotEmpty ? images.first : 'assets/images/flash_traditional_dagger.jpg',
+              imageUrl: images.isNotEmpty
+                  ? images.first
+                  : 'assets/images/flash_traditional_dagger.jpg',
               price: minDeposit * 3,
               deposit: minDeposit,
               dimensions: '5" x 7"',
@@ -216,11 +309,19 @@ class Artist {
   Artist copyWith({
     String? id,
     String? name,
+    String? username,
+    String? instagramHandle,
+    String? studioName,
     String? avatarUrl,
     bool? isBooksOpen,
     String? location,
     String? studioType,
+    bool? isPrivateStudio,
     String? distance,
+    double? distanceMiles,
+    double? latitude,
+    double? longitude,
+    bool? profileCompleted,
     double? rating,
     int? availablePieces,
     int? minDeposit,
@@ -234,15 +335,24 @@ class Artist {
     List<StudioPolicy>? policies,
     bool? isVerifiedStudio,
     bool? customRequestAvailable,
+    StudioInformation? studioInformation,
   }) {
     return Artist(
       id: id ?? this.id,
       name: name ?? this.name,
+      username: username ?? this.username,
+      instagramHandle: instagramHandle ?? this.instagramHandle,
+      studioName: studioName ?? this.studioName,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       isBooksOpen: isBooksOpen ?? this.isBooksOpen,
       location: location ?? this.location,
       studioType: studioType ?? this.studioType,
+      isPrivateStudio: isPrivateStudio ?? this.isPrivateStudio,
       distance: distance ?? this.distance,
+      distanceMiles: distanceMiles ?? this.distanceMiles,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      profileCompleted: profileCompleted ?? this.profileCompleted,
       rating: rating ?? this.rating,
       availablePieces: availablePieces ?? this.availablePieces,
       minDeposit: minDeposit ?? this.minDeposit,
@@ -256,517 +366,177 @@ class Artist {
       isVerifiedStudio: isVerifiedStudio ?? this.isVerifiedStudio,
       customRequestAvailable:
           customRequestAvailable ?? this.customRequestAvailable,
+      studioInformation: studioInformation ?? this.studioInformation,
     );
   }
 
-  static const List<Artist> mockArtists = [
-    Artist(
-      id: 'artist_1',
-      name: 'Oddmaree',
-      avatarUrl:
-          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-      isBooksOpen: true,
-      location: 'Portland, OR',
-      studioType: 'Private Studio',
-      distance: '1.2 mi',
-      rating: 5.0,
-      availablePieces: 12,
-      minDeposit: 50,
-      tags: ['Traditional', 'Queer Artists', 'Female', 'Silent Appointment'],
-      previewImages: [
-        'assets/images/flash_traditional_dagger.jpg',
-        'assets/images/flash_blackwork_skull.jpg',
-        'assets/images/flash_traditional_heart.jpg',
-        'assets/images/flash_traditional_moth.jpg',
-      ],
-      flashArtworks: [
-        FlashArtwork(
-          id: 'flash_1_1',
-          artistId: 'artist_1',
-          artistName: 'Oddmaree',
-          title: 'Sacred Dagger & Serpent',
-          imageUrl: 'assets/images/flash_traditional_dagger.jpg',
-          price: 220,
-          deposit: 60,
-          status: FlashStatus.available,
-          dimensions: '5" x 8"',
-          estimatedTime: '2.5 hrs',
-          location: 'Forearm / Calf',
-          category: 'Traditional',
-        ),
-        FlashArtwork(
-          id: 'flash_1_2',
-          artistId: 'artist_1',
-          artistName: 'Oddmaree',
-          title: 'Botanical Sun Skull',
-          imageUrl: 'assets/images/flash_blackwork_skull.jpg',
-          price: 260,
-          deposit: 70,
-          status: FlashStatus.available,
-          dimensions: '6" x 9"',
-          estimatedTime: '3.0 hrs',
-          location: 'Thigh / Outer Arm',
-          category: 'Traditional',
-        ),
-        FlashArtwork(
-          id: 'flash_1_3',
-          artistId: 'artist_1',
-          artistName: 'Oddmaree',
-          title: 'Crying Heart Dagger',
-          imageUrl: 'assets/images/flash_traditional_heart.jpg',
-          price: 190,
-          deposit: 50,
-          status: FlashStatus.available,
-          dimensions: '4" x 6"',
-          estimatedTime: '2.0 hrs',
-          location: 'Upper Arm / Chest',
-          category: 'Traditional',
-        ),
-        FlashArtwork(
-          id: 'flash_1_4',
-          artistId: 'artist_1',
-          artistName: 'Oddmaree',
-          title: 'Celestial Luna Moth',
-          imageUrl: 'assets/images/flash_traditional_moth.jpg',
-          price: 300,
-          deposit: 80,
-          status: FlashStatus.repeatable,
-          dimensions: '7" x 5"',
-          estimatedTime: '3.5 hrs',
-          location: 'Sternum / Back',
-          category: 'Neo-Traditional',
-        ),
-        FlashArtwork(
-          id: 'flash_1_5',
-          artistId: 'artist_1',
-          artistName: 'Oddmaree',
-          title: 'Wild Rose & Thorn',
-          imageUrl: 'assets/images/flash_sheet_saam_a.jpg',
-          price: 170,
-          deposit: 50,
-          status: FlashStatus.available,
-          dimensions: '3" x 6"',
-          estimatedTime: '1.5 hrs',
-          location: 'Inner Forearm',
-          category: 'Traditional',
-        ),
-        FlashArtwork(
-          id: 'flash_1_6',
-          artistId: 'artist_1',
-          artistName: 'Oddmaree',
-          title: 'Twin Swallow Flight',
-          imageUrl: 'assets/images/flash_sheet_saam_b.jpg',
-          price: 240,
-          deposit: 65,
-          status: FlashStatus.available,
-          dimensions: '5" x 5"',
-          estimatedTime: '2.5 hrs',
-          location: 'Shoulders / Chest',
-          category: 'Traditional',
-        ),
-        FlashArtwork(
-          id: 'flash_1_7',
-          artistId: 'artist_1',
-          artistName: 'Oddmaree',
-          title: 'Vintage Anchor Flash',
-          imageUrl: 'assets/images/flash_anchor.jpg',
-          price: 160,
-          deposit: 50,
-          status: FlashStatus.available,
-          dimensions: '3" x 5"',
-          estimatedTime: '1.5 hrs',
-          location: 'Ankle / Wrist',
-          category: 'Traditional',
-        ),
-        FlashArtwork(
-          id: 'flash_1_8',
-          artistId: 'artist_1',
-          artistName: 'Oddmaree',
-          title: 'Clipper Ship Voyage',
-          imageUrl: 'assets/images/flash_clipper_ship.jpg',
-          price: 320,
-          deposit: 80,
-          status: FlashStatus.claimed,
-          dimensions: '6" x 10"',
-          estimatedTime: '3.5 hrs',
-          location: 'Bicep / Thigh',
-          category: 'Neo-Traditional',
-        ),
-      ],
-    ),
-    Artist(
-      id: 'artist_2',
-      name: 'Kian Forreal',
-      avatarUrl:
-          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
-      isBooksOpen: true,
-      location: 'San Francisco, CA',
-      studioType: 'Black Veil Studio',
-      distance: '2.8 mi',
-      rating: 4.9,
-      availablePieces: 8,
-      minDeposit: 75,
-      tags: ['Japanese', 'Queer Artists', 'BIPOC'],
-      previewImages: [
-        'assets/images/flash_japanese_koi.jpg',
-        'assets/images/flash_japanese_oni.jpg',
-        'assets/images/flash_dragon_snake.jpg',
-        'assets/images/flash_sheet_saam_e.jpg',
-      ],
-      flashArtworks: [
-        FlashArtwork(
-          id: 'flash_2_1',
-          artistId: 'artist_2',
-          artistName: 'Kian Forreal',
-          title: 'Dragon Koi Ascending',
-          imageUrl: 'assets/images/flash_japanese_koi.jpg',
-          price: 340,
-          deposit: 85,
-          status: FlashStatus.available,
-          dimensions: '6" x 12"',
-          estimatedTime: '4.0 hrs',
-          location: 'Forearm / Calf',
-          category: 'Japanese',
-        ),
-        FlashArtwork(
-          id: 'flash_2_2',
-          artistId: 'artist_2',
-          artistName: 'Kian Forreal',
-          title: 'Oni Mask & Blossoms',
-          imageUrl: 'assets/images/flash_japanese_oni.jpg',
-          price: 400,
-          deposit: 100,
-          status: FlashStatus.available,
-          dimensions: '7" x 10"',
-          estimatedTime: '4.5 hrs',
-          location: 'Thigh / Upper Arm',
-          category: 'Japanese',
-        ),
-        FlashArtwork(
-          id: 'flash_2_3',
-          artistId: 'artist_2',
-          artistName: 'Kian Forreal',
-          title: 'Great Wave & Dragon',
-          imageUrl: 'assets/images/flash_dragon_snake.jpg',
-          price: 270,
-          deposit: 75,
-          status: FlashStatus.repeatable,
-          dimensions: '5" x 7"',
-          estimatedTime: '2.5 hrs',
-          location: 'Forearm / Shoulder',
-          category: 'Japanese',
-        ),
-        FlashArtwork(
-          id: 'flash_2_4',
-          artistId: 'artist_2',
-          artistName: 'Kian Forreal',
-          title: 'Fujin Wind Crest',
-          imageUrl: 'assets/images/flash_sheet_saam_e.jpg',
-          price: 440,
-          deposit: 110,
-          status: FlashStatus.claimed,
-          dimensions: '8" x 10"',
-          estimatedTime: '5.0 hrs',
-          location: 'Back / Ribs',
-          category: 'Japanese',
-        ),
-        FlashArtwork(
-          id: 'flash_2_5',
-          artistId: 'artist_2',
-          artistName: 'Kian Forreal',
-          title: 'Tiger Stalking Bamboo',
-          imageUrl: 'assets/images/flash_sheet_saam_d.jpg',
-          price: 360,
-          deposit: 90,
-          status: FlashStatus.available,
-          dimensions: '6" x 11"',
-          estimatedTime: '4.0 hrs',
-          location: 'Calf / Thigh',
-          category: 'Japanese',
-        ),
-        FlashArtwork(
-          id: 'flash_2_6',
-          artistId: 'artist_2',
-          artistName: 'Kian Forreal',
-          title: 'Golden Koi Talisman',
-          imageUrl: 'assets/images/flash_japanese_koi.jpg',
-          price: 290,
-          deposit: 75,
-          status: FlashStatus.available,
-          dimensions: '5" x 5"',
-          estimatedTime: '3.0 hrs',
-          location: 'Knee / Elbow',
-          category: 'Japanese',
-        ),
-        FlashArtwork(
-          id: 'flash_2_7',
-          artistId: 'artist_2',
-          artistName: 'Kian Forreal',
-          title: 'Hannya & Sakura',
-          imageUrl: 'assets/images/flash_japanese_oni.jpg',
-          price: 260,
-          deposit: 70,
-          status: FlashStatus.available,
-          dimensions: '4" x 7"',
-          estimatedTime: '2.5 hrs',
-          location: 'Forearm',
-          category: 'Japanese',
-        ),
-        FlashArtwork(
-          id: 'flash_2_8',
-          artistId: 'artist_2',
-          artistName: 'Kian Forreal',
-          title: 'Demon Slayer Katana',
-          imageUrl: 'assets/images/flash_dragon_snake.jpg',
-          price: 310,
-          deposit: 80,
-          status: FlashStatus.available,
-          dimensions: '5" x 9"',
-          estimatedTime: '3.0 hrs',
-          location: 'Outer Arm',
-          category: 'Japanese',
-        ),
-      ],
-    ),
-    Artist(
-      id: 'artist_3',
-      name: 'Elena Surova',
-      avatarUrl:
-          'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80',
-      isBooksOpen: false,
-      location: 'Brooklyn, NY',
-      studioType: 'Rose & Dagger',
-      distance: '4.5 mi',
-      rating: 5.0,
-      availablePieces: 15,
-      minDeposit: 100,
-      tags: ['Fine Line', 'Blackwork', 'Female', 'BIPOC', 'Silent Appointment'],
-      previewImages: [
-        'assets/images/flash_fineline_flora.jpg',
-        'assets/images/flash_butterfly.jpg',
-        'assets/images/flash_blackwork_skull.jpg',
-        'assets/images/flash_traditional_moth.jpg',
-      ],
-      flashArtworks: [
-        FlashArtwork(
-          id: 'flash_3_1',
-          artistId: 'artist_3',
-          artistName: 'Elena Surova',
-          title: 'Fine Line Flora Study',
-          imageUrl: 'assets/images/flash_fineline_flora.jpg',
-          price: 330,
-          deposit: 100,
-          status: FlashStatus.available,
-          dimensions: '4" x 8"',
-          estimatedTime: '3.0 hrs',
-          location: 'Inner Bicep / Ribs',
-          category: 'Fine Line',
-        ),
-        FlashArtwork(
-          id: 'flash_3_2',
-          artistId: 'artist_3',
-          artistName: 'Elena Surova',
-          title: 'Butterfly Silhouette',
-          imageUrl: 'assets/images/flash_butterfly.jpg',
-          price: 250,
-          deposit: 80,
-          status: FlashStatus.claimed,
-          dimensions: '3" x 5"',
-          estimatedTime: '2.0 hrs',
-          location: 'Shoulder / Nape',
-          category: 'Fine Line',
-        ),
-        FlashArtwork(
-          id: 'flash_3_3',
-          artistId: 'artist_3',
-          artistName: 'Elena Surova',
-          title: 'Blackwork Sacred Geometry',
-          imageUrl: 'assets/images/flash_blackwork_skull.jpg',
-          price: 380,
-          deposit: 100,
-          status: FlashStatus.available,
-          dimensions: '5" x 10"',
-          estimatedTime: '3.5 hrs',
-          location: 'Forearm / Spine',
-          category: 'Blackwork',
-        ),
-        FlashArtwork(
-          id: 'flash_3_4',
-          artistId: 'artist_3',
-          artistName: 'Elena Surova',
-          title: 'Botanical Fern Arch',
-          imageUrl: 'assets/images/flash_fineline_flora.jpg',
-          price: 300,
-          deposit: 90,
-          status: FlashStatus.repeatable,
-          dimensions: '4" x 7"',
-          estimatedTime: '2.5 hrs',
-          location: 'Collarbone / Arm',
-          category: 'Fine Line',
-        ),
-        FlashArtwork(
-          id: 'flash_3_5',
-          artistId: 'artist_3',
-          artistName: 'Elena Surova',
-          title: 'Celestial Luna Moth',
-          imageUrl: 'assets/images/flash_traditional_moth.jpg',
-          price: 280,
-          deposit: 85,
-          status: FlashStatus.available,
-          dimensions: '3" x 9"',
-          estimatedTime: '2.5 hrs',
-          location: 'Spine / Forearm',
-          category: 'Fine Line',
-        ),
-        FlashArtwork(
-          id: 'flash_3_6',
-          artistId: 'artist_3',
-          artistName: 'Elena Surova',
-          title: 'Vintage Swallow Flash',
-          imageUrl: 'assets/images/flash_sheet_saam_c.jpg',
-          price: 230,
-          deposit: 80,
-          status: FlashStatus.available,
-          dimensions: '2" x 3"',
-          estimatedTime: '1.5 hrs',
-          location: 'Wrist / Behind Ear',
-          category: 'Fine Line',
-        ),
-        FlashArtwork(
-          id: 'flash_3_7',
-          artistId: 'artist_3',
-          artistName: 'Elena Surova',
-          title: 'Wild Peony & Ferns',
-          imageUrl: 'assets/images/flash_fineline_flora.jpg',
-          price: 400,
-          deposit: 110,
-          status: FlashStatus.available,
-          dimensions: '6" x 9"',
-          estimatedTime: '3.5 hrs',
-          location: 'Thigh / Outer Arm',
-          category: 'Fine Line',
-        ),
-        FlashArtwork(
-          id: 'flash_3_8',
-          artistId: 'artist_3',
-          artistName: 'Elena Surova',
-          title: 'Sun Skull Emblem',
-          imageUrl: 'assets/images/flash_blackwork_skull.jpg',
-          price: 320,
-          deposit: 95,
-          status: FlashStatus.claimed,
-          dimensions: '2" x 12"',
-          estimatedTime: '3.0 hrs',
-          location: 'Spine / Forearm',
-          category: 'Blackwork',
-        ),
-      ],
-    ),
-    Artist(
-      id: 'artist_4',
-      name: 'Marcus Vex',
-      avatarUrl:
-          'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
-      isBooksOpen: true,
-      location: 'Austin, TX',
-      studioType: 'Golden Needle',
-      distance: '8.3 mi',
-      rating: 4.8,
-      availablePieces: 6,
-      minDeposit: 60,
-      tags: ['Realism', 'Traditional', 'BIPOC', 'Silent Appointment'],
-      previewImages: [
-        'assets/images/flash_traditional_panther.jpg',
-        'assets/images/flash_anchor.jpg',
-        'assets/images/flash_american_eagle.jpg',
-        'assets/images/flash_traditional_heart.jpg',
-      ],
-      flashArtworks: [
-        FlashArtwork(
-          id: 'flash_4_1',
-          artistId: 'artist_4',
-          artistName: 'Marcus Vex',
-          title: 'Panther Head Snarl',
-          imageUrl: 'assets/images/flash_traditional_panther.jpg',
-          price: 280,
-          deposit: 65,
-          status: FlashStatus.available,
-          dimensions: '5" x 5"',
-          estimatedTime: '2.5 hrs',
-          location: 'Shoulder / Calf',
-          category: 'Traditional',
-        ),
-        FlashArtwork(
-          id: 'flash_4_2',
-          artistId: 'artist_4',
-          artistName: 'Marcus Vex',
-          title: 'Vintage Anchor & Rose',
-          imageUrl: 'assets/images/flash_anchor.jpg',
-          price: 230,
-          deposit: 60,
-          status: FlashStatus.repeatable,
-          dimensions: '4" x 6"',
-          estimatedTime: '2.0 hrs',
-          location: 'Bicep / Calf',
-          category: 'Traditional',
-        ),
-        FlashArtwork(
-          id: 'flash_4_3',
-          artistId: 'artist_4',
-          artistName: 'Marcus Vex',
-          title: 'American Eagle Crest',
-          imageUrl: 'assets/images/flash_american_eagle.jpg',
-          price: 350,
-          deposit: 80,
-          status: FlashStatus.claimed,
-          dimensions: '7" x 9"',
-          estimatedTime: '3.5 hrs',
-          location: 'Chest / Back',
-          category: 'Traditional',
-        ),
-        FlashArtwork(
-          id: 'flash_4_4',
-          artistId: 'artist_4',
-          artistName: 'Marcus Vex',
-          title: 'Crying Heart Dagger',
-          imageUrl: 'assets/images/flash_traditional_heart.jpg',
-          price: 260,
-          deposit: 60,
-          status: FlashStatus.available,
-          dimensions: '5" x 8"',
-          estimatedTime: '2.5 hrs',
-          location: 'Forearm',
-          category: 'Traditional',
-        ),
-        FlashArtwork(
-          id: 'flash_4_5',
-          artistId: 'artist_4',
-          artistName: 'Marcus Vex',
-          title: 'Dagger Through Skull',
-          imageUrl: 'assets/images/flash_traditional_dagger.jpg',
-          price: 290,
-          deposit: 60,
-          status: FlashStatus.available,
-          dimensions: '5" x 8"',
-          estimatedTime: '2.5 hrs',
-          location: 'Forearm / Calf',
-          category: 'Blackwork',
-        ),
-        FlashArtwork(
-          id: 'flash_4_6',
-          artistId: 'artist_4',
-          artistName: 'Marcus Vex',
-          title: 'Sun Skull & Hourglass',
-          imageUrl: 'assets/images/flash_blackwork_skull.jpg',
-          price: 320,
-          deposit: 70,
-          status: FlashStatus.available,
-          dimensions: '6" x 10"',
-          estimatedTime: '3.0 hrs',
-          location: 'Outer Thigh / Arm',
-          category: 'Traditional',
-        ),
-      ],
-    ),
-  ];
+  /// Privacy-safe public Firestore serialization for `/artists/{uid}`.
+  /// Never writes private street/suite/entryCode/phoneNumber/email fields.
+  Map<String, dynamic> toMap() {
+    final safeCoords = studioInformation?.discoveryCoordinates ?? discoveryCoordinates;
+    final effectivePrivateCoords = isPrivateStudio && safeCoords != null
+        ? safeCoords.coarsened(decimals: 2)
+        : safeCoords;
+    return {
+      'id': id,
+      'name': name,
+      'displayName': name,
+      if (username.isNotEmpty) 'username': username,
+      if (instagramHandle.isNotEmpty) 'instagramHandle': instagramHandle,
+      if (studioName.isNotEmpty) 'studioName': studioName,
+      'avatarUrl': avatarUrl,
+      'photoUrl': avatarUrl,
+      'isBooksOpen': isBooksOpen,
+      'location': location,
+      'city': studioInformation?.city.isNotEmpty == true
+          ? studioInformation!.city
+          : location,
+      if (studioInformation?.state.isNotEmpty == true)
+        'state': studioInformation!.state,
+      'studioType': studioType,
+      'isPrivateStudio': isPrivateStudio,
+      if (effectivePrivateCoords != null) 'latitude': effectivePrivateCoords.latitude,
+      if (effectivePrivateCoords != null) 'longitude': effectivePrivateCoords.longitude,
+      'profileCompleted': profileCompleted,
+      'rating': rating,
+      'availablePieces': availablePieces,
+      'minDeposit': minDeposit,
+      'images': images,
+      'isFavorited': isFavorited,
+      'tags': tags,
+      'flashArtworks': flashArtworks.map((f) => f.toMap()).toList(),
+      'bio': bio,
+      'funFacts': funFacts.map((f) => f.toMap()).toList(),
+      'policies': policies.map((p) => p.toMap()).toList(),
+      'isVerifiedStudio': isVerifiedStudio,
+      'customRequestAvailable': customRequestAvailable,
+      if (studioInformation != null)
+        'studioInformation': studioInformation!.toPublicMap(),
+    };
+  }
+
+  factory Artist.fromMap(Map<String, dynamic> map, [String? docId]) {
+    final id = docId ?? map['id']?.toString() ?? '';
+    final name = map['name']?.toString() ?? map['displayName']?.toString() ?? 'Artist';
+
+    // Parse images
+    List<String> images = [];
+    if (map['images'] is List) {
+      images = (map['images'] as List).map((e) => e.toString()).toList();
+    } else if (map['previewImages'] is List) {
+      images = (map['previewImages'] as List).map((e) => e.toString()).toList();
+    }
+
+    // Parse tags
+    List<String> tags = [];
+    if (map['tags'] is List) {
+      tags = (map['tags'] as List).map((e) => e.toString()).toList();
+    }
+
+    // Parse flashArtworks
+    List<FlashArtwork> flashArtworks = [];
+    if (map['flashArtworks'] is List) {
+      flashArtworks = (map['flashArtworks'] as List)
+          .whereType<Map>()
+          .map((item) => FlashArtwork.fromMap(
+                Map<String, dynamic>.from(item),
+                defaultArtistId: id,
+                defaultArtistName: name,
+              ))
+          .toList();
+    }
+
+    // Parse fun facts
+    List<ArtistFunFact>? funFacts;
+    if (map['funFacts'] is List) {
+      funFacts = (map['funFacts'] as List)
+          .whereType<Map>()
+          .map((item) => ArtistFunFact.fromMap(Map<String, dynamic>.from(item)))
+          .toList();
+    }
+
+    // Parse policies
+    List<StudioPolicy>? policies;
+    if (map['policies'] is List) {
+      policies = (map['policies'] as List)
+          .whereType<Map>()
+          .map((item) => StudioPolicy.fromMap(Map<String, dynamic>.from(item)))
+          .toList();
+    }
+
+    StudioInformation? studioInfo;
+    if (map['studioInformation'] is Map) {
+      studioInfo = StudioInformation.fromMap(
+        Map<String, dynamic>.from(map['studioInformation'] as Map),
+      );
+    } else if (map['studioName'] != null) {
+      studioInfo = StudioInformation(
+        name: map['studioName'].toString(),
+        formattedAddress: map['studioAddress']?.toString() ?? '',
+        city: map['city']?.toString() ?? '',
+        state: map['state']?.toString() ?? '',
+        latitude: (map['latitude'] is num) ? (map['latitude'] as num).toDouble() : null,
+        longitude: (map['longitude'] is num) ? (map['longitude'] as num).toDouble() : null,
+        isPrivateStudio: map['isPrivateStudio'] == true,
+        studioType: map['studioType']?.toString() ?? 'Street Shop',
+      );
+    }
+
+    final rawAvatar = map['avatarUrl'] ?? map['photoUrl'] ?? map['photoURL'];
+    final avatarUrl = (rawAvatar is String && !rawAvatar.startsWith('local://'))
+        ? rawAvatar
+        : '';
+
+    final parsedLat = (map['latitude'] is num)
+        ? (map['latitude'] as num).toDouble()
+        : studioInfo?.latitude;
+    final parsedLng = (map['longitude'] is num)
+        ? (map['longitude'] as num).toDouble()
+        : studioInfo?.longitude;
+
+    final bookableCount = flashArtworks
+        .where((f) => !f.isClaimed)
+        .length;
+
+    return Artist(
+      id: id,
+      name: name,
+      username: map['username']?.toString() ?? '',
+      instagramHandle: map['instagramHandle']?.toString() ?? '',
+      studioName: map['studioName']?.toString() ?? studioInfo?.name ?? '',
+      avatarUrl: avatarUrl,
+      isBooksOpen: map['isBooksOpen'] == true || map['isBooksOpen'] == null,
+      location: map['location']?.toString() ??
+          studioInfo?.displayLocation ??
+          map['city']?.toString() ??
+          '',
+      studioType: map['studioType']?.toString() ??
+          studioInfo?.studioType ??
+          'Private Studio',
+      isPrivateStudio: map['isPrivateStudio'] == true ||
+          (studioInfo?.isPrivateStudio ?? false),
+      distance: map['distance']?.toString() ?? '',
+      latitude: parsedLat,
+      longitude: parsedLng,
+      profileCompleted: map['profileCompleted'] == true,
+      rating: (map['rating'] is num) ? (map['rating'] as num).toDouble() : 5.0,
+      availablePieces: (map['availablePieces'] is num)
+          ? (map['availablePieces'] as num).toInt()
+          : bookableCount,
+      minDeposit: (map['minDeposit'] is num) ? (map['minDeposit'] as num).toInt() : 100,
+      images: images,
+      isFavorited: map['isFavorited'] == true,
+      tags: tags,
+      flashArtworks: flashArtworks,
+      bio: map['bio']?.toString() ?? '',
+      funFacts: funFacts ?? MockFixtures.defaultFunFacts,
+      policies: policies ?? MockFixtures.defaultStudioPolicies,
+      isVerifiedStudio: map['isVerifiedStudio'] != false,
+      customRequestAvailable: map['customRequestAvailable'] != false,
+      studioInformation: studioInfo,
+    );
+  }
+
+  /// Quarantined fixture forwarder retained for unit/widget test compatibility.
+  static const List<Artist> mockArtists = MockFixtures.artists;
 }

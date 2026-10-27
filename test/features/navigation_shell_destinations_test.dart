@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flash_ink/core/mock/mock_data_config.dart';
 import 'package:flash_ink/core/widgets/flash_bottom_nav_bar.dart';
 import 'package:flash_ink/features/appointments/presentation/screens/appointments_screen.dart';
 import 'package:flash_ink/features/appointments/presentation/widgets/appointment_card.dart';
@@ -15,6 +16,13 @@ import 'package:flash_ink/theme/app_spacing.dart';
 
 void main() {
   group('Navigation Shell & 4 Primary Root Screens Tests', () {
+    setUp(() {
+      MockDataConfig.debugOverride = true;
+    });
+
+    tearDown(() {
+      MockDataConfig.resetDebugOverride();
+    });
     testWidgets('FlashBottomNavBar renders the 4 updated client destinations',
         (tester) async {
       tester.view.physicalSize = const Size(800, 1200);
@@ -184,7 +192,7 @@ void main() {
       expect(find.text('Sounds good! See you then.'), findsOneWidget);
     });
 
-    testWidgets('Header text at top-left is aligned on the left with screen content margin (AppSpacing.spaceLg)',
+    testWidgets('Header text at top-left is aligned on the left with screen content margin (AppSpacing.screenGutter)',
         (tester) async {
       tester.view.physicalSize = const Size(800, 1400);
       tester.view.devicePixelRatio = 1.0;
@@ -200,7 +208,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       final appointmentsTitleOffset = tester.getTopLeft(find.text('Appointments'));
-      expect(appointmentsTitleOffset.dx, equals(AppSpacing.spaceLg));
+      expect(appointmentsTitleOffset.dx, equals(AppSpacing.screenGutter));
 
       // 2. MessagesScreen header alignment
       await tester.pumpWidget(
@@ -212,7 +220,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       final messagesTitleOffset = tester.getTopLeft(find.text('Messages'));
-      expect(messagesTitleOffset.dx, equals(AppSpacing.spaceLg));
+      expect(messagesTitleOffset.dx, equals(AppSpacing.screenGutter));
 
       // 3. ExploreScreen header alignment
       await tester.pumpWidget(
@@ -224,7 +232,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       final exploreTitleOffset = tester.getTopLeft(find.text('Explore'));
-      expect(exploreTitleOffset.dx, equals(AppSpacing.spaceLg));
+      expect(exploreTitleOffset.dx, equals(AppSpacing.screenGutter));
     });
   });
 }

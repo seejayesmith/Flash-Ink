@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/flash_image.dart';
+import '../../../../widgets/flash_snack_bar.dart';
 import '../../domain/models/explore_studio.dart';
 
 /// Card component displaying tattoo studio details, resident artists, and style specialties.
@@ -20,18 +22,17 @@ class StudioCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap ??
           () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Selected studio: ${studio.name}'),
-                duration: const Duration(seconds: 1),
-              ),
+            FlashSnackBar.showInfo(
+              context,
+              'Selected studio: ${studio.name}',
+              duration: const Duration(seconds: 1),
             );
           },
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
         decoration: BoxDecoration(
           color: AppTheme.cardBackground,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(AppRadius.radiusLg),
           border: Border.all(color: AppTheme.cardBorder, width: 1.2),
           boxShadow: [
             BoxShadow(
@@ -46,7 +47,7 @@ class StudioCard extends StatelessWidget {
           children: [
             // Studio Cover Image with rating badge overlay
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(17)),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.radiusLg - 1.2)),
               child: SizedBox(
                 height: 120,
                 width: double.infinity,
@@ -94,7 +95,7 @@ class StudioCard extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
                           color: AppTheme.goldBadgeBackground,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                           border: Border.all(color: AppTheme.goldBadgeBorder),
                         ),
                         child: Text(
@@ -164,7 +165,7 @@ class StudioCard extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
                           color: AppTheme.onyxContainer,
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                           border: Border.all(color: AppTheme.darkBorder),
                         ),
                         child: Text(

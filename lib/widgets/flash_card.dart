@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/artist.dart';
 import '../screens/booking/flash_booking_screen.dart';
 import '../theme/app_buttons.dart';
+import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
 import 'flash_image.dart';
 import 'adaptive_glass_container.dart';
@@ -73,7 +74,7 @@ class FlashCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const cardRadius = 24.0;
+    const cardRadius = AppRadius.radiusLg;
     final isClaimed = flash.isClaimed;
 
     return Container(
@@ -347,7 +348,7 @@ class FlashCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AppRadius.radiusFull),
         border: Border.all(color: border, width: 1),
         boxShadow: [
           BoxShadow(
@@ -382,7 +383,7 @@ class FlashCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: const Color(0xFF262929),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.radiusSm),
         border: Border.all(
           color: const Color(0xFF4D4530),
           width: 1,
@@ -418,7 +419,7 @@ class FlashCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: const Color(0xFF1E2121),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.radiusSm),
         border: Border.all(color: const Color(0xFF2B2F2F), width: 1),
       ),
       child: Row(
@@ -464,7 +465,7 @@ class FlashCard extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: const Color(0xFF222626),
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(AppButtons.ctaBorderRadius),
           border: Border.all(color: const Color(0xFF333737)),
         ),
         child: Row(
@@ -525,7 +526,7 @@ void showFlashBookingSheet(
             unselectedBorderColor: const Color(0xFF38352A),
             selectedBorderWidth: 1.5,
             unselectedBorderWidth: 1.5,
-            topRadius: 24.0,
+            topRadius: AppRadius.radiusSheet,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
               child: SingleChildScrollView(
@@ -540,7 +541,7 @@ void showFlashBookingSheet(
                       height: 4,
                       decoration: BoxDecoration(
                         color: const Color(0xFF4D5252),
-                        borderRadius: BorderRadius.circular(2),
+                        borderRadius: BorderRadius.circular(AppRadius.dragHandle),
                       ),
                     ),
                   ),
@@ -578,7 +579,7 @@ void showFlashBookingSheet(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: const Color(0xFF1A2218),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                           border: Border.all(color: const Color(0xFF436938)),
                         ),
                         child: Text(
@@ -599,7 +600,7 @@ void showFlashBookingSheet(
 
                   // Flash Artwork Preview
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                     child: AspectRatio(
                       aspectRatio: 1.3,
                       child: Image.network(
@@ -627,7 +628,7 @@ void showFlashBookingSheet(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: const Color(0xFF202323),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                       border: Border.all(color: const Color(0xFF2D3131)),
                     ),
                     child: Column(
@@ -651,7 +652,7 @@ void showFlashBookingSheet(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: const Color(0xFF1C1E1E),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                       border: Border.all(color: const Color(0xFF2B2F2F)),
                     ),
                     child: Row(

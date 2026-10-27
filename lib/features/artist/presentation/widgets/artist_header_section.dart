@@ -5,6 +5,7 @@ import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../theme/app_typography.dart';
+import '../../../../widgets/flash_snack_bar.dart';
 import '../../domain/models/artist_profile.dart';
 
 /// Top header section of the artist profile screen containing:
@@ -67,7 +68,7 @@ class ArtistHeaderSection extends StatelessWidget {
         // 2. Floating Top Right Action Buttons (Share & Favorite)
         Positioned(
           top: topPadding + AppSpacing.spaceXs,
-          right: AppSpacing.spaceLg,
+          right: AppSpacing.screenGutter,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -77,22 +78,9 @@ class ArtistHeaderSection extends StatelessWidget {
                   Clipboard.setData(ClipboardData(
                     text: 'https://flashink.app/artist/${artist.id}',
                   ));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      backgroundColor: AppTheme.onyxContainer,
-                      content: Text(
-                        'Artist profile link copied to clipboard!',
-                        style: AppTypography.bodySmall.copyWith(
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-                        side: const BorderSide(color: AppTheme.goldBorder),
-                      ),
-                      duration: const Duration(seconds: 2),
-                    ),
+                  FlashSnackBar.showSuccess(
+                    context,
+                    'Artist profile link copied to clipboard!',
                   );
                 },
                 tooltip: 'Share Profile',
@@ -112,7 +100,7 @@ class ArtistHeaderSection extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(top: 155),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -155,10 +143,7 @@ class ArtistHeaderSection extends StatelessWidget {
                             // "Books open" badge
                             if (artist.isBooksOpen) ...[
                               Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 2.5,
-                                ),
+                                padding: const EdgeInsets.fromLTRB(7, 2, 7, 3),
                                 decoration: BoxDecoration(
                                   color: AppTheme.goldBadgeBackground,
                                   border: Border.all(
@@ -171,10 +156,14 @@ class ArtistHeaderSection extends StatelessWidget {
                                   'Books open',
                                   maxLines: 1,
                                   softWrap: false,
+                                  textHeightBehavior: const TextHeightBehavior(
+                                    leadingDistribution: TextLeadingDistribution.even,
+                                  ),
                                   style: AppTypography.labelBold.copyWith(
                                     color: AppTheme.gold,
                                     fontSize: 10,
-                                    height: 1.1,
+                                    height: 1.0,
+                                    leadingDistribution: TextLeadingDistribution.even,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),

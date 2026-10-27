@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../features/auth/presentation/screens/account_recovery_hub_screen.dart';
+import '../../features/auth/presentation/sheets/delivery_troubleshooting_sheet.dart';
 import '../../services/auth_service.dart';
-import '../../theme/app_radius.dart';
 import '../../widgets/adaptive_glass_container.dart';
-import '../../widgets/artist_stepper_header.dart';
+import '../../widgets/fade_page_route.dart';
+import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/tattoo_background_wrapper.dart';
-import '../../widgets/skip_pill_button.dart';
+import '../../features/onboarding/shared/onboarding_step_scaffold.dart';
 import 'artist_profile_photo_screen.dart';
 
 class ArtistPhoneVerificationScreen extends StatefulWidget {
@@ -35,8 +37,10 @@ class ArtistPhoneVerificationScreen extends StatefulWidget {
 
 class _ArtistPhoneVerificationScreenState extends State<ArtistPhoneVerificationScreen> {
   late final AuthService _authService = widget.authService ?? AuthService();
-  late String _verificationId = widget.verificationId;
-  late int? _resendToken = widget.resendToken;
+  late String _verificationId = widget.verificationId.isNotEmpty
+      ? widget.verificationId
+      : (_authService.verificationId ?? '');
+  late int? _resendToken = widget.resendToken ?? _authService.resendToken;
 
   final List<TextEditingController> _controllers = List.generate(6, (_) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
@@ -81,17 +85,7 @@ class _ArtistPhoneVerificationScreenState extends State<ArtistPhoneVerificationS
 
   void _showErrorSnackBar(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message.replaceAll('Exception: ', ''),
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: const Color(0xFFEF4444),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: AppBorderRadius.md),
-      ),
-    );
+    FlashSnackBar.showError(context, message);
   }
 
   Future<void> _verifyCode() async {
@@ -116,19 +110,27 @@ class _ArtistPhoneVerificationScreenState extends State<ArtistPhoneVerificationS
           phoneNumber: widget.phoneNumber,
         );
 
-        // Update artist document in Firestore
-        await FirebaseFirestore.instance.collection('artists').doc(uid).set({
+        // Update public artist document in Firestore (without PII)
+        final artistDoc = FirebaseFirestore.instance.collection('artists').doc(uid);
+        await artistDoc.set({
+          'phoneVerified': true,
+          'name': widget.artistName,
+        }, SetOptions(merge: true));
+
+        // Store private contact details in isolated subcollection
+        await artistDoc.collection('private').doc('settings').set({
           'phoneVerified': true,
           'phoneNumber': widget.phoneNumber,
-          'name': widget.artistName,
           'email': widget.artistEmail,
+          'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       }
 
       if (mounted) {
+        FocusManager.instance.primaryFocus?.unfocus();
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
+          FadePageRoute(
             builder: (_) => ArtistProfilePhotoScreen(
               artistName: widget.artistName,
               authService: _authService,
@@ -153,9 +155,10 @@ class _ArtistPhoneVerificationScreenState extends State<ArtistPhoneVerificationS
   }
 
   void _skipVerification() {
+    FocusManager.instance.primaryFocus?.unfocus();
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(
+      FadePageRoute(
         builder: (_) => ArtistProfilePhotoScreen(
           artistName: widget.artistName,
           authService: _authService,
@@ -180,11 +183,9 @@ class _ArtistPhoneVerificationScreenState extends State<ArtistPhoneVerificationS
               _isLoading = false;
             });
             _startCountdown();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('A new 6-digit code has been sent.'),
-                backgroundColor: Color(0xFF22C55E),
-              ),
+            FlashSnackBar.showSuccess(
+              context,
+              'A new 6-digit code has been sent.',
             );
           }
         },
@@ -193,6 +194,11 @@ class _ArtistPhoneVerificationScreenState extends State<ArtistPhoneVerificationS
             setState(() => _isLoading = false);
             final errorMsg = error.toString().replaceAll('Exception: ', '');
             _showErrorSnackBar(errorMsg);
+          }
+        },
+        onCodeAutoRetrievalTimeout: (String verificationId) {
+          if (mounted) {
+            setState(() => _verificationId = verificationId);
           }
         },
       );
@@ -224,6 +230,12 @@ class _ArtistPhoneVerificationScreenState extends State<ArtistPhoneVerificationS
         controller: _controllers[index],
         focusNode: _focusNodes[index],
         keyboardType: TextInputType.number,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+        onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+        scrollPadding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
+        ),
         textAlign: TextAlign.center,
         maxLength: 1,
         style: GoogleFonts.plusJakartaSans(
@@ -256,167 +268,138 @@ class _ArtistPhoneVerificationScreenState extends State<ArtistPhoneVerificationS
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      backgroundColor: const Color(0xFF121414),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFFF9FAFA)),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: Center(
-              child: SkipPillButton(
-                onPressed: _skipVerification,
-              ),
+    return OnboardingStepScaffold(
+      currentStep: 1,
+      totalSteps: 9,
+      onBack: Navigator.canPop(context)
+          ? () {
+              FocusManager.instance.primaryFocus?.unfocus();
+              Navigator.pop(context);
+            }
+          : null,
+      onSkip: _skipVerification,
+      skipText: 'Skip',
+      title: 'Verify your phone\nnumber',
+      subtitle: 'We\'ve sent a 6-digit verification code\nto your device. Please enter it below.',
+      ctaText: 'VERIFY',
+      isCtaLoading: _isLoading,
+      onCtaPressed: _isLoading ? null : _verifyCode,
+      backgroundOverlay: const TattooBackgroundWrapper(child: SizedBox.expand()),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          AdaptiveGlassContainer(
+            useGradient: false,
+            borderRadius: 16,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            child: Column(
+              children: [
+                const SizedBox(height: 12),
+                // SMS Chat Icon Badge
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF252929),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.chat_bubble,
+                      color: Color(0xFFEEC200),
+                      size: 30,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 28),
+                // 6-digit OTP Inputs Row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: List.generate(6, (index) => _buildDigitBox(index)),
+                ),
+                const SizedBox(height: 24),
+                // Didn't receive code? Resend / Troubleshoot
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "Didn't receive code? ",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 14,
+                        color: const Color(0xFF919696),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: (_resendCountdown == 0 && !_isLoading) ? _resendCode : null,
+                      child: Text(
+                        _resendCountdown > 0 ? 'Resend in ${_resendCountdown}s' : 'Resend',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: _resendCountdown > 0
+                              ? const Color(0xFF6C7272)
+                              : const Color(0xFFEEC200),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
+                        DeliveryTroubleshootingSheet.show(
+                          context: context,
+                          destination: widget.phoneNumber,
+                          isPhone: true,
+                          onEditDestination: () => Navigator.pop(context),
+                          onResendSms: _resendCode,
+                          onSwitchToEmail: () {
+                            Navigator.push(
+                              context,
+                              FadePageRoute(
+                                builder: (_) => const AccountRecoveryHubScreen(),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                      child: Text(
+                        'Troubleshoot',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFFEEC200),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Center(
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        FadePageRoute(
+                          builder: (_) => const AccountRecoveryHubScreen(),
+                        ),
+                      );
+                    },
+                    child: Text(
+                      'Trouble signing in?',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF8C9191),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        decoration: TextDecoration.underline,
+                        decorationColor: const Color(0xFF8C9191),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
-      body: TattooBackgroundWrapper(
-        child: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-            child: Column(
-              children: [
-                // Top Stepper (Still Step 1 active)
-                const ArtistStepperHeader(currentStep: 1),
-                const SizedBox(height: 24),
-
-                // Main Card
-                AdaptiveGlassContainer(
-                  borderRadius: 16,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                  child: Column(
-                  children: [
-                    const SizedBox(height: 12),
-
-                    // SMS Chat Icon Badge
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF252929),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Center(
-                        child: Icon(
-                          Icons.chat_bubble,
-                          color: Color(0xFFEEC200),
-                          size: 30,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Heading
-                    Text(
-                      'Verify your phone\nnumber',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFFF9FAFA),
-                        height: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Subtitle
-                    Text(
-                      'We\'ve sent a 6-digit verification code\nto your device. Please enter it below.',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14,
-                        color: const Color(0xFF919696),
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-
-                    // 6-digit OTP Inputs Row
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: List.generate(6, (index) => _buildDigitBox(index)),
-                    ),
-                    const SizedBox(height: 32),
-
-                    // VERIFY Button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _verifyCode,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFEEC200),
-                          foregroundColor: const Color(0xFF121414),
-                          disabledBackgroundColor: const Color(0xFFEEC200).withAlpha(120),
-                          elevation: 0,
-                          shape: const StadiumBorder(),
-                        ),
-                        child: _isLoading
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF121414)),
-                                ),
-                              )
-                            : Text(
-                                'VERIFY',
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.1,
-                                  color: const Color(0xFF121414),
-                                ),
-                              ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Didn't receive code? Resend
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          "Didn't receive code? ",
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 14,
-                            color: const Color(0xFF919696),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: (_resendCountdown == 0 && !_isLoading) ? _resendCode : null,
-                          child: Text(
-                            _resendCountdown > 0 ? 'Resend in ${_resendCountdown}s' : 'Resend',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: _resendCountdown > 0
-                                  ? const Color(0xFF6C7272)
-                                  : const Color(0xFFEEC200),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
+    );
+  }
 }

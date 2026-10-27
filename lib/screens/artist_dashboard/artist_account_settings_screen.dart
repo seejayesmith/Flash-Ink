@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/adaptive_glass_container.dart';
+import '../../widgets/flash_glass_app_bar.dart';
 
 class ArtistAccountSettingsScreen extends StatelessWidget {
   final String email;
@@ -18,14 +19,8 @@ class ArtistAccountSettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF121414),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFFF9FAFA)),
-          onPressed: () => Navigator.pop(context),
-        ),
+      extendBodyBehindAppBar: true,
+      appBar: FlashGlassAppBar(
         title: Text(
           'Account Settings',
           key: const Key('account_settings_modal_title'),
@@ -35,13 +30,22 @@ class ArtistAccountSettingsScreen extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        centerTitle: true,
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.spaceLg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      body: Column(
+        children: [
+          SizedBox(
+            height: MediaQuery.paddingOf(context).top + kToolbarHeight,
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.spaceLg,
+                16,
+                AppSpacing.spaceLg,
+                MediaQuery.paddingOf(context).bottom + 12,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Manage security credentials, primary email, and irreversible account actions.',
@@ -148,6 +152,8 @@ class ArtistAccountSettingsScreen extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ],
+  ),
+);
   }
 }

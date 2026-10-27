@@ -19,7 +19,7 @@ class StudioPoliciesCard extends StatelessWidget {
     final policies = artist.policies;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
       child: Container(
         padding: const EdgeInsets.all(AppSpacing.spaceMd),
         decoration: BoxDecoration(

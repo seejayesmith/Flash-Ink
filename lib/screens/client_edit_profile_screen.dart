@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
-import '../theme/app_spacing.dart';
 import '../widgets/adaptive_glass_container.dart';
+import '../widgets/flash_glass_app_bar.dart';
+import '../widgets/pinned_bottom_action_scaffold.dart';
+import '../widgets/username_input_formatter.dart';
 
 class ClientEditProfileScreen extends StatefulWidget {
   final String? initialDisplayName;
@@ -27,7 +29,9 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _usernameController = TextEditingController(text: widget.initialUsername);
+    _usernameController = TextEditingController(
+      text: widget.initialUsername.replaceFirst(RegExp(r'^@'), ''),
+    );
   }
 
   @override
@@ -60,16 +64,11 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PinnedBottomActionScaffold(
       backgroundColor: const Color(0xFF121414),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFFF9FAFA)),
-          onPressed: () => Navigator.pop(context),
-        ),
+      extendBodyBehindAppBar: true,
+      inlineCTA: true,
+      appBar: FlashGlassAppBar(
         title: Text(
           'Edit Profile',
           key: const Key('edit_profile_sheet_title'),
@@ -79,88 +78,50 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        centerTitle: true,
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.spaceLg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AdaptiveGlassContainer(
-                useGradient: false,
-                borderRadius: 20.0,
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Username (@handle)',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFF919696),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      key: const Key('account_edit_username_input'),
-                      controller: _usernameController,
-                      style: GoogleFonts.plusJakartaSans(color: AppTheme.textPrimary),
-                      decoration: InputDecoration(
-                        prefixText: '@',
-                        prefixStyle: GoogleFonts.plusJakartaSans(color: AppTheme.gold),
-                        filled: true,
-                        fillColor: const Color(0xFF141616),
-                        hintText: 'yourhandle',
-                        hintStyle: const TextStyle(color: Color(0xFF4D5252)),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppTheme.darkBorder),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppTheme.gold),
-                        ),
-                      ),
-                    ),
-                  ],
+      ctaKey: const Key('account_save_profile_button'),
+      ctaText: 'Save Changes',
+      onCtaPressed: _handleSave,
+      isCtaLoading: _isSaving,
+      child: AdaptiveGlassContainer(
+        useGradient: false,
+        borderRadius: 20.0,
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Username (@handle)',
+              style: GoogleFonts.plusJakartaSans(
+                color: const Color(0xFF919696),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              key: const Key('account_edit_username_input'),
+              controller: _usernameController,
+              inputFormatters: const [StripLeadingAtFormatter()],
+              style: GoogleFonts.plusJakartaSans(color: AppTheme.textPrimary),
+              decoration: InputDecoration(
+                prefixText: '@',
+                prefixStyle: GoogleFonts.plusJakartaSans(color: AppTheme.gold),
+                filled: true,
+                fillColor: const Color(0xFF141616),
+                hintText: 'yourhandle',
+                hintStyle: const TextStyle(color: Color(0xFF4D5252)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppTheme.darkBorder),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppTheme.gold),
                 ),
               ),
-              const SizedBox(height: 28),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  key: const Key('account_save_profile_button'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.gold,
-                    foregroundColor: AppTheme.onyxBackground,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: _isSaving ? null : _handleSave,
-                  child: _isSaving
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                          ),
-                        )
-                      : Text(
-                          'Save Changes',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

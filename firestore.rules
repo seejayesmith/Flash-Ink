@@ -1,0 +1,456 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // This security rules file assumes the following data structures:
+    //
+    // Collection: users
+    // Document ID: {userId} (matches Firebase Auth UID)
+    // Fields:
+    //   - uid: string (optional on merge-create; must match userId if present; immutable once set)
+    //   - role: string (optional on create, must be 'client' if provided; immutable by client)
+    //   - onboardingRole: string|null (optional, 'client' or 'artist' UI funnel marker; non-authoritative)
+    //   - isArtist: bool (forbidden from client writes; managed by Admin SDK)
+    //   - claimsUpdatedAt: timestamp (forbidden from client writes; managed by Admin SDK)
+    //   - username: string|null (optional, <= 100 chars)
+    //   - displayName: string|null (optional, <= 200 chars)
+    //   - name: string|null (optional, <= 200 chars)
+    //   - bio: string|null (optional, <= 2000 chars)
+    //   - photoUrl / photoURL / avatarUrl: string|null (optional, <= 2000 chars)
+    //   - email: string|null (optional, <= 320 chars; owner-only read)
+    //   - phoneNumber: string|null (optional, <= 40 chars; owner-only read)
+    //   - instagramHandle: string|null (optional, <= 100 chars)
+    //   - zipCode: string|null (optional, <= 20 chars)
+    //   - cityState: string|null (optional, <= 200 chars)
+    //   - latitude: number|null (optional, -90..90)
+    //   - longitude: number|null (optional, -180..180)
+    //   - travelRadiusMiles: number|null (optional, 0..5000)
+    //   - aesthetics: list<string>|null (optional, <= 50 items)
+    //   - placements: list<string>|null (optional, <= 50 items)
+    //   - notificationsEnabled: bool|null (optional)
+    //   - profileCompleted: bool|null (optional)
+    //   - phoneVerified: bool|null (optional)
+    //   - isAnonymous: bool|null (optional)
+    //
+    // Collection: artists
+    // Document ID: {artistId} (matches Firebase Auth UID of artist)
+    // Fields:
+    //   - Public profile & discovery fields only (name, displayName, username,
+    //     studioName, bio, location, avatarUrl, latitude, longitude, tags,
+    //     images, flashArtworks, policies, studioInformation, etc.)
+    //   - Explicitly forbids top-level sensitive PII/financial/location fields:
+    //     ['stripeAccountId', 'payoutSchedule', 'ssn', 'taxId', 'taxMetadata',
+    //      'phoneNumber', 'email', 'suiteNumber', 'streetAddress', 'entryCode']
+    //   - Nested studioInformation map (if present) forbids ['streetAddress',
+    //     'suiteNumber', 'entryCode'] when studioInformation.isPrivateStudio == true.
+    //
+    // Subcollection: artists/{artistId}/private
+    // Document ID: {docId}
+    // Fields:
+    //   - docId == 'settings': Private artist contact & onboarding settings
+    //     isolated to isOwner(artistId) during and after onboarding; forbids
+    //     client writes to Admin-managed ['stripeAccountId', 'payoutSchedule'].
+    //   - Other {docId} and nested subpaths: Sensitive financial, tax, and
+    //     operational metadata strictly isolated to isOwner(artistId) && isArtist().
+    //
+    // Collection: bookings
+    // Document ID: {bookingId}
+    // Fields:
+    //   - clientId: string (required, immutable) - Client's Firebase Auth UID
+    //   - artistId: string (required, immutable) - Artist's Firebase Auth UID
+    //   - status: string (required, must be 'pending' on client create; transitions via Admin SDK)
+    //   - appointmentTime: timestamp (required for deposit_confirmed window calculation)
+    //
+    // Subcollection: bookings/{bookingId}/private_location
+    // Document ID: {docId}
+    // Fields:
+    //   - suiteNumber: string - Exact studio suite number
+    //   - streetAddress: string - Exact studio street address
+    //   - entryCode: string - Building/studio entry code
+    //
+    // Collection: chats
+    // Document ID: {threadId}
+    // Fields:
+    //   - participants: list<string> (created by Admin SDK upon deposit confirmation)
+    //   - bookingId: string (reference to parent booking document)
+    //
+    // Subcollection: chats/{threadId}/messages
+    // Document ID: {messageId}
+    // Fields:
+    //   - senderId: string (required, must match request.auth.uid)
+    //   - text: string (required, 1..2000 chars)
+    //   - createdAt: timestamp (optional)
+    //
+    // Collection: core_config
+    // Document ID: {configId}
+    // Fields:
+    //   - Application-wide read-only configuration parameters
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAuthenticated() {
+      return isSignedIn();
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isArtist() {
+      return isSignedIn() && request.auth.token.role == 'artist';
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) ||
+        request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in resource.data) ||
+        request.resource.data.uid == resource.data.uid;
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function isValidOptionalString(data, field, maxLen) {
+      return !(field in data) ||
+        data[field] == null ||
+        (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isValidOptionalBool(data, field) {
+      return !(field in data) ||
+        data[field] == null ||
+        data[field] is bool;
+    }
+
+    function isValidOptionalNumber(data, field, minVal, maxVal) {
+      return !(field in data) ||
+        data[field] == null ||
+        (data[field] is number && data[field] >= minVal && data[field] <= maxVal);
+    }
+
+    function isValidOptionalList(data, field, maxSize) {
+      return !(field in data) ||
+        data[field] == null ||
+        (data[field] is list && data[field].size() <= maxSize);
+    }
+
+    function isValidOptionalStringList(data, field, maxSize, maxItemLen) {
+      return !(field in data) ||
+        data[field] == null ||
+        (
+          data[field] is list &&
+          data[field].size() <= maxSize &&
+          (data[field].size() == 0 || (data[field][0] is string && data[field][0].size() <= maxItemLen))
+        );
+    }
+
+    function isValidOptionalCoord(data, latField, lngField) {
+      return (
+        !(latField in data) ||
+        data[latField] == null ||
+        (data[latField] is number && data[latField] >= -90 && data[latField] <= 90)
+      ) && (
+        !(lngField in data) ||
+        data[lngField] == null ||
+        (data[lngField] is number && data[lngField] >= -180 && data[lngField] <= 180)
+      );
+    }
+
+    function isValidOptionalStudioInfo(data) {
+      return !('studioInformation' in data) ||
+        data.studioInformation == null ||
+        (
+          data.studioInformation is map &&
+          data.studioInformation.keys().size() <= 25 &&
+          !data.studioInformation.keys().hasAny([
+            'stripeAccountId',
+            'payoutSchedule',
+            'ssn',
+            'taxId',
+            'taxMetadata',
+            'phoneNumber',
+            'email'
+          ]) &&
+          !(
+            ('isPrivateStudio' in data.studioInformation && data.studioInformation.isPrivateStudio == true) &&
+            data.studioInformation.keys().hasAny(['streetAddress', 'suiteNumber', 'entryCode'])
+          ) &&
+          isValidOptionalString(data.studioInformation, 'name', 200) &&
+          isValidOptionalString(data.studioInformation, 'formattedAddress', 500) &&
+          isValidOptionalString(data.studioInformation, 'streetAddress', 500) &&
+          isValidOptionalString(data.studioInformation, 'suiteNumber', 100) &&
+          isValidOptionalString(data.studioInformation, 'entryCode', 100) &&
+          isValidOptionalString(data.studioInformation, 'city', 200) &&
+          isValidOptionalString(data.studioInformation, 'state', 120) &&
+          isValidOptionalString(data.studioInformation, 'postalCode', 40) &&
+          isValidOptionalString(data.studioInformation, 'placeId', 250) &&
+          isValidOptionalString(data.studioInformation, 'studioType', 100) &&
+          isValidOptionalBool(data.studioInformation, 'isPrivateStudio') &&
+          isValidOptionalCoord(data.studioInformation, 'latitude', 'longitude')
+        );
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().size() <= 50 &&
+        (!('uid' in data) || (data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128)) &&
+        (!('onboardingRole' in data) || data.onboardingRole == null || data.onboardingRole in ['client', 'artist', '']) &&
+        isValidOptionalString(data, 'username', 100) &&
+        isValidOptionalString(data, 'displayName', 200) &&
+        isValidOptionalString(data, 'name', 200) &&
+        isValidOptionalString(data, 'bio', 2000) &&
+        isValidOptionalString(data, 'photoUrl', 2000) &&
+        isValidOptionalString(data, 'photoURL', 2000) &&
+        isValidOptionalString(data, 'avatarUrl', 2000) &&
+        isValidOptionalString(data, 'email', 320) &&
+        isValidOptionalString(data, 'phoneNumber', 40) &&
+        isValidOptionalString(data, 'instagramHandle', 100) &&
+        isValidOptionalString(data, 'zipCode', 20) &&
+        isValidOptionalString(data, 'cityState', 200) &&
+        isValidOptionalCoord(data, 'latitude', 'longitude') &&
+        isValidOptionalNumber(data, 'travelRadiusMiles', 0, 5000) &&
+        isValidOptionalStringList(data, 'aesthetics', 50, 100) &&
+        isValidOptionalStringList(data, 'placements', 50, 100) &&
+        isValidOptionalBool(data, 'notificationsEnabled') &&
+        isValidOptionalBool(data, 'profileCompleted') &&
+        isValidOptionalBool(data, 'phoneVerified') &&
+        isValidOptionalBool(data, 'isAnonymous');
+    }
+
+    function isValidArtistProfile(data) {
+      return data.keys().size() <= 50 &&
+        !data.keys().hasAny([
+          'stripeAccountId',
+          'payoutSchedule',
+          'ssn',
+          'taxId',
+          'taxMetadata',
+          'phoneNumber',
+          'email',
+          'suiteNumber',
+          'streetAddress',
+          'entryCode'
+        ]) &&
+        (!('id' in data) || data.id == null || (data.id is string && data.id == request.auth.uid)) &&
+        isValidOptionalString(data, 'name', 200) &&
+        isValidOptionalString(data, 'displayName', 200) &&
+        isValidOptionalString(data, 'username', 100) &&
+        isValidOptionalString(data, 'instagramHandle', 100) &&
+        isValidOptionalString(data, 'studioName', 200) &&
+        isValidOptionalString(data, 'studioAddress', 500) &&
+        isValidOptionalString(data, 'studioType', 100) &&
+        isValidOptionalString(data, 'bio', 2000) &&
+        isValidOptionalString(data, 'location', 200) &&
+        isValidOptionalString(data, 'city', 200) &&
+        isValidOptionalString(data, 'state', 120) &&
+        isValidOptionalString(data, 'distance', 50) &&
+        isValidOptionalString(data, 'avatarUrl', 2000) &&
+        isValidOptionalString(data, 'photoUrl', 2000) &&
+        isValidOptionalString(data, 'photoURL', 2000) &&
+        isValidOptionalCoord(data, 'latitude', 'longitude') &&
+        isValidOptionalNumber(data, 'minDeposit', 0, 100000) &&
+        isValidOptionalNumber(data, 'rating', 0, 5) &&
+        isValidOptionalNumber(data, 'availablePieces', 0, 10000) &&
+        isValidOptionalBool(data, 'isBooksOpen') &&
+        isValidOptionalBool(data, 'isPrivateStudio') &&
+        isValidOptionalBool(data, 'isVerifiedStudio') &&
+        isValidOptionalBool(data, 'customRequestAvailable') &&
+        isValidOptionalBool(data, 'isFavorited') &&
+        isValidOptionalBool(data, 'profileCompleted') &&
+        isValidOptionalBool(data, 'phoneVerified') &&
+        isValidOptionalStringList(data, 'tags', 50, 100) &&
+        isValidOptionalStringList(data, 'images', 50, 2000) &&
+        isValidOptionalList(data, 'flashArtworks', 100) &&
+        isValidOptionalList(data, 'funFacts', 20) &&
+        isValidOptionalList(data, 'policies', 20) &&
+        isValidOptionalStudioInfo(data);
+    }
+
+    function isValidArtistPrivateSettings(data) {
+      return data.keys().size() <= 30 &&
+        isValidOptionalString(data, 'email', 320) &&
+        isValidOptionalString(data, 'phoneNumber', 40) &&
+        isValidOptionalBool(data, 'phoneVerified') &&
+        isValidOptionalString(data, 'streetAddress', 500) &&
+        isValidOptionalString(data, 'suiteNumber', 100) &&
+        isValidOptionalString(data, 'entryCode', 100) &&
+        isValidOptionalString(data, 'studioName', 200) &&
+        isValidOptionalString(data, 'formattedAddress', 500) &&
+        isValidOptionalString(data, 'city', 200) &&
+        isValidOptionalString(data, 'state', 120) &&
+        isValidOptionalString(data, 'postalCode', 40) &&
+        isValidOptionalBool(data, 'isPrivateStudio') &&
+        isValidOptionalCoord(data, 'latitude', 'longitude');
+    }
+
+    function isValidBooking(data) {
+      return data.keys().size() <= 50 &&
+        data.clientId is string && data.clientId.size() > 0 && data.clientId.size() <= 128 &&
+        data.status == 'pending';
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().size() <= 20 &&
+        data.senderId == request.auth.uid &&
+        data.text is string &&
+        data.text.size() > 0 &&
+        data.text.size() <= 2000;
+    }
+
+    // ===============================================================
+    // Default Deny All
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Users Collection (/users/{userId})
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && isValidUser(request.resource.data)
+        && uidUnchanged()
+        && (!('role' in request.resource.data) || request.resource.data.role == 'client')
+        && !('isArtist' in request.resource.data)
+        && !('claimsUpdatedAt' in request.resource.data);
+      allow update: if isOwner(userId)
+        && isValidUser(request.resource.data)
+        && uidNotModified()
+        && uidUnchanged()
+        && areImmutableFieldsUnchanged(['role', 'isArtist', 'claimsUpdatedAt']);
+      allow delete: if isOwner(userId);
+    }
+
+    // ===============================================================
+    // Artists Collection (/artists/{artistId}) & Private Subcollection
+    // ===============================================================
+    match /artists/{artistId} {
+      allow read: if isSignedIn();
+      allow create, update: if isOwner(artistId)
+        && isValidArtistProfile(request.resource.data)
+        && !request.resource.data.keys().hasAny([
+          'stripeAccountId',
+          'payoutSchedule',
+          'ssn',
+          'taxId',
+          'taxMetadata',
+          'phoneNumber',
+          'email',
+          'suiteNumber',
+          'streetAddress',
+          'entryCode'
+        ]);
+      allow delete: if isOwner(artistId);
+
+      match /private/{docId} {
+        allow read: if isOwner(artistId) && (docId == 'settings' || isArtist());
+        allow create: if isOwner(artistId) && (
+          docId == 'settings'
+            ? (
+                isValidArtistPrivateSettings(request.resource.data) &&
+                !request.resource.data.keys().hasAny(['stripeAccountId', 'payoutSchedule'])
+              )
+            : (
+                isArtist() &&
+                request.resource.data.keys().size() <= 50
+              )
+        );
+        allow update: if isOwner(artistId) && (
+          docId == 'settings'
+            ? (
+                isValidArtistPrivateSettings(request.resource.data) &&
+                areImmutableFieldsUnchanged(['stripeAccountId', 'payoutSchedule'])
+              )
+            : (
+                isArtist() &&
+                request.resource.data.keys().size() <= 50
+              )
+        );
+        allow delete: if isOwner(artistId) && (docId == 'settings' || isArtist());
+      }
+
+      match /private/{docId}/{subcollection}/{subpath=**} {
+        allow read: if isOwner(artistId) && isArtist();
+        allow create, update: if isOwner(artistId) && isArtist() && request.resource.data.keys().size() <= 50;
+        allow delete: if isOwner(artistId) && isArtist();
+      }
+    }
+
+    // ===============================================================
+    // Bookings & Staged Studio Location Disclosure (/bookings/{bookingId})
+    // ===============================================================
+    match /bookings/{bookingId} {
+      allow read: if isSignedIn()
+        && (resource.data.clientId == request.auth.uid || resource.data.artistId == request.auth.uid);
+      allow create: if isSignedIn()
+        && isValidBooking(request.resource.data)
+        && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update, delete: if false;
+
+      match /private_location/{docId} {
+        allow read: if isSignedIn() && (
+          get(/databases/$(database)/documents/bookings/$(bookingId)).data.artistId == request.auth.uid
+          || (
+            get(/databases/$(database)/documents/bookings/$(bookingId)).data.clientId == request.auth.uid
+            && get(/databases/$(database)/documents/bookings/$(bookingId)).data.status == 'deposit_confirmed'
+            && request.time >= get(/databases/$(database)/documents/bookings/$(bookingId)).data.appointmentTime - duration.value(24, 'h')
+            && request.time <= get(/databases/$(database)/documents/bookings/$(bookingId)).data.appointmentTime + duration.value(12, 'h')
+          )
+        );
+        allow write: if isArtist()
+          && get(/databases/$(database)/documents/bookings/$(bookingId)).data.artistId == request.auth.uid;
+      }
+    }
+
+    // ===============================================================
+    // Anti-Spam Deposit-Gated Direct Messaging (/chats/{threadId})
+    // ===============================================================
+    match /chats/{threadId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow create, update, delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participants;
+        allow create: if isSignedIn()
+          && isValidChatMessage(request.resource.data)
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 2000
+          && request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participants
+          && get(/databases/$(database)/documents/bookings/$(get(/databases/$(database)/documents/chats/$(threadId)).data.bookingId)).data.status == 'deposit_confirmed';
+        allow update, delete: if false;
+      }
+    }
+
+    // ===============================================================
+    // Core Config (/core_config/{configId})
+    // ===============================================================
+    match /core_config/{configId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+  }
+}

@@ -28,11 +28,11 @@ class FlashPieceCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.radiusMd + 2),
+        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
         child: Ink(
           decoration: BoxDecoration(
             color: AppTheme.cardBackground,
-            borderRadius: BorderRadius.circular(AppRadius.radiusMd + 2),
+            borderRadius: BorderRadius.circular(AppRadius.radiusMd),
             border: Border.all(
               color: AppTheme.cardBorder,
               width: 1.2,
@@ -52,8 +52,8 @@ class FlashPieceCard extends StatelessWidget {
               Expanded(
                 flex: 12,
                 child: ClipRRect(
-                  borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(AppRadius.radiusMd + 1),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(AppRadius.radiusMd - 1.2),
                   ),
                   child: Stack(
                     fit: StackFit.expand,
@@ -190,7 +190,7 @@ class FlashPieceCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AppRadius.radiusFull),
         border: Border.all(color: border, width: 1),
         boxShadow: [
           BoxShadow(

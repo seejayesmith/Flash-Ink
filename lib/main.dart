@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 
-import 'theme/app_typography.dart';
+import 'theme/app_theme.dart';
 
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
@@ -39,7 +40,7 @@ void main() async {
   PaintingBinding.instance.imageCache.maximumSizeBytes = 80 << 20; // 80 MB limit
   PaintingBinding.instance.imageCache.maximumSize = 60; // 60 image limit
 
-  runApp(const MyApp());
+  runApp(const ProviderScope(child: MyApp()));
 }
 
 class MyApp extends StatelessWidget {
@@ -52,24 +53,16 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    final app = MaterialApp(
       title: 'Flash Ink',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        textTheme: AppTypography.textTheme(),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFEEC200),
-          brightness: Brightness.dark,
-        ),
-        scaffoldBackgroundColor: const Color(0xFF121414),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          surfaceTintColor: Colors.transparent,
-        ),
-      ),
+      theme: AppTheme.darkTheme(),
       home: SplashScreen(delay: splashDelay),
     );
+    final hasScope = context.findAncestorWidgetOfExactType<ProviderScope>() !=
+            null ||
+        context.findAncestorWidgetOfExactType<UncontrolledProviderScope>() !=
+            null;
+    return hasScope ? app : ProviderScope(child: app);
   }
 }

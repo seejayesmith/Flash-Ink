@@ -21,7 +21,7 @@ class TrendingStudiosSection extends StatelessWidget {
     if (studios.isEmpty) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
-import '../theme/app_spacing.dart';
 import '../widgets/adaptive_glass_container.dart';
+import '../widgets/flash_glass_app_bar.dart';
+import '../widgets/pinned_bottom_action_scaffold.dart';
 
 class ClientAestheticsScreen extends StatefulWidget {
   final List<String> initialAesthetics;
@@ -56,16 +57,11 @@ class _ClientAestheticsScreenState extends State<ClientAestheticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PinnedBottomActionScaffold(
       backgroundColor: const Color(0xFF121414),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFFF9FAFA)),
-          onPressed: () => Navigator.pop(context),
-        ),
+      extendBodyBehindAppBar: true,
+      inlineCTA: true,
+      appBar: FlashGlassAppBar(
         title: Text(
           'Aesthetic Preferences',
           style: GoogleFonts.plusJakartaSans(
@@ -74,15 +70,12 @@ class _ClientAestheticsScreenState extends State<ClientAestheticsScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        centerTitle: true,
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.spaceLg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AdaptiveGlassContainer(
+      ctaKey: const Key('account_save_aesthetics_button'),
+      ctaText: 'Save Aesthetics',
+      onCtaPressed: _handleSave,
+      isCtaLoading: _isSaving,
+      child: AdaptiveGlassContainer(
                 useGradient: false,
                 borderRadius: 20.0,
                 padding: const EdgeInsets.all(20.0),
@@ -157,42 +150,6 @@ class _ClientAestheticsScreenState extends State<ClientAestheticsScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 28),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  key: const Key('account_save_aesthetics_button'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.gold,
-                    foregroundColor: AppTheme.onyxBackground,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: _isSaving ? null : _handleSave,
-                  child: _isSaving
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                          ),
-                        )
-                      : Text(
-                          'Save Aesthetics',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

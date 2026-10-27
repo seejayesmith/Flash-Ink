@@ -20,11 +20,23 @@ import 'package:google_fonts/google_fonts.dart';
 /// - Label Bold: 10/50 Bold
 /// - Logo: 32/50
 class AppTypography {
-  static const String fontFamily = 'Plus Jakarta Sans';
-
   // ---------------------------------------------------------------------------
   // Headings & Titles
   // ---------------------------------------------------------------------------
+
+  /// Hero Title · 34/1.15 (w800 / Extra Bold) - standardized for all onboarding hero headings
+  static TextStyle get heroTitle => GoogleFonts.plusJakartaSans(
+        fontSize: 34,
+        height: 1.15,
+        fontWeight: FontWeight.w800,
+      );
+
+  /// Hero Subtitle · 15/1.4 (Regular) - standardized for all onboarding hero subheadings
+  static TextStyle get heroSubtitle => GoogleFonts.plusJakartaSans(
+        fontSize: 15,
+        height: 1.4,
+        fontWeight: FontWeight.normal,
+      );
 
   /// Title · 40/50 (Bold)
   static TextStyle get title => GoogleFonts.plusJakartaSans(

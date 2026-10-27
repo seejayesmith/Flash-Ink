@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist_dashboard_data.dart';
+import '../../theme/app_radius.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_switch.dart';
 
@@ -55,7 +56,7 @@ class _BooksOpenOptionsModalState extends State<BooksOpenOptionsModal> {
       unselectedBorderColor: const Color(0xFFEEC200),
       selectedBorderWidth: 1.5,
       unselectedBorderWidth: 1.5,
-      topRadius: 28.0,
+      topRadius: AppRadius.radiusSheet,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(22, 14, 22, 20),
         child: SingleChildScrollView(
@@ -70,7 +71,7 @@ class _BooksOpenOptionsModalState extends State<BooksOpenOptionsModal> {
               height: 4,
               decoration: BoxDecoration(
                 color: const Color(0xFF333838),
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: BorderRadius.circular(AppRadius.dragHandle),
               ),
             ),
           ),
@@ -83,7 +84,7 @@ class _BooksOpenOptionsModalState extends State<BooksOpenOptionsModal> {
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: const Color(0xFFEEC200).withAlpha(28),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                   border: Border.all(
                     color: const Color(0xFFEEC200).withAlpha(120),
                     width: 1,
@@ -231,7 +232,7 @@ class _BooksOpenOptionsModalState extends State<BooksOpenOptionsModal> {
     final isSelected = _selectedHours == hours;
     return InkWell(
       onTap: () => setState(() => _selectedHours = hours),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppRadius.radiusFull),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -239,7 +240,7 @@ class _BooksOpenOptionsModalState extends State<BooksOpenOptionsModal> {
           color: isSelected
               ? const Color(0xFFEEC200)
               : const Color(0xFF1E2222),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppRadius.radiusFull),
           border: Border.all(
             color: isSelected
                 ? const Color(0xFFEEC200)
@@ -276,7 +277,7 @@ class _BooksOpenOptionsModalState extends State<BooksOpenOptionsModal> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF1A1D1D),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppRadius.radiusLg),
         border: Border.all(
           color: borderSideColor ?? badgeColor.withAlpha(80),
           width: 1.2,
@@ -303,7 +304,7 @@ class _BooksOpenOptionsModalState extends State<BooksOpenOptionsModal> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: badgeColor.withAlpha(30),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                 ),
                 child: Text(
                   badgeText,
@@ -338,7 +339,7 @@ class _BooksOpenOptionsModalState extends State<BooksOpenOptionsModal> {
                 foregroundColor: buttonTextColor,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                 ),
               ),
               child: Text(

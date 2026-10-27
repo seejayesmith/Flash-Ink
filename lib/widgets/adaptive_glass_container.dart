@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../theme/app_radius.dart';
 
 /// An adaptive surface container that renders high-fidelity
 /// liquid glass matching Figma glass parameters:
@@ -12,6 +13,8 @@ class AdaptiveGlassContainer extends StatelessWidget {
   final BorderRadiusGeometry? customBorderRadius;
   final EdgeInsetsGeometry? padding;
   final EdgeInsetsGeometry? margin;
+  final double? width;
+  final double? height;
   final bool isSelected;
   final Color selectedBorderColor;
   final Color unselectedBorderColor;
@@ -30,10 +33,12 @@ class AdaptiveGlassContainer extends StatelessWidget {
   const AdaptiveGlassContainer({
     super.key,
     required this.child,
-    this.borderRadius = 16.0,
+    this.borderRadius = AppRadius.radiusLg,
     this.customBorderRadius,
     this.padding,
     this.margin,
+    this.width,
+    this.height,
     this.isSelected = false,
     this.selectedBorderColor = const Color(0xFFEEC200),
     this.unselectedBorderColor = const Color(0xFF8C7E55),
@@ -44,7 +49,7 @@ class AdaptiveGlassContainer extends StatelessWidget {
     this.baseTintAlpha,
     this.selectedBaseTintAlpha,
     this.unselectedBaseTintAlpha,
-    this.useGradient = true,
+    this.useGradient = false,
     this.glassEnabled = true,
     this.onTap,
     this.isBottomSheet = false,
@@ -55,10 +60,12 @@ class AdaptiveGlassContainer extends StatelessWidget {
   const AdaptiveGlassContainer.bottomSheet({
     Key? key,
     required Widget child,
-    double topRadius = 28.0,
+    double topRadius = AppRadius.radiusSheet,
     BorderRadiusGeometry? customBorderRadius,
     EdgeInsetsGeometry? padding,
     EdgeInsetsGeometry? margin,
+    double? width,
+    double? height,
     bool isSelected = false,
     Color selectedBorderColor = const Color(0xFFEEC200),
     Color unselectedBorderColor = const Color(0xFF8C7E55),
@@ -69,7 +76,7 @@ class AdaptiveGlassContainer extends StatelessWidget {
     int? baseTintAlpha,
     int? selectedBaseTintAlpha,
     int? unselectedBaseTintAlpha,
-    bool useGradient = true,
+    bool useGradient = false,
     bool glassEnabled = true,
     VoidCallback? onTap,
   }) : this(
@@ -79,6 +86,8 @@ class AdaptiveGlassContainer extends StatelessWidget {
           customBorderRadius: customBorderRadius,
           padding: padding,
           margin: margin,
+          width: width,
+          height: height,
           isSelected: isSelected,
           selectedBorderColor: selectedBorderColor,
           unselectedBorderColor: unselectedBorderColor,
@@ -122,10 +131,10 @@ class AdaptiveGlassContainer extends StatelessWidget {
       final custom = customBorderRadius;
       final topL = custom is BorderRadius
           ? custom.topLeft
-          : Radius.circular(borderRadius != 16.0 ? borderRadius : 28.0);
+          : Radius.circular(borderRadius != AppRadius.radiusLg ? borderRadius : AppRadius.radiusSheet);
       final topR = custom is BorderRadius
           ? custom.topRight
-          : Radius.circular(borderRadius != 16.0 ? borderRadius : 28.0);
+          : Radius.circular(borderRadius != AppRadius.radiusLg ? borderRadius : AppRadius.radiusSheet);
       radius = BorderRadius.only(
         topLeft: topL,
         topRight: topR,
@@ -137,6 +146,8 @@ class AdaptiveGlassContainer extends StatelessWidget {
     }
 
     Widget content = Container(
+      width: width,
+      height: height,
       padding: padding,
       child: isBottomSheet
           ? SafeArea(
@@ -149,110 +160,101 @@ class AdaptiveGlassContainer extends StatelessWidget {
 
     Widget surface;
     if (glassEnabled) {
-      // 💎 High-fidelity Liquid Glass View
+      // 💎 Pure Frosted Glass View
       final int topAlpha;
       final int bottomAlpha;
       if (isSelected) {
-        topAlpha = selectedBaseTintAlpha ?? baseTintAlpha ?? 165;
+        topAlpha = selectedBaseTintAlpha ?? baseTintAlpha ?? 120;
         bottomAlpha = selectedBaseTintAlpha != null
-            ? (selectedBaseTintAlpha! + 25).clamp(0, 255)
-            : (baseTintAlpha != null ? (baseTintAlpha! + 25).clamp(0, 255) : 190);
+            ? (selectedBaseTintAlpha! + 20).clamp(0, 255)
+            : (baseTintAlpha != null ? (baseTintAlpha! + 20).clamp(0, 255) : 140);
       } else {
-        topAlpha = unselectedBaseTintAlpha ?? baseTintAlpha ?? 130;
+        topAlpha = unselectedBaseTintAlpha ?? baseTintAlpha ?? 90;
         bottomAlpha = unselectedBaseTintAlpha != null
-            ? (unselectedBaseTintAlpha! + 25).clamp(0, 255)
-            : (baseTintAlpha != null ? (baseTintAlpha! + 25).clamp(0, 255) : 155);
+            ? (unselectedBaseTintAlpha! + 20).clamp(0, 255)
+            : (baseTintAlpha != null ? (baseTintAlpha! + 20).clamp(0, 255) : 110);
       }
 
-      surface = ClipRRect(
-        borderRadius: radius,
-        child: BackdropFilter(
-          // Silky liquid blur for superior background diffusion & legibility
-          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-          child: Stack(
-            children: [
-              // Layer 1: Base dark liquid tint (refraction & high contrast translucency)
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: radius,
-                    color: useGradient ? null : const Color(0xFF1E2222).withAlpha(topAlpha),
-                    gradient: useGradient
-                        ? LinearGradient(
-                            begin: const Alignment(-0.8, -0.8), // Light angle -45°
-                            end: const Alignment(0.8, 0.8),
-                            colors: [
-                              const Color(0xFF1E2222).withAlpha(topAlpha),
-                              const Color(0xFF0F1111).withAlpha(bottomAlpha),
-                            ],
-                          )
-                        : null,
+      surface = Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: selectedBorderColor.withAlpha(55),
+                    blurRadius: 18,
+                    spreadRadius: 1,
+                    offset: const Offset(0, 4),
                   ),
-                ),
-              ),
-
-              // Layer 2: Light reflection & Splay 44 (-45° specular light highlight)
-              if (useGradient)
+                  BoxShadow(
+                    color: Colors.black.withAlpha(60),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(45),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+        ),
+        child: ClipRRect(
+          borderRadius: radius,
+          child: BackdropFilter(
+            // Silky liquid blur for superior background diffusion & legibility
+            filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+            child: Stack(
+              children: [
+                // Layer 1: Base translucent liquid tint (refraction & high contrast translucency)
                 Positioned.fill(
                   child: Container(
                     decoration: BoxDecoration(
                       borderRadius: radius,
-                      gradient: LinearGradient(
-                        begin: const Alignment(-1.0, -1.0),
-                        end: const Alignment(0.6, 0.6),
-                        colors: [
-                          Colors.white.withAlpha(isSelected ? 50 : 35), // Liquid specular light reflection
-                          Colors.white.withAlpha(12),
-                          Colors.transparent,
-                        ],
-                        stops: const [0.0, 0.30, 0.75],
-                      ),
+                      color: useGradient ? null : const Color(0xFF1E2222).withAlpha(topAlpha),
+                      gradient: useGradient
+                          ? LinearGradient(
+                              begin: const Alignment(-0.8, -0.8), // Light angle -45°
+                              end: const Alignment(0.8, 0.8),
+                              colors: [
+                                const Color(0xFF1E2222).withAlpha(topAlpha),
+                                const Color(0xFF0F1111).withAlpha(bottomAlpha),
+                              ],
+                            )
+                          : null,
                     ),
                   ),
                 ),
 
-              // Layer 3: Golden/light bevel border stroke & selection aura
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: radius,
-                  border: Border.all(
-                    color: isSelected
-                        ? selectedBorderColor
-                        : unselectedBorderColor.withAlpha(90),
-                    width: isSelected ? selectedBorderWidth : unselectedBorderWidth,
-                    strokeAlign: BorderSide.strokeAlignInside,
+                // Layer 2: Subtle translucent border stroke & content container
+                Container(
+                  width: width,
+                  height: height,
+                  decoration: BoxDecoration(
+                    borderRadius: radius,
+                    border: Border.all(
+                      color: isSelected
+                          ? selectedBorderColor
+                          : unselectedBorderColor.withAlpha(90),
+                      width: isSelected ? selectedBorderWidth : unselectedBorderWidth,
+                      strokeAlign: BorderSide.strokeAlignInside,
+                    ),
                   ),
-                  boxShadow: isSelected
-                      ? [
-                          BoxShadow(
-                            color: selectedBorderColor.withAlpha(55),
-                            blurRadius: 18,
-                            spreadRadius: 1,
-                            offset: const Offset(0, 4),
-                          ),
-                          BoxShadow(
-                            color: Colors.black.withAlpha(60),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ]
-                      : [
-                          BoxShadow(
-                            color: Colors.black.withAlpha(45),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
+                  child: content,
                 ),
-                child: content,
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
     } else {
       // Material Surface Container fallback
       surface = Container(
+        width: width,
+        height: height,
         decoration: BoxDecoration(
           color: androidSurfaceColor,
           borderRadius: radius,
@@ -302,3 +304,4 @@ class AdaptiveGlassContainer extends StatelessWidget {
     return surface;
   }
 }
+

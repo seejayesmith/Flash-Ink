@@ -3,13 +3,18 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import '../../core/mock/mock_data_config.dart';
 import '../../models/artist.dart';
+import '../../config/dev_config.dart';
+import '../../providers/app_providers.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/flash_switch.dart';
 import '../../widgets/flash_image.dart';
+import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/photo_source_bottom_sheet.dart';
+import '../../widgets/reauthentication_bottom_sheet.dart';
 import 'artist_edit_profile_screen.dart';
 import 'artist_account_settings_screen.dart';
 import '../app_info_screen.dart';
@@ -39,7 +44,6 @@ class ArtistAccountScreen extends StatefulWidget {
 class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
   late final AuthService _authService = widget.authService ?? AuthService();
 
-  final bool _isLoading = false;
   bool _isDeleting = false;
   bool _isUploadingPhoto = false;
 
@@ -66,27 +70,83 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
   }
 
   void _initDefaultValues() {
-    final effective = _getEffectiveArtist();
-    _displayName = effective.name.isNotEmpty ? effective.name : 'OddMaree';
-    _username = effective.name.isNotEmpty
-        ? effective.name.toLowerCase().replaceAll(' ', '_')
-        : 'oddmaree';
-    _bio = effective.bio.isNotEmpty
-        ? effective.bio
-        : 'Resident artist specializing in flash & custom illustrative blackwork.';
-    _location = effective.location.isNotEmpty
-        ? effective.location
-        : 'Portland, OR • Flash & Custom';
-    _photoUrl = effective.avatarUrl.isNotEmpty ? effective.avatarUrl : null;
+    if (widget.artist != null) {
+      final effective = widget.artist!;
+      _displayName = effective.name.isNotEmpty
+          ? (effective.name.startsWith('@')
+              ? effective.name.substring(1)
+              : effective.name)
+          : 'Artist';
+      _username = effective.username.isNotEmpty
+          ? effective.username.replaceAll('@', '')
+          : _displayName.toLowerCase().replaceAll(' ', '_').replaceAll('@', '');
+      _bio = effective.bio;
+      _location = effective.location;
+      _photoUrl = effective.avatarUrl.isNotEmpty ? effective.avatarUrl : null;
+      return;
+    }
+
+    final user = _authService.currentUser;
+    if (user != null &&
+        user.displayName != null &&
+        user.displayName!.trim().isNotEmpty) {
+      final cleanName = user.displayName!.trim();
+      _displayName =
+          cleanName.startsWith('@') ? cleanName.substring(1) : cleanName;
+      _username =
+          _displayName.toLowerCase().replaceAll(' ', '_').replaceAll('@', '');
+      _bio = MockDataConfig.isEnabled
+          ? 'Resident artist specializing in flash & custom illustrative blackwork.'
+          : '';
+      _location = MockDataConfig.isEnabled ? 'Portland, OR • Flash & Custom' : '';
+      _photoUrl = (user.photoURL != null && user.photoURL!.isNotEmpty)
+          ? user.photoURL
+          : null;
+      return;
+    }
+
+    if (MockDataConfig.isEnabled) {
+      final mock = Artist.mockArtists.firstWhere(
+        (a) => a.name.toLowerCase() == 'oddmaree',
+        orElse: () => Artist.mockArtists.first,
+      );
+      _displayName = 'OddMaree';
+      _username = 'oddmaree';
+      _bio = mock.bio;
+      _location = mock.location;
+      _photoUrl = mock.avatarUrl;
+    } else {
+      _displayName = 'Artist';
+      _username = 'artist';
+      _bio = '';
+      _location = '';
+      _photoUrl = null;
+    }
   }
 
   Artist _getEffectiveArtist() {
     if (widget.artist != null) {
       return widget.artist!;
     }
-    return Artist.mockArtists.firstWhere(
-      (a) => a.name.toLowerCase() == 'oddmaree',
-      orElse: () => Artist.mockArtists.first,
+    if (MockDataConfig.isEnabled) {
+      return Artist.mockArtists.firstWhere(
+        (a) => a.name.toLowerCase() == 'oddmaree',
+        orElse: () => Artist.mockArtists.first,
+      );
+    }
+    final user = _authService.currentUser;
+    return Artist(
+      id: user?.uid ?? 'live_artist',
+      name: _displayName,
+      username: _username,
+      avatarUrl: _photoUrl ?? user?.photoURL ?? '',
+      location: _location,
+      studioType: 'Independent Artist',
+      bio: _bio,
+      rating: 5.0,
+      availablePieces: 0,
+      minDeposit: 50,
+      images: const [],
     );
   }
 
@@ -118,10 +178,11 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
           final data = artistDoc.data()!;
           setState(() {
             if (data['name'] != null && (data['name'] as String).isNotEmpty) {
-              _displayName = data['name'] as String;
+              final rawName = data['name'] as String;
+              _displayName = rawName.startsWith('@') ? rawName.substring(1) : rawName;
             }
             if (data['username'] != null && (data['username'] as String).isNotEmpty) {
-              _username = data['username'] as String;
+              _username = (data['username'] as String).replaceAll('@', '');
             }
             if (data['bio'] != null && (data['bio'] as String).isNotEmpty) {
               _bio = data['bio'] as String;
@@ -129,14 +190,29 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
             if (data['location'] != null && (data['location'] as String).isNotEmpty) {
               _location = data['location'] as String;
             }
-            if (data['avatarUrl'] != null && (data['avatarUrl'] as String).isNotEmpty) {
-              _photoUrl = data['avatarUrl'] as String;
+            final photo = data['avatarUrl'] ?? data['photoUrl'] ?? data['photoURL'];
+            if (photo != null && photo is String && photo.isNotEmpty) {
+              _photoUrl = photo;
             }
-            if (data['email'] != null && (data['email'] as String).isNotEmpty) {
-              _email = data['email'] as String;
+          });
+        }
+
+        // Read private artist contact details from isolated /artists/{uid}/private/settings subcollection
+        final privateSettingsDoc = await FirebaseFirestore.instance
+            .collection('artists')
+            .doc(user.uid)
+            .collection('private')
+            .doc('settings')
+            .get();
+
+        if (privateSettingsDoc.exists && privateSettingsDoc.data() != null && mounted) {
+          final privateData = privateSettingsDoc.data()!;
+          setState(() {
+            if (privateData['email'] != null && (privateData['email'] as String).isNotEmpty) {
+              _email = privateData['email'] as String;
             }
-            if (data['phoneNumber'] != null && (data['phoneNumber'] as String).isNotEmpty) {
-              _phoneNumber = data['phoneNumber'] as String;
+            if (privateData['phoneNumber'] != null && (privateData['phoneNumber'] as String).isNotEmpty) {
+              _phoneNumber = privateData['phoneNumber'] as String;
             }
           });
         }
@@ -151,6 +227,12 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
           setState(() {
             if (uData['phoneVerified'] != null) {
               _phoneVerified = uData['phoneVerified'] as bool;
+            }
+            if (uData['email'] != null && (uData['email'] as String).isNotEmpty && _email == 'artist@flash.ink') {
+              _email = uData['email'] as String;
+            }
+            if (uData['phoneNumber'] != null && (uData['phoneNumber'] as String).isNotEmpty && _phoneNumber == '+1 (555) 345-6789') {
+              _phoneNumber = uData['phoneNumber'] as String;
             }
           });
         }
@@ -170,6 +252,7 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
     if (user != null) {
       try {
         await FirebaseFirestore.instance.collection('artists').doc(user.uid).set({
+          'id': user.uid,
           'name': name,
           'username': username,
           'bio': bio,
@@ -177,6 +260,7 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
         }, SetOptions(merge: true)).timeout(const Duration(milliseconds: 600));
 
         await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'uid': user.uid,
           'displayName': name,
           'username': username,
         }, SetOptions(merge: true)).timeout(const Duration(milliseconds: 600));
@@ -209,12 +293,21 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
 
         await user.updatePhotoURL(null);
         try {
+          await user.reload();
+        } catch (_) {}
+        final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
+        final timeoutDuration = isTest ? const Duration(milliseconds: 500) : const Duration(seconds: 10);
+        try {
           await FirebaseFirestore.instance.collection('artists').doc(user.uid).set({
+            'id': user.uid,
             'avatarUrl': null,
-          }, SetOptions(merge: true));
+            'photoUrl': null,
+          }, SetOptions(merge: true)).timeout(timeoutDuration);
           await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+            'uid': user.uid,
             'photoURL': null,
-          }, SetOptions(merge: true));
+            'photoUrl': null,
+          }, SetOptions(merge: true)).timeout(timeoutDuration);
         } catch (_) {}
 
         if (mounted) {
@@ -222,16 +315,12 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
             _photoUrl = null;
             _isUploadingPhoto = false;
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Artist profile photo removed')),
-          );
+          FlashSnackBar.showSuccess(context, 'Artist profile photo removed');
         }
       } catch (e) {
         if (mounted) {
           setState(() => _isUploadingPhoto = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to remove photo: $e')),
-          );
+          FlashSnackBar.showError(context, 'Failed to remove photo: $e');
         }
       }
       return;
@@ -240,25 +329,43 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
     if (result.croppedBytes != null) {
       setState(() => _isUploadingPhoto = true);
       try {
-        final storageRef = FirebaseStorage.instance
-            .ref()
-            .child('artist_profiles')
-            .child('${user.uid}.png');
+        String downloadUrl;
+        try {
+          final storageRef = FirebaseStorage.instance
+              .ref()
+              .child('artist_profiles')
+              .child('${user.uid}.png');
 
-        await storageRef.putData(
-          result.croppedBytes!,
-          SettableMetadata(contentType: 'image/png'),
-        );
-        final downloadUrl = await storageRef.getDownloadURL();
+          await storageRef.putData(
+            result.croppedBytes!,
+            SettableMetadata(contentType: 'image/png'),
+          );
+          downloadUrl = await storageRef.getDownloadURL();
+        } catch (storageErr) {
+          if (kEnableDevBypass || user is DevMockUser) {
+            downloadUrl = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
+          } else {
+            rethrow;
+          }
+        }
 
         await user.updatePhotoURL(downloadUrl);
         try {
+          await user.reload();
+        } catch (_) {}
+        final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
+        final timeoutDuration = isTest ? const Duration(milliseconds: 500) : const Duration(seconds: 10);
+        try {
           await FirebaseFirestore.instance.collection('artists').doc(user.uid).set({
+            'id': user.uid,
             'avatarUrl': downloadUrl,
-          }, SetOptions(merge: true));
+            'photoUrl': downloadUrl,
+          }, SetOptions(merge: true)).timeout(timeoutDuration);
           await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+            'uid': user.uid,
             'photoURL': downloadUrl,
-          }, SetOptions(merge: true));
+            'photoUrl': downloadUrl,
+          }, SetOptions(merge: true)).timeout(timeoutDuration);
         } catch (_) {}
 
         if (mounted) {
@@ -266,16 +373,12 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
             _photoUrl = downloadUrl;
             _isUploadingPhoto = false;
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Artist profile photo updated successfully')),
-          );
+          FlashSnackBar.showSuccess(context, 'Artist profile photo updated successfully');
         }
       } catch (e) {
         if (mounted) {
           setState(() => _isUploadingPhoto = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to update photo: $e')),
-          );
+          FlashSnackBar.showError(context, 'Failed to update photo: $e');
         }
       }
     }
@@ -317,16 +420,10 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
         _location = result['location'] ?? _location;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Profile updated successfully',
-            style: GoogleFonts.plusJakartaSans(color: Colors.white),
-          ),
-          backgroundColor: const Color(0xFF1E2020),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
+      FlashSnackBar.showSuccess(
+        context,
+        'Profile updated successfully',
+        duration: const Duration(seconds: 2),
       );
     }
   }
@@ -417,6 +514,7 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
     if (shouldSignOut == true) {
       await _authService.signOut();
       if (mounted) {
+        invalidateUserSessionFromContext(context);
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const SplashScreen()),
@@ -508,43 +606,64 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
       try {
         await _authService.deleteAccount();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Account deleted. A confirmation email has been sent.',
-                style: GoogleFonts.plusJakartaSans(color: Colors.white),
-              ),
-              backgroundColor: const Color(0xFF1E2020),
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 4),
-            ),
-          );
-
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => const SplashScreen()),
-            (route) => false,
-          );
+          _onAccountDeletedSuccessfully();
         }
       } catch (e) {
         if (mounted) {
           setState(() => _isDeleting = false);
+          final isRequiresRecentLogin = e is RequiresRecentLoginException ||
+              (e is FirebaseAuthException && e.code == 'requires-recent-login') ||
+              e.toString().toLowerCase().contains('requires recent authentication') ||
+              e.toString().toLowerCase().contains('requires-recent-login');
+
           final errorMsg = e is FirebaseAuthException
               ? _authService.handleFirebaseAuthException(e).toString().replaceFirst('Exception: ', '')
               : e.toString().replaceFirst('Exception: ', '');
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                errorMsg,
-                style: GoogleFonts.plusJakartaSans(color: Colors.white),
-              ),
-              backgroundColor: const Color(0xFFEF4444),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+          if (isRequiresRecentLogin) {
+            _showReauthenticationSheet();
+          } else {
+            FlashSnackBar.showError(context, errorMsg);
+          }
         }
       }
+    }
+  }
+
+  void _onAccountDeletedSuccessfully() {
+    if (!mounted) return;
+    invalidateUserSessionFromContext(context);
+    FlashSnackBar.showSuccess(
+      context,
+      'Account deleted. A confirmation email has been sent.',
+      duration: const Duration(seconds: 4),
+    );
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const SplashScreen()),
+      (route) => false,
+    );
+  }
+
+  Future<void> _showReauthenticationSheet() async {
+    final deleted = await ReauthenticationBottomSheet.show(
+      context: context,
+      authService: _authService,
+    );
+
+    if (deleted == true && mounted) {
+      _onAccountDeletedSuccessfully();
+    } else if (mounted) {
+      FlashSnackBar.showError(
+        context,
+        'This action requires recent authentication. Please log in again before deleting your account.',
+        action: SnackBarAction(
+          label: 'Verify',
+          textColor: AppTheme.gold,
+          onPressed: () => _showReauthenticationSheet(),
+        ),
+      );
     }
   }
 
@@ -828,7 +947,7 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
               ),
             ),
 
-            SizedBox(height: bottomInset + 32),
+            SizedBox(height: bottomInset + 16),
           ],
         ),
       ),

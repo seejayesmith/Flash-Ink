@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../models/artist.dart';
 import '../../../../screens/artist_profile_screen.dart';
+import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
 
@@ -22,7 +23,7 @@ class DiscoverTrendingArtists extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -50,7 +51,7 @@ class DiscoverTrendingArtists extends StatelessWidget {
         SizedBox(
           height: 148,
           child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
             scrollDirection: Axis.horizontal,
             itemCount: artists.length,
             separatorBuilder: (context, index) => const SizedBox(width: 12),
@@ -79,7 +80,7 @@ class DiscoverTrendingArtists extends StatelessWidget {
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: AppTheme.cardBackground,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.radiusLg),
           border: Border.all(color: AppTheme.cardBorder, width: 1.2),
           boxShadow: [
             BoxShadow(

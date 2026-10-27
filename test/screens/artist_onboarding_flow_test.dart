@@ -7,15 +7,16 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_core_platform_interface/test.dart';
 
 import 'package:flash_ink/widgets/artist_stepper_header.dart';
+import 'package:flash_ink/features/onboarding/shared/onboarding_step_scaffold.dart';
 import 'package:flash_ink/widgets/tattoo_background_wrapper.dart';
 import 'package:flash_ink/widgets/adaptive_glass_container.dart';
 import 'package:flash_ink/widgets/skip_pill_button.dart';
 import 'package:flash_ink/screens/account_creation_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_info_screen.dart';
-import 'package:flash_ink/screens/artist_onboarding/artist_sign_up_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_phone_verification_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_profile_photo_screen.dart';
-import 'package:flash_ink/screens/artist_onboarding/artist_instagram_screen.dart';
+import 'package:flash_ink/screens/artist_onboarding/artist_studio_bio_screen.dart';
+import 'package:flash_ink/screens/artist_onboarding/artist_policies_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_set_price_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_flash_upload_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_identity_tags_screen.dart';
@@ -32,14 +33,19 @@ class MockUser extends Fake implements User {
   final String? email;
   @override
   final String? displayName;
+  @override
+  final String? phoneNumber;
 
-  MockUser({required this.uid, this.email, this.displayName});
+  MockUser({required this.uid, this.email, this.displayName, this.phoneNumber});
 
   @override
   Future<void> updateDisplayName(String? name) async {}
 
   @override
   Future<void> updatePhotoURL(String? photoUri) async {}
+
+  @override
+  Future<String> getIdToken([bool forceRefresh = false]) async => 'mock_token';
 }
 
 class MockUserCredential extends Fake implements UserCredential {
@@ -141,9 +147,9 @@ void main() {
         ),
       );
 
-      expect(find.text('Setup\nyour\naccount'), findsOneWidget);
-      expect(find.text('Create\nyour\nprofile'), findsOneWidget);
-      expect(find.text('Share\nyour\nlink'), findsOneWidget);
+      expect(find.text('Account'), findsOneWidget);
+      expect(find.text('Profile'), findsOneWidget);
+      expect(find.text('Share'), findsOneWidget);
     });
 
     testWidgets('Current step 1 shows step 1 active and steps 2 & 3 inactive', (tester) async {
@@ -154,14 +160,26 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
 
-      expect(find.text('1'), findsOneWidget);
-      expect(find.text('2'), findsOneWidget);
-      expect(find.text('3'), findsOneWidget);
-      expect(find.byIcon(Icons.check), findsNothing);
+      final size1 = tester.getSize(find.byKey(const Key('artist_step_indicator_1')));
+      final size2 = tester.getSize(find.byKey(const Key('artist_step_indicator_2')));
+      final size3 = tester.getSize(find.byKey(const Key('artist_step_indicator_3')));
+
+      expect(size1.width, 24.0);
+      expect(size2.width, 12.0);
+      expect(size3.width, 12.0);
+
+      final c1 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_1')));
+      final c2 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_2')));
+      final c3 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_3')));
+
+      expect((c1.decoration as BoxDecoration).color, const Color(0xFFEEC200));
+      expect((c2.decoration as BoxDecoration).color, const Color(0xFF333737));
+      expect((c3.decoration as BoxDecoration).color, const Color(0xFF333737));
     });
 
-    testWidgets('Current step 2 shows step 1 completed with checkmark and step 2 active', (tester) async {
+    testWidgets('Current step 2 shows step 1 completed and step 2 active', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -169,13 +187,26 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.check), findsOneWidget);
-      expect(find.text('2'), findsOneWidget);
-      expect(find.text('3'), findsOneWidget);
+      final size1 = tester.getSize(find.byKey(const Key('artist_step_indicator_1')));
+      final size2 = tester.getSize(find.byKey(const Key('artist_step_indicator_2')));
+      final size3 = tester.getSize(find.byKey(const Key('artist_step_indicator_3')));
+
+      expect(size1.width, 12.0);
+      expect(size2.width, 24.0);
+      expect(size3.width, 12.0);
+
+      final c1 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_1')));
+      final c2 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_2')));
+      final c3 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_3')));
+
+      expect((c1.decoration as BoxDecoration).color, const Color(0xFFEEC200));
+      expect((c2.decoration as BoxDecoration).color, const Color(0xFFEEC200));
+      expect((c3.decoration as BoxDecoration).color, const Color(0xFF333737));
     });
 
-    testWidgets('Current step 3 shows steps 1 and 2 completed with checkmarks', (tester) async {
+    testWidgets('Current step 3 shows steps 1 and 2 completed and step 3 active', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -183,9 +214,23 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.check), findsNWidgets(2));
-      expect(find.text('3'), findsOneWidget);
+      final size1 = tester.getSize(find.byKey(const Key('artist_step_indicator_1')));
+      final size2 = tester.getSize(find.byKey(const Key('artist_step_indicator_2')));
+      final size3 = tester.getSize(find.byKey(const Key('artist_step_indicator_3')));
+
+      expect(size1.width, 12.0);
+      expect(size2.width, 12.0);
+      expect(size3.width, 24.0);
+
+      final c1 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_1')));
+      final c2 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_2')));
+      final c3 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_3')));
+
+      expect((c1.decoration as BoxDecoration).color, const Color(0xFFEEC200));
+      expect((c2.decoration as BoxDecoration).color, const Color(0xFFEEC200));
+      expect((c3.decoration as BoxDecoration).color, const Color(0xFFEEC200));
     });
   });
 
@@ -200,8 +245,9 @@ void main() {
         ),
       );
 
-      // Verify email and social auth buttons are present
-      expect(find.text('Continue with Email'), findsOneWidget);
+      // Verify unified input, primary CTA, and social auth buttons are present
+      expect(find.byKey(const Key('unified_auth_input_field')), findsOneWidget);
+      expect(find.byKey(const Key('unified_auth_continue_button')), findsOneWidget);
       expect(find.byType(CircularGoogleSignInButton), findsOneWidget);
       expect(find.byType(CircularAppleSignInButton), findsOneWidget);
       expect(find.byKey(const Key('google_sign_in_button')), findsOneWidget);
@@ -214,14 +260,15 @@ void main() {
       expect(find.text('Continue as Guest'), findsNothing);
     });
 
-    testWidgets('ArtistInfoScreen renders stepper header, fields, and dev skip banner', (tester) async {
+    testWidgets('ArtistInfoScreen renders progress bar, fields, and dev skip banner', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: ArtistInfoScreen(authService: FakeArtistAuthService()),
         ),
       );
 
-      expect(find.byType(ArtistStepperHeader), findsOneWidget);
+      expect(find.byType(SegmentedProgressPills), findsOneWidget);
+      expect(find.byType(ArtistStepperHeader), findsNothing);
       expect(find.text('Artist Profile'), findsOneWidget);
       expect(find.text('Enter your artist name and contact number to get set up.'), findsOneWidget);
       expect(find.text('Name or Artist Handle'), findsOneWidget);
@@ -230,6 +277,26 @@ void main() {
       expect(find.text('CONTINUE'), findsOneWidget);
       expect(find.byType(TattooBackgroundWrapper), findsOneWidget);
       expect(find.byType(AdaptiveGlassContainer), findsWidgets);
+    });
+
+    testWidgets('ArtistInfoScreen displays placeholder copy @yourhandle', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistInfoScreen(
+            authService: FakeArtistAuthService(),
+            initialName: '',
+          ),
+        ),
+      );
+
+      final textField = tester.widget<TextField>(
+        find.descendant(
+          of: find.byKey(const Key('artist_name_handle_field')),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(textField.decoration?.hintText, '@yourhandle');
+      expect(find.text('@yourhandle'), findsOneWidget);
     });
 
     testWidgets('ArtistInfoScreen form validation blocks submit when empty', (tester) async {
@@ -326,10 +393,10 @@ void main() {
 
       expect(find.text('Add a profile photo'), findsOneWidget);
       expect(find.text('Show the community who you are!\nYou can always change this later.'), findsOneWidget);
-      expect(find.text('Upload a Photo'), findsOneWidget);
-      expect(find.text('Take a Picture'), findsOneWidget);
-      expect(find.text('Continue'), findsOneWidget);
+      expect(find.text('Upload a Photo'), findsNothing);
+      expect(find.text('Take a Picture'), findsNothing);
       expect(find.text('Skip for now'), findsOneWidget);
+      expect(find.text('Continue'), findsOneWidget);
     });
 
     testWidgets('Renders preview state with active Continue button when photo is present', (tester) async {
@@ -344,11 +411,14 @@ void main() {
       );
 
       expect(find.text('Add a profile photo'), findsOneWidget);
+      expect(find.text('Upload a Photo'), findsNothing);
+      expect(find.text('Change Photo'), findsNothing);
+      expect(find.text('Take a Picture'), findsNothing);
+      expect(find.text('Skip for now'), findsNothing);
       expect(find.text('Continue'), findsOneWidget);
-      expect(find.text('Upload a Photo'), findsOneWidget);
     });
 
-    testWidgets('Tapping CONTINUE navigates to ArtistInstagramScreen (Screen 6)', (tester) async {
+    testWidgets('Tapping CONTINUE navigates to ArtistStudioBioScreen', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: ArtistProfilePhotoScreen(
@@ -362,11 +432,10 @@ void main() {
       await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Keep your\naudience'), findsOneWidget);
-      expect(find.text('Add your instagram handle to your artist profile'), findsOneWidget);
+      expect(find.text('Where do you tattoo?'), findsOneWidget);
     });
 
-    testWidgets('Tapping Skip bypasses photo upload and navigates to ArtistInstagramScreen', (tester) async {
+    testWidgets('Tapping Skip bypasses photo upload and navigates to ArtistStudioBioScreen', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: ArtistProfilePhotoScreen(
@@ -380,41 +449,7 @@ void main() {
       await tester.tap(find.text('Skip'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Keep your\naudience'), findsOneWidget);
-    });
-  });
-
-  group('ArtistInstagramScreen (Screen 6) Tests', () {
-    testWidgets('Renders handle input, continue button, and mockup profile card', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: ArtistInstagramScreen(
-            artistName: 'OddMaree',
-          ),
-        ),
-      );
-
-      expect(find.text('Keep your\naudience'), findsOneWidget);
-      expect(find.byKey(const Key('instagram_handle_field')), findsOneWidget);
-      expect(find.text('CONTINUE'), findsOneWidget);
-      expect(find.byKey(const Key('continue_to_price_button')), findsOneWidget);
-      expect(find.text('Skip'), findsOneWidget);
-    });
-
-    testWidgets('Tapping CONTINUE navigates to ArtistSetPriceScreen (Screens 7 & 8)', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: ArtistInstagramScreen(
-            artistName: 'OddMaree',
-          ),
-        ),
-      );
-
-      await tester.tap(find.byKey(const Key('continue_to_price_button')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Set your price'), findsOneWidget);
-      expect(find.text('Set your minimum deposit. This will be displayed on your profile.'), findsOneWidget);
+      expect(find.text('Where do you tattoo?'), findsOneWidget);
     });
   });
 
@@ -542,7 +577,7 @@ void main() {
       expect(find.text('Help clients find a space where they feel welcome by tagging your identity, vibe, and accommodations'), findsOneWidget);
     });
 
-    testWidgets('Renders notice that artists must include four pieces of flash artwork', (tester) async {
+    testWidgets('Does not require four pieces of flash artwork', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: ArtistFlashUploadScreen(
@@ -553,16 +588,11 @@ void main() {
         ),
       );
 
-      expect(find.byKey(const Key('four_pieces_notice')), findsOneWidget);
-      expect(find.text('4 Pieces Required'), findsOneWidget);
-      expect(find.text('0 of 4 added'), findsOneWidget);
-      expect(
-        find.text('You must include four pieces of flash artwork to complete your showcase and fill your 2x2 profile preview.'),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('four_pieces_notice')), findsNothing);
+      expect(find.text('4 Pieces Required'), findsNothing);
     });
 
-    testWidgets('Uploading flash artwork updates notice count and shows notice on DONE with < 4 items', (tester) async {
+    testWidgets('Uploading flash artwork proceeds on DONE without requiring 4 items', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: ArtistFlashUploadScreen(
@@ -583,32 +613,25 @@ void main() {
 
       // Details editor is now open
       expect(find.text('Upload Flash: Item Details'), findsOneWidget);
-      expect(find.byKey(const Key('four_pieces_notice')), findsOneWidget);
+      expect(find.byKey(const Key('four_pieces_notice')), findsNothing);
 
       // Save item
       await tester.tap(find.byKey(const Key('done_details_button')));
       await tester.pumpAndSettle();
 
-      // Back to main view: notice now reflects 1 of 4 added
-      expect(find.text('1 of 4 added'), findsOneWidget);
+      // Back to main view: 1 item uploaded
       expect(find.text('UPLOADED FLASH (1)'), findsOneWidget);
       expect(find.byKey(const Key('done_flash_button')), findsOneWidget);
 
-      // Tapping DONE with 1 piece triggers SnackBar notice
+      // Tapping DONE with 1 piece proceeds directly without requiring 4 items
       await tester.tap(find.byKey(const Key('done_flash_button')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 750));
-
-      expect(
-        find.text('Notice: You must include four pieces of flash artwork to complete your showcase (1 of 4 added).'),
-        findsOneWidget,
-      );
-
-      // Tapping CONTINUE ANYWAY in SnackBar proceeds
-      await tester.tap(find.text('CONTINUE ANYWAY'));
       await tester.pumpAndSettle();
 
       expect(find.text('Tell them who\nyou are'), findsOneWidget);
+      expect(
+        find.text('Notice: You must include four pieces of flash artwork to complete your showcase (1 of 4 added).'),
+        findsNothing,
+      );
     });
   });
 
@@ -728,9 +751,160 @@ void main() {
       );
 
       await tester.tap(find.byKey(const Key('skip_share_link_button')));
+      await tester.pump(const Duration(seconds: 9));
       await tester.pumpAndSettle();
 
       expect(find.byType(ArtistDashboardScreen), findsOneWidget);
+    });
+  });
+
+  group('Artist Onboarding Progress Bar Matching Client Side Suite', () {
+    testWidgets('All artist onboarding screens render top SegmentedProgressPills and no ArtistStepperHeader', (tester) async {
+      final fakeAuth = FakeArtistAuthService();
+
+      // Step 1: Info Screen
+      await tester.pumpWidget(MaterialApp(home: ArtistInfoScreen(authService: fakeAuth)));
+      await tester.pumpAndSettle();
+      expect(find.byType(SegmentedProgressPills), findsOneWidget);
+      expect(find.byType(ArtistStepperHeader), findsNothing);
+      var pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
+      expect(pills.currentStep, equals(1));
+      expect(pills.totalSteps, equals(9));
+
+      // Step 1 (phone sub-step): Phone Verification Screen
+      await tester.pumpWidget(MaterialApp(
+        home: ArtistPhoneVerificationScreen(
+          phoneNumber: '+15551234567',
+          verificationId: 'vid',
+          artistName: 'OddMaree',
+          artistEmail: 'test@flash.ink',
+          authService: fakeAuth,
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byType(SegmentedProgressPills), findsOneWidget);
+      expect(find.byType(ArtistStepperHeader), findsNothing);
+      pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
+      expect(pills.currentStep, equals(1));
+      expect(pills.totalSteps, equals(9));
+
+      // Step 2: Profile Photo Screen
+      await tester.pumpWidget(MaterialApp(
+        home: ArtistProfilePhotoScreen(
+          artistName: 'OddMaree',
+          authService: fakeAuth,
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byType(SegmentedProgressPills), findsOneWidget);
+      expect(find.byType(ArtistStepperHeader), findsNothing);
+      pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
+      expect(pills.currentStep, equals(2));
+      expect(pills.totalSteps, equals(9));
+
+      // Step 3: Studio & Bio Screen
+      await tester.pumpWidget(MaterialApp(
+        home: ArtistStudioBioScreen(
+          artistName: 'OddMaree',
+          authService: fakeAuth,
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byType(SegmentedProgressPills), findsOneWidget);
+      expect(find.byType(ArtistStepperHeader), findsNothing);
+      pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
+      expect(pills.currentStep, equals(3));
+      expect(pills.totalSteps, equals(9));
+
+      // Step 4: Policies Screen
+      await tester.pumpWidget(MaterialApp(
+        home: ArtistPoliciesScreen(
+          artistName: 'OddMaree',
+          authService: fakeAuth,
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byType(SegmentedProgressPills), findsOneWidget);
+      expect(find.byType(ArtistStepperHeader), findsNothing);
+      pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
+      expect(pills.currentStep, equals(4));
+      expect(pills.totalSteps, equals(9));
+
+      // Step 5: Set Price Screen
+      await tester.pumpWidget(MaterialApp(
+        home: ArtistSetPriceScreen(
+          artistName: 'OddMaree',
+          authService: fakeAuth,
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byType(SegmentedProgressPills), findsOneWidget);
+      expect(find.byType(ArtistStepperHeader), findsNothing);
+      pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
+      expect(pills.currentStep, equals(5));
+      expect(pills.totalSteps, equals(9));
+
+      // Step 6: Flash Upload Screen
+      await tester.pumpWidget(MaterialApp(
+        home: ArtistFlashUploadScreen(
+          artistName: 'OddMaree',
+          instagramHandle: '@OddMaree',
+          minDeposit: 100,
+          authService: fakeAuth,
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byType(SegmentedProgressPills), findsOneWidget);
+      expect(find.byType(ArtistStepperHeader), findsNothing);
+      pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
+      expect(pills.currentStep, equals(6));
+      expect(pills.totalSteps, equals(9));
+
+      // Step 7: Identity Tags Screen
+      await tester.pumpWidget(MaterialApp(
+        home: ArtistIdentityTagsScreen(
+          artistName: 'OddMaree',
+          instagramHandle: '@OddMaree',
+          minDeposit: 100,
+          authService: fakeAuth,
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byType(SegmentedProgressPills), findsOneWidget);
+      expect(find.byType(ArtistStepperHeader), findsNothing);
+      pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
+      expect(pills.currentStep, equals(7));
+      expect(pills.totalSteps, equals(9));
+
+      // Step 8: Choose Style Screen
+      await tester.pumpWidget(MaterialApp(
+        home: ArtistChooseStyleScreen(
+          artistName: 'OddMaree',
+          instagramHandle: '@OddMaree',
+          minDeposit: 100,
+          authService: fakeAuth,
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byType(SegmentedProgressPills), findsOneWidget);
+      expect(find.byType(ArtistStepperHeader), findsNothing);
+      pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
+      expect(pills.currentStep, equals(8));
+      expect(pills.totalSteps, equals(9));
+
+      // Step 9: Share Link Screen
+      await tester.pumpWidget(MaterialApp(
+        home: ArtistShareLinkScreen(
+          artistName: 'OddMaree',
+          authService: fakeAuth,
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byType(SegmentedProgressPills), findsOneWidget);
+      expect(find.byType(ArtistStepperHeader), findsNothing);
+      pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
+      expect(pills.currentStep, equals(9));
+      expect(pills.totalSteps, equals(9));
     });
   });
 }

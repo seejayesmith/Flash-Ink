@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/artist.dart';
+import '../models/artist_dashboard_data.dart';
 import '../theme/app_spacing.dart';
+import '../widgets/flash_snack_bar.dart';
 import '../widgets/flash_switch.dart';
 import '../widgets/guest_auth_prompt_bottom_sheet.dart';
 
@@ -74,11 +76,9 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
     if (!authenticated || !mounted) return;
 
     if (_conceptController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please describe your tattoo concept or idea.'),
-          backgroundColor: Color(0xFF7A3535),
-        ),
+      FlashSnackBar.showError(
+        context,
+        'Please describe your tattoo concept or idea.',
       );
       return;
     }
@@ -92,33 +92,60 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
 
     if (!mounted) return;
 
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: const Color(0xFF1E2020),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: const BorderSide(color: Color(0xFFEEC200), width: 1),
-        ),
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_outline, color: Color(0xFFEEC200), size: 22),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Custom brief sent to ${widget.artist.name}! You will receive a response within 48 hours.',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFF9FAFA),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-        duration: const Duration(seconds: 4),
-      ),
+    final int estimatedPrice;
+    final int requiredDeposit;
+    switch (_selectedSize) {
+      case 'Small (2"-4")':
+        estimatedPrice = 220;
+        requiredDeposit = 60;
+        break;
+      case 'Large (8"-12")':
+        estimatedPrice = 550;
+        requiredDeposit = 120;
+        break;
+      case 'Sleeve / Backpiece':
+        estimatedPrice = 850;
+        requiredDeposit = 200;
+        break;
+      default:
+        estimatedPrice = 350;
+        requiredDeposit = widget.artist.minDeposit > 0 ? widget.artist.minDeposit : 80;
+    }
+
+    final reqId = 'req_custom_${DateTime.now().millisecondsSinceEpoch}';
+    final category = widget.artist.tags.isNotEmpty
+        ? widget.artist.tags.first
+        : 'Custom Design';
+    final sketchImg = widget.artist.flashArtworks.isNotEmpty
+        ? widget.artist.flashArtworks.first.imageUrl
+        : 'assets/images/flash_traditional_panther.jpg';
+
+    final newRequest = BookingRequest(
+      id: reqId,
+      clientName: 'Alex Rivers',
+      timeAgo: 'Just now',
+      conceptDescription: _conceptController.text.trim(),
+      placement: _selectedPlacement,
+      category: category,
+      sketchImageUrl: sketchImg,
+      estimatedPrice: estimatedPrice,
+      deposit: requiredDeposit,
+      size: _selectedSize,
+      isSilentAppointment: _requestSilentAppointment,
+      artistName: widget.artist.name,
+    );
+    ArtistDashboardRepository.addPendingRequest(newRequest);
+
+    // Anti-Spam Deposit Gate:
+    // Direct messaging threads are NOT created on initial custom request submission.
+    // A chat thread is provisioned only after the artist approves the brief and the
+    // booking deposit is confirmed (`deposit_confirmed`).
+
+    Navigator.pop(context, newRequest);
+    FlashSnackBar.showSuccess(
+      context,
+      'Custom brief sent to ${widget.artist.name}! You will receive a response within 48 hours.',
+      duration: const Duration(seconds: 4),
     );
   }
 
@@ -150,15 +177,12 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
         centerTitle: true,
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg, vertical: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg, vertical: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
                     // Artist Context Header
                     _buildArtistHeader(),
                     const SizedBox(height: 24),
@@ -385,56 +409,44 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
                       ),
                     ),
                     const SizedBox(height: 32),
+                    // Submit Button (Inline, no gray bar)
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: _isSubmitting ? null : _submitBrief,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFEEC200),
+                          foregroundColor: const Color(0xFF121414),
+                          disabledBackgroundColor: const Color(0xFF4D4530),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: _isSubmitting
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: Color(0xFF121414),
+                                ),
+                              )
+                            : Text(
+                                'SUBMIT CUSTOM BRIEF',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),
-            ),
-
-            // Submit Button
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.spaceLg),
-              decoration: const BoxDecoration(
-                color: Color(0xFF151717),
-                border: Border(
-                  top: BorderSide(color: Color(0xFF262929), width: 1),
-                ),
-              ),
-              child: SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _isSubmitting ? null : _submitBrief,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEEC200),
-                    foregroundColor: const Color(0xFF121414),
-                    disabledBackgroundColor: const Color(0xFF4D4530),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: _isSubmitting
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Color(0xFF121414),
-                          ),
-                        )
-                      : Text(
-                          'SUBMIT CUSTOM BRIEF',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

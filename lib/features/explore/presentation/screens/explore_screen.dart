@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../models/artist.dart';
+import '../../../../models/user.dart';
+import '../../../../providers/app_providers.dart';
 import '../../../../screens/splash_screen.dart';
 import '../../../../screens/client_account_screen.dart';
 import '../../../../services/auth_service.dart';
+import '../../../../widgets/flash_snack_bar.dart';
+import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
 import '../../domain/models/explore_studio.dart';
@@ -19,7 +23,7 @@ import '../widgets/trending_studios_section.dart';
 /// - Trending artists in the local area
 /// - Featured artist spotlight
 /// - Trending shops or studios
-class ExploreScreen extends StatefulWidget {
+class ExploreScreen extends StatelessWidget {
   final List<Artist>? mockArtists;
   final List<ExploreStudio>? mockStudios;
   final AuthService? authService;
@@ -32,27 +36,43 @@ class ExploreScreen extends StatefulWidget {
   });
 
   @override
-  State<ExploreScreen> createState() => _ExploreScreenState();
+  Widget build(BuildContext context) {
+    final content = _ExploreScreenContent(
+      mockArtists: mockArtists,
+      mockStudios: mockStudios,
+      authService: authService,
+    );
+    final hasScope = context.findAncestorWidgetOfExactType<ProviderScope>() !=
+            null ||
+        context.findAncestorWidgetOfExactType<UncontrolledProviderScope>() !=
+            null;
+    return hasScope ? content : ProviderScope(child: content);
+  }
 }
 
-class _ExploreScreenState extends State<ExploreScreen> {
-  late final List<Artist> _artists;
-  late final List<ExploreStudio> _studios;
-  late final AuthService _authService;
-  bool _isDeleting = false;
-  String? _photoUrl;
-  
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
+class _ExploreScreenContent extends ConsumerStatefulWidget {
+  final List<Artist>? mockArtists;
+  final List<ExploreStudio>? mockStudios;
+  final AuthService? authService;
+
+  const _ExploreScreenContent({
+    required this.mockArtists,
+    required this.mockStudios,
+    required this.authService,
+  });
 
   @override
-  void initState() {
-    super.initState();
-    _artists = widget.mockArtists ?? List.from(Artist.mockArtists);
-    _studios = widget.mockStudios ?? List.from(ExploreStudio.mockStudios);
-    _authService = widget.authService ?? AuthService();
-    _loadUserProfile();
-  }
+  ConsumerState<_ExploreScreenContent> createState() =>
+      _ExploreScreenContentState();
+}
+
+class _ExploreScreenContentState extends ConsumerState<_ExploreScreenContent> {
+  AuthService get _authService =>
+      widget.authService ?? ref.read(authServiceProvider);
+  bool _isDeleting = false;
+
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void dispose() {
@@ -60,34 +80,17 @@ class _ExploreScreenState extends State<ExploreScreen> {
     super.dispose();
   }
 
-  Future<void> _loadUserProfile() async {
+  String? _resolveAvatarUrl(UserProfile? profile) {
+    if (profile?.photoUrl != null && profile!.photoUrl!.isNotEmpty) {
+      return profile.photoUrl;
+    }
     try {
-      final user = _authService.currentUser;
-      if (user != null) {
-        if (mounted) {
-          setState(() {
-            if (user.photoURL != null && user.photoURL!.isNotEmpty) {
-              _photoUrl = user.photoURL;
-            }
-          });
-        }
-
-        try {
-          final doc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get();
-          if (doc.exists && doc.data() != null && mounted) {
-            final data = doc.data()!;
-            if (data['photoURL'] != null && (data['photoURL'] as String).isNotEmpty) {
-              setState(() {
-                _photoUrl = data['photoURL'] as String;
-              });
-            }
-          }
-        } catch (_) {}
+      final authPhoto = _authService.currentUser?.photoURL;
+      if (authPhoto != null && authPhoto.isNotEmpty) {
+        return authPhoto;
       }
     } catch (_) {}
+    return null;
   }
 
   Future<void> _handleDeleteAccount() async {
@@ -98,7 +101,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         return AlertDialog(
           backgroundColor: const Color(0xFF1E2020),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AppRadius.radiusLg),
           ),
           title: Center(
             child: Text(
@@ -141,7 +144,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 backgroundColor: const Color(0xFFEF4444),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                 ),
               ),
               onPressed: () => Navigator.of(dialogContext).pop(true),
@@ -169,18 +172,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
     try {
       await _authService.deleteAccount();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Account deleted. A confirmation email has been sent.',
-              style: GoogleFonts.plusJakartaSans(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            backgroundColor: const Color(0xFF22C55E),
-            behavior: SnackBarBehavior.floating,
-          ),
+        invalidateUserSessionProviders(ref);
+        FlashSnackBar.showSuccess(
+          context,
+          'Account deleted. A confirmation email has been sent.',
         );
         Navigator.pushAndRemoveUntil(
           context,
@@ -196,28 +191,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
         } else {
           errorMessage = e.message ?? 'Failed to delete account. Please try again.';
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              errorMessage,
-              style: GoogleFonts.plusJakartaSans(color: Colors.white),
-            ),
-            backgroundColor: const Color(0xFFEF4444),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        FlashSnackBar.showError(context, errorMessage);
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Failed to delete account. Please try again.',
-              style: GoogleFonts.plusJakartaSans(color: Colors.white),
-            ),
-            backgroundColor: const Color(0xFFEF4444),
-            behavior: SnackBarBehavior.floating,
-          ),
+        FlashSnackBar.showError(
+          context,
+          'Failed to delete account. Please try again.',
         );
       }
     } finally {
@@ -227,35 +207,69 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
   }
 
-  List<Artist> get _filteredArtists {
-    if (_searchQuery.isEmpty) return _artists;
+  List<Artist> _filterArtists(List<Artist> source) {
+    if (_searchQuery.isEmpty) return source;
     final lowerQuery = _searchQuery.toLowerCase();
-    return _artists.where((artist) {
+    return source.where((artist) {
       return artist.name.toLowerCase().contains(lowerQuery) ||
-             artist.location.toLowerCase().contains(lowerQuery) ||
-             artist.studioType.toLowerCase().contains(lowerQuery) ||
-             artist.tags.any((t) => t.toLowerCase().contains(lowerQuery));
+          artist.username.toLowerCase().contains(lowerQuery) ||
+          artist.studioName.toLowerCase().contains(lowerQuery) ||
+          artist.location.toLowerCase().contains(lowerQuery) ||
+          artist.studioType.toLowerCase().contains(lowerQuery) ||
+          artist.tags.any((t) => t.toLowerCase().contains(lowerQuery));
     }).toList();
   }
 
-  List<ExploreStudio> get _filteredStudios {
-    if (_searchQuery.isEmpty) return _studios;
+  List<ExploreStudio> _filterStudios(List<ExploreStudio> source) {
+    if (_searchQuery.isEmpty) return source;
     final lowerQuery = _searchQuery.toLowerCase();
-    return _studios.where((studio) {
+    return source.where((studio) {
       return studio.name.toLowerCase().contains(lowerQuery) ||
-             studio.address.toLowerCase().contains(lowerQuery) ||
-             studio.city.toLowerCase().contains(lowerQuery) ||
-             studio.styles.any((s) => s.toLowerCase().contains(lowerQuery));
+          studio.address.toLowerCase().contains(lowerQuery) ||
+          studio.city.toLowerCase().contains(lowerQuery) ||
+          studio.styles.any((s) => s.toLowerCase().contains(lowerQuery));
     }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    final useMock = ref.watch(mockModeProvider);
+    final clientCoords = ref.watch(effectiveClientCoordinatesProvider);
+    final userProfile = ref.watch(currentUserProfileProvider).maybeWhen(
+          data: (u) => u,
+          orElse: () => null,
+        );
+    final artistsAsync = ref.watch(artistsWithDistanceProvider);
+    final studiosAsync = ref.watch(exploreStudiosProvider);
+
+    final allArtists = widget.mockArtists != null
+        ? widget.mockArtists!
+            .map((a) => a.withLiveDistanceFrom(clientCoords))
+            .toList(growable: false)
+        : artistsAsync.maybeWhen(
+            data: (list) => list,
+            orElse: () => const <Artist>[],
+          );
+
+    final List<ExploreStudio> allStudios = widget.mockStudios ??
+        studiosAsync.maybeWhen<List<ExploreStudio>>(
+          data: (list) => list,
+          orElse: () => const <ExploreStudio>[],
+        );
+
+    final headerLocation = (userProfile?.cityState != null &&
+            userProfile!.cityState!.trim().isNotEmpty)
+        ? userProfile.cityState!.split(',').first.trim()
+        : (useMock ? 'Los Angeles' : 'All Locations');
+
+    final avatarUrl = _resolveAvatarUrl(userProfile);
     final bottomInset = MediaQuery.of(context).padding.bottom;
-    final filteredArtists = _filteredArtists;
+    final filteredArtists = _filterArtists(allArtists);
     final trendingArtists = filteredArtists.take(5).toList();
-    final featuredArtist = filteredArtists.length > 1 ? filteredArtists[1] : (filteredArtists.isNotEmpty ? filteredArtists.first : null);
-    final studios = _filteredStudios;
+    final featuredArtist = filteredArtists.length > 1
+        ? filteredArtists[1]
+        : (filteredArtists.isNotEmpty ? filteredArtists.first : null);
+    final studios = _filterStudios(allStudios);
 
     return Scaffold(
       backgroundColor: AppTheme.onyxBackground,
@@ -273,7 +287,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               statusBarColor: Colors.transparent,
               statusBarIconBrightness: Brightness.light,
             ),
-            titleSpacing: AppSpacing.spaceLg,
+            titleSpacing: AppSpacing.screenGutter,
             title: Row(
               children: [
                 Text(
@@ -289,7 +303,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: AppTheme.onyxContainer,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusFull),
                     border: Border.all(color: AppTheme.darkBorder),
                   ),
                   child: Row(
@@ -298,7 +312,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       const Icon(Icons.location_on, color: AppTheme.gold, size: 12),
                       const SizedBox(width: 4),
                       Text(
-                        'Los Angeles',
+                        headerLocation,
                         style: GoogleFonts.plusJakartaSans(
                           color: AppTheme.textPrimary,
                           fontSize: 11,
@@ -314,11 +328,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
               IconButton(
                 icon: const Icon(Icons.notifications_none_rounded, color: AppTheme.textPrimary),
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('No new notifications'),
-                      duration: Duration(seconds: 1),
-                    ),
+                  FlashSnackBar.showInfo(
+                    context,
+                    'No new notifications',
+                    duration: const Duration(seconds: 1),
                   );
                 },
               ),
@@ -333,7 +346,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       ),
                     ),
                   );
-                  _loadUserProfile();
+                  if (mounted) {
+                    ref.invalidate(currentUserProfileProvider);
+                    setState(() {});
+                  }
                 },
                 child: Container(
                   width: 32,
@@ -346,9 +362,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     ),
                   ),
                   child: ClipOval(
-                    child: _photoUrl != null && _photoUrl!.isNotEmpty
+                    child: avatarUrl != null && avatarUrl.isNotEmpty
                         ? Image.network(
-                            _photoUrl!,
+                            avatarUrl,
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) {
                               return const Center(
@@ -362,19 +378,19 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: AppSpacing.spaceLg),
+              const SizedBox(width: AppSpacing.screenGutter),
             ],
           ),
 
           // Standalone Search Bar
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter, vertical: 10),
               child: Container(
                 height: 46,
                 decoration: BoxDecoration(
                   color: AppTheme.cardBackground,
-                  borderRadius: BorderRadius.circular(23),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusFull),
                   border: Border.all(color: AppTheme.cardBorder, width: 1.2),
                 ),
                 child: TextField(
@@ -443,16 +459,22 @@ class _ExploreScreenState extends State<ExploreScreen> {
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 20)),
           ],
-          
+
           if (trendingArtists.isEmpty && studios.isEmpty)
             SliverFillRemaining(
               hasScrollBody: false,
               child: Center(
-                child: Text(
-                  'No results found for "$_searchQuery"',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: AppTheme.navInactive,
-                    fontSize: 14,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceXl),
+                  child: Text(
+                    _searchQuery.trim().isEmpty
+                        ? 'No artists or studios available yet.'
+                        : 'No results found for "$_searchQuery"',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AppTheme.navInactive,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
               ),
@@ -461,7 +483,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
           // Delete Account Button for Account Lifecycle & Compliance
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
               child: Center(
                 child: TextButton(
                   key: const Key('delete_account_button'),

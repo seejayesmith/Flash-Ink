@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -211,6 +212,32 @@ void main() {
       expect(sheetResult, isNotNull);
       expect(sheetResult!.isRemoved, isTrue);
       expect(sheetResult!.croppedBytes, isNull);
+    });
+
+    testWidgets('Opens CupertinoActionSheet on iOS platform', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.iOS),
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => PhotoSourceBottomSheet.show(
+                context: context,
+                hasExistingPhoto: true,
+              ),
+              child: const Text('Open iOS Sheet'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open iOS Sheet'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CupertinoActionSheet), findsOneWidget);
+      expect(find.text('Take a Picture'), findsOneWidget);
+      expect(find.text('Upload a Photo'), findsOneWidget);
+      expect(find.text('Remove Photo'), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
     });
   });
 

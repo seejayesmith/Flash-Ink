@@ -3,13 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../../models/artist.dart';
+import '../../models/studio_information.dart';
 import '../../services/auth_service.dart';
+import '../../theme/app_radius.dart';
+import '../../theme/app_spacing.dart';
 import '../../widgets/adaptive_glass_container.dart';
-import '../../widgets/artist_stepper_header.dart';
+import '../../widgets/fade_page_route.dart';
 import '../../widgets/flash_switch.dart';
+import '../../widgets/flow_page_layout.dart';
 import '../../widgets/tattoo_background_wrapper.dart';
-import '../../widgets/skip_pill_button.dart';
+import '../../features/onboarding/shared/onboarding_step_scaffold.dart';
 import 'artist_identity_tags_screen.dart';
 
 class UploadedFlashItem {
@@ -41,6 +47,9 @@ class ArtistFlashUploadScreen extends StatefulWidget {
   final String instagramHandle;
   final int minDeposit;
   final AuthService? authService;
+  final StudioInformation? studioInformation;
+  final String? artistBio;
+  final List<StudioPolicy>? policies;
 
   const ArtistFlashUploadScreen({
     super.key,
@@ -50,6 +59,9 @@ class ArtistFlashUploadScreen extends StatefulWidget {
     required this.instagramHandle,
     required this.minDeposit,
     this.authService,
+    this.studioInformation,
+    this.artistBio,
+    this.policies,
   });
 
   @override
@@ -126,7 +138,7 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
         return AdaptiveGlassContainer.bottomSheet(
           glassEnabled: false,
           androidSurfaceColor: const Color(0xFF1E2121),
-          topRadius: 20.0,
+          topRadius: AppRadius.radiusSheet,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: Column(
@@ -220,51 +232,57 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
   }
 
   void _onDonePressed() {
-    if (_uploadedItems.length < 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Notice: You must include four pieces of flash artwork to complete your showcase (${_uploadedItems.length} of 4 added).',
-            style: GoogleFonts.plusJakartaSans(
-              color: Colors.white,
-              fontSize: 13,
-            ),
-          ),
-          backgroundColor: const Color(0xFF262929),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 4),
-          action: SnackBarAction(
-            label: 'CONTINUE ANYWAY',
-            textColor: const Color(0xFFEEC200),
-            onPressed: _proceedToIdentityTags,
-          ),
-        ),
-      );
-      return;
-    }
     _proceedToIdentityTags();
   }
 
-  void _proceedToIdentityTags() {
-    // Convert uploaded items to FlashArtwork list
-    final flashArtworks = _uploadedItems.map((item) {
-      return FlashArtwork(
-        id: item.id,
-        artistName: widget.artistName,
-        title: item.title,
-        imageUrl: item.assetPath ?? 'assets/images/flash_traditional_panther.jpg',
-        price: item.price,
-        deposit: widget.minDeposit,
-        dimensions: item.size,
-        status: item.isRepeatable ? FlashStatus.repeatable : FlashStatus.available,
-        category: item.styleTag,
-        isExclusive: !item.isRepeatable,
-      );
-    }).toList();
+  Future<void> _proceedToIdentityTags() async {
+    final effectiveAuth = widget.authService ?? AuthService();
+    final user = effectiveAuth.currentUser ?? FirebaseAuth.instance.currentUser;
 
+    // Convert uploaded items to FlashArtwork list, uploading any picked images if online
+    final flashArtworks = <FlashArtwork>[];
+    for (final item in _uploadedItems) {
+      String imageUrl = item.assetPath ?? 'assets/images/flash_traditional_panther.jpg';
+
+      if (user != null && item.imageBytes != null) {
+        try {
+          final storageRef = FirebaseStorage.instance
+              .ref()
+              .child('artists')
+              .child(user.uid)
+              .child('flash')
+              .child('${item.id}.jpg');
+          await storageRef
+              .putData(item.imageBytes!, SettableMetadata(contentType: 'image/jpeg'))
+              .timeout(const Duration(seconds: 5));
+          imageUrl = await storageRef.getDownloadURL().timeout(const Duration(seconds: 3));
+        } catch (_) {
+          // Graceful fallback if offline or in tests
+        }
+      }
+
+      flashArtworks.add(
+        FlashArtwork(
+          id: item.id,
+          artistName: widget.artistName,
+          title: item.title,
+          imageUrl: imageUrl,
+          price: item.price,
+          deposit: widget.minDeposit,
+          dimensions: item.size,
+          status: item.isRepeatable ? FlashStatus.repeatable : FlashStatus.available,
+          category: item.styleTag,
+          isExclusive: !item.isRepeatable,
+        ),
+      );
+    }
+
+    if (!mounted) return;
+
+    FocusManager.instance.primaryFocus?.unfocus();
     Navigator.push(
       context,
-      MaterialPageRoute(
+      FadePageRoute(
         builder: (_) => ArtistIdentityTagsScreen(
           artistName: widget.artistName,
           photoBytes: widget.photoBytes,
@@ -273,6 +291,9 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
           minDeposit: widget.minDeposit,
           flashArtworks: flashArtworks,
           authService: widget.authService,
+          studioInformation: widget.studioInformation,
+          artistBio: widget.artistBio,
+          policies: widget.policies,
         ),
       ),
     );
@@ -280,269 +301,98 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      backgroundColor: const Color(0xFF121414),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: Center(
-              child: SkipPillButton(
-                key: const Key('skip_flash_button'),
-                onPressed: _proceedToIdentityTags,
+    return OnboardingStepScaffold(
+      currentStep: 6,
+      totalSteps: 9,
+      onBack: Navigator.canPop(context)
+          ? () {
+              FocusManager.instance.primaryFocus?.unfocus();
+              Navigator.pop(context);
+            }
+          : null,
+      onSkip: _proceedToIdentityTags,
+      skipKey: const Key('skip_flash_button'),
+      skipText: 'Skip',
+      title: 'Showcase your\nwork',
+      subtitle: 'Upload some custom flash work you plan on selling',
+      ctaText: 'DONE',
+      ctaKey: const Key('done_flash_button'),
+      isCtaEnabled: _uploadedItems.isNotEmpty,
+      onCtaPressed: _uploadedItems.isNotEmpty ? _onDonePressed : null,
+      contentPadding: EdgeInsets.zero,
+      backgroundOverlay: const TattooBackgroundWrapper(child: SizedBox.expand()),
+      child: FlowPageLayout(
+        title: 'Showcase your\nwork',
+        subtitle: 'Upload some custom flash work you plan on selling',
+        ctaText: 'DONE',
+        ctaKey: const Key('done_flash_button'),
+        onCtaPressed: _uploadedItems.isNotEmpty ? _onDonePressed : null,
+        renderInternalHeaderAndCTA: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_isEditingDetails)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
+                child: _buildItemDetailsCard(),
+              )
+            else ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
+                child: _buildUploadBox(),
               ),
-            ),
-          ),
-        ],
-      ),
-      body: TattooBackgroundWrapper(
-        child: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const ArtistStepperHeader(currentStep: 2),
-                const SizedBox(height: 24),
-
-                Text(
-                  'Showcase your\nwork',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFFF9FAFA),
-                    height: 1.15,
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                Text(
-                  'Upload some custom flash work you plan on selling',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 15,
-                    color: const Color(0xFF919696),
-                  ),
-                ),
-                const SizedBox(height: 18),
-
-                _buildFourPiecesNotice(),
-                const SizedBox(height: 24),
-
-                // Dynamic content based on state:
-                // 1. If currently editing item details (Creation 10)
-                // 2. If uploaded items exist (Creation 11 & 12)
-                // 3. If empty initial state (Creation 9)
-                if (_isEditingDetails) ...[
-                  _buildItemDetailsCard(),
-                ] else ...[
-                  _buildUploadBox(),
-                  const SizedBox(height: 24),
-
-                  if (_uploadedItems.isNotEmpty) ...[
-                    _buildUploadedItemsGallery(),
-                    const SizedBox(height: 28),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        key: const Key('done_flash_button'),
-                        onPressed: _onDonePressed,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFEEC200),
-                          foregroundColor: const Color(0xFF121414),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(26),
-                          ),
-                        ),
-                        child: Text(
-                          'DONE',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-                const SizedBox(height: 32),
+              if (_uploadedItems.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.spaceLg),
+                _buildUploadedItemsGallery(),
               ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFourPiecesNotice() {
-    final count = _uploadedItems.length;
-    final isComplete = count >= 4;
-
-    return Container(
-      key: const Key('four_pieces_notice'),
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E2121),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isComplete
-              ? const Color(0xFF4CAF50).withAlpha(128)
-              : const Color(0xFFEEC200).withAlpha(90),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: (isComplete
-                          ? const Color(0xFF4CAF50)
-                          : const Color(0xFFEEC200))
-                      .withAlpha(38),
-                ),
-                child: Icon(
-                  isComplete
-                      ? Icons.check_circle_outline_rounded
-                      : Icons.info_outline_rounded,
-                  size: 20,
-                  color: isComplete
-                      ? const Color(0xFF4CAF50)
-                      : const Color(0xFFEEC200),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '4 Pieces Required',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFFF9FAFA),
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: (isComplete
-                                    ? const Color(0xFF4CAF50)
-                                    : const Color(0xFFEEC200))
-                                .withAlpha(38),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            '$count of 4 added',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: isComplete
-                                  ? const Color(0xFF4CAF50)
-                                  : const Color(0xFFEEC200),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'You must include four pieces of flash artwork to complete your showcase and fill your 2x2 profile preview.',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        color: const Color(0xFF919696),
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: List.generate(4, (index) {
-              final filled = index < count;
-              return Expanded(
-                child: Container(
-                  height: 3,
-                  margin: EdgeInsets.only(right: index < 3 ? 4 : 0),
-                  decoration: BoxDecoration(
-                    color: filled
-                        ? (isComplete
-                            ? const Color(0xFF4CAF50)
-                            : const Color(0xFFEEC200))
-                        : const Color(0xFF333636),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              );
-            }),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildUploadBox() {
-    return InkWell(
-      key: const Key('upload_flash_trigger'),
-      onTap: _showImageSourcePicker,
-      borderRadius: BorderRadius.circular(16),
-      child: AdaptiveGlassContainer(
-        borderRadius: 16,
-        padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
-        child: Column(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF242727),
-                border: Border.all(color: const Color(0xFF333636)),
+    return SizedBox(
+      width: double.infinity,
+      child: InkWell(
+        key: const Key('upload_flash_trigger'),
+        onTap: _showImageSourcePicker,
+        borderRadius: BorderRadius.circular(AppRadius.radiusLg),
+        child: AdaptiveGlassContainer(
+          width: double.infinity,
+          useGradient: false,
+          borderRadius: AppRadius.radiusLg,
+          padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF242727),
+                  border: Border.all(color: const Color(0xFF333636)),
+                ),
+                child: const Icon(
+                  Icons.file_upload_outlined,
+                  size: 24,
+                  color: Color(0xFFEEC200),
+                ),
               ),
-              child: const Icon(
-                Icons.file_upload_outlined,
-                size: 24,
-                color: Color(0xFFEEC200),
+              const SizedBox(height: 12),
+              Text(
+                'High-resolution JPEG or PNG.\nMax 10MB.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  color: const Color(0xFF919696),
+                  height: 1.4,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'High-resolution JPEG or PNG.\nMax 10MB.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 13,
-                color: const Color(0xFF919696),
-                height: 1.4,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -552,6 +402,7 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
     final styleOptions = ['TRADITIONAL', 'BLACKWORK', 'NEO-TRAD', 'JAPANESE', '+ CUSTOM'];
 
     return AdaptiveGlassContainer(
+      useGradient: false,
       borderRadius: 16,
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -574,7 +425,7 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
           Stack(
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                 child: Container(
                   width: double.infinity,
                   height: 220,
@@ -619,6 +470,13 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
           TextField(
             key: const Key('flash_title_field'),
             controller: _titleController,
+            keyboardType: TextInputType.text,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+            scrollPadding: EdgeInsets.only(
+              bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
+            ),
             style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 14),
             decoration: _fieldDecoration('Traditional Panther'),
           ),
@@ -645,6 +503,12 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
                       key: const Key('flash_price_field'),
                       controller: _priceController,
                       keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+                      onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+                      scrollPadding: EdgeInsets.only(
+                        bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
+                      ),
                       style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 14),
                       decoration: _fieldDecoration('150', prefix: '\$ '),
                     ),
@@ -669,6 +533,13 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
                     TextField(
                       key: const Key('flash_size_field'),
                       controller: _sizeController,
+                      keyboardType: TextInputType.text,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+                      onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+                      scrollPadding: EdgeInsets.only(
+                        bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
+                      ),
                       style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 14),
                       decoration: _fieldDecoration('4x4'),
                     ),
@@ -699,12 +570,12 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
                 onTap: () {
                   setState(() => _selectedStyle = style);
                 },
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF262929),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                     border: Border.all(
                       color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF333636),
                     ),
@@ -769,9 +640,7 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFEEC200),
                 foregroundColor: const Color(0xFF121414),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
+                shape: const StadiumBorder(),
               ),
               child: Text(
                 '+ Add More Flash',
@@ -806,19 +675,23 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'UPLOADED FLASH (${_uploadedItems.length})',
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: const Color(0xFF8C9191),
-            letterSpacing: 0.8,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
+          child: Text(
+            'UPLOADED FLASH (${_uploadedItems.length})',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF8C9191),
+              letterSpacing: 0.8,
+            ),
           ),
         ),
         const SizedBox(height: 12),
         SizedBox(
           height: 130,
           child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
             scrollDirection: Axis.horizontal,
             itemCount: _uploadedItems.length,
             separatorBuilder: (context, index) => const SizedBox(width: 12),
@@ -827,6 +700,7 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
               return SizedBox(
                 width: 110,
                 child: AdaptiveGlassContainer(
+                  useGradient: false,
                   borderRadius: 12,
                   padding: EdgeInsets.zero,
                   child: Column(
@@ -834,7 +708,7 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
                   children: [
                     Expanded(
                       child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.radiusMd - 1)),
                         child: item.imageBytes != null
                             ? Image.memory(item.imageBytes!, fit: BoxFit.cover, width: double.infinity)
                             : (item.assetPath != null
@@ -889,15 +763,15 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
       hintStyle: GoogleFonts.plusJakartaSans(color: const Color(0xFF636767)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.radiusSm),
         borderSide: const BorderSide(color: Color(0xFF2E3232)),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.radiusSm),
         borderSide: const BorderSide(color: Color(0xFF2E3232)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.radiusSm),
         borderSide: const BorderSide(color: Color(0xFFEEC200), width: 1.5),
       ),
     );

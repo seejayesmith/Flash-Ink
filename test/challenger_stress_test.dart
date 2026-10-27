@@ -152,6 +152,19 @@ void main() {
         expect(exc.toString(), contains(entry.value), reason: 'Failed mapping for ${entry.key}');
       }
 
+      // Provider-specific operation-not-allowed mapping
+      final phoneOpNotAllowed = authService.handleFirebaseAuthException(
+        FirebaseAuthException(code: 'operation-not-allowed'),
+        'phone',
+      );
+      expect(phoneOpNotAllowed.toString(), contains('Phone authentication is disabled in the Firebase Console'));
+
+      final emailOpNotAllowed = authService.handleFirebaseAuthException(
+        FirebaseAuthException(code: 'operation-not-allowed'),
+        'email',
+      );
+      expect(emailOpNotAllowed.toString(), contains('Email/Password sign-in is disabled in the Firebase Console'));
+
       // Fallback with custom message
       final customFallback = authService.handleFirebaseAuthException(
         FirebaseAuthException(code: 'custom-error', message: 'Custom server error description'),
@@ -180,25 +193,21 @@ void main() {
         ),
       );
 
-      // Open phone modal
-      await tester.tap(find.text('Continue with Phone'));
-      await tester.pumpAndSettle();
-
       // Submit empty
-      await tester.tap(find.text('SEND VERIFICATION CODE'));
+      await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
       await tester.pump();
-      expect(find.text('Please enter your phone number'), findsOneWidget);
+      expect(find.text('Please enter your email or phone number'), findsOneWidget);
       expect(fakeAuth.verifyPhoneCallCount, 0);
 
       // Enter short number (< 10 digits)
-      await tester.enterText(find.byType(TextFormField), '12345');
-      await tester.tap(find.text('SEND VERIFICATION CODE'));
+      await tester.enterText(find.byKey(const Key('unified_auth_input_field')), '12345');
+      await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
       await tester.pump();
       expect(find.text('Please enter a valid 10-digit phone number'), findsOneWidget);
       expect(fakeAuth.verifyPhoneCallCount, 0);
     });
 
-    testWidgets('Surfaces SMS failure in inline alert container and SnackBar without dismissing modal', (WidgetTester tester) async {
+    testWidgets('Surfaces SMS failure in inline alert container and SnackBar without navigating away', (WidgetTester tester) async {
       final fakeAuth = StressFakeAuthService()..failVerifyPhone = true;
 
       await tester.pumpWidget(
@@ -207,22 +216,19 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('Continue with Phone'));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(find.byType(TextFormField), '5551234567');
+      await tester.enterText(find.byKey(const Key('unified_auth_input_field')), '5551234567');
       await tester.pump();
 
-      await tester.tap(find.text('SEND VERIFICATION CODE'));
+      await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
       await tester.pumpAndSettle();
 
-      // 1. Verify phone service was invoked with formatted phone (+1 5551234567)
+      // 1. Verify phone service was invoked with formatted phone (+15551234567)
       expect(fakeAuth.verifyPhoneCallCount, 1);
-      expect(fakeAuth.lastPhoneNumberVerified, '+1 5551234567');
+      expect(fakeAuth.lastPhoneNumberVerified, '+15551234567');
 
-      // 2. Verify modal remains visible
-      expect(find.text('Verify Phone Number'), findsOneWidget);
-      expect(find.text('SEND VERIFICATION CODE'), findsOneWidget);
+      // 2. Verify screen remains visible
+      expect(find.byType(AccountCreationScreen), findsOneWidget);
+      expect(find.byKey(const Key('unified_auth_continue_button')), findsOneWidget);
 
       // 3. Verify error is surfaced in inline alert container
       expect(find.byIcon(Icons.error_outline), findsOneWidget);
@@ -241,18 +247,15 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('Continue with Phone'));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(find.byType(TextFormField), '5559876543');
+      await tester.enterText(find.byKey(const Key('unified_auth_input_field')), '5559876543');
       await tester.pump();
 
-      await tester.tap(find.text('SEND VERIFICATION CODE'));
+      await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
       await tester.pumpAndSettle();
 
-      // Error caught by try/catch in _showPhoneEntryModal
+      // Error caught by try/catch in _handleUnifiedContinue
       expect(find.textContaining('Synchronous SMS provider crash'), findsWidgets);
-      expect(find.text('Verify Phone Number'), findsOneWidget);
+      expect(find.byType(AccountCreationScreen), findsOneWidget);
       expect(find.byType(SnackBar), findsOneWidget);
     });
 
@@ -265,13 +268,10 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('Continue with Phone'));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(find.byType(TextFormField), '+447911123456');
+      await tester.enterText(find.byKey(const Key('unified_auth_input_field')), '+447911123456');
       await tester.pump();
 
-      await tester.tap(find.text('SEND VERIFICATION CODE'));
+      await tester.tap(find.byKey(const Key('unified_auth_continue_button')));
       await tester.pumpAndSettle();
 
       expect(fakeAuth.lastPhoneNumberVerified, '+447911123456');
@@ -326,8 +326,8 @@ void main() {
       expect(fakeAuth.lastSmsCodePassed, '654321');
       expect(fakeAuth.lastVerificationIdPassed, 'v_id_test');
 
-      // Verify SnackBar displayed
-      expect(find.byType(SnackBar), findsOneWidget);
+      // Verify inline error banner displayed
+      expect(find.byKey(const Key('phone_verification_error_banner')), findsOneWidget);
       expect(find.text('Verification failed: The verification code entered is invalid.'), findsOneWidget);
 
       // Verify text field was cleared
@@ -369,7 +369,7 @@ void main() {
       expect(fakeAuth.lastVerificationIdPassed, 'v_id_new_456');
     });
 
-    testWidgets('Resend code error surfaces in error SnackBar', (WidgetTester tester) async {
+    testWidgets('Resend code error surfaces in inline error banner', (WidgetTester tester) async {
       final fakeAuth = StressFakeAuthService()..failVerifyPhone = true;
 
       await tester.pumpWidget(
@@ -386,11 +386,11 @@ void main() {
       await tester.pump();
 
       expect(fakeAuth.verifyPhoneCallCount, 1);
-      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.byKey(const Key('phone_verification_error_banner')), findsOneWidget);
       expect(find.text('SMS quota exceeded. Please try again later.'), findsOneWidget);
     });
 
-    testWidgets('Firestore status update failure surfaces in error SnackBar and clears input', (WidgetTester tester) async {
+    testWidgets('Firestore status update failure surfaces in inline error banner and clears input', (WidgetTester tester) async {
       final fakeAuth = StressFakeAuthService()
         ..customUser = FakeUser(uid: 'uid_test_123')
         ..failUpdateStatus = true;
@@ -410,7 +410,7 @@ void main() {
 
       expect(fakeAuth.signInCallCount, 1);
       expect(fakeAuth.updateStatusCallCount, 1);
-      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.byKey(const Key('phone_verification_error_banner')), findsOneWidget);
       expect(find.textContaining('Firestore write timed out'), findsOneWidget);
 
       final textField = tester.widget<TextField>(find.byType(TextField));

@@ -20,7 +20,7 @@ class CustomRequestBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceLg),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -35,7 +35,7 @@ class CustomRequestBanner extends StatelessWidget {
               },
           borderRadius: BorderRadius.circular(AppRadius.radiusLg),
           child: Ink(
-            padding: const EdgeInsets.all(AppSpacing.spaceSm + 2),
+            padding: const EdgeInsets.all(AppSpacing.spaceXs),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
@@ -60,13 +60,13 @@ class CustomRequestBanner extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // Tag / Brief Icon Container
+                // Tag / Brief Icon Container (concentric: outer radiusLg 16 - padding spaceXs 8 = radiusSm 8)
                 Container(
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
                     color: AppTheme.goldBadgeBackground,
-                    borderRadius: BorderRadius.circular(AppRadius.radiusSm + 2),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                   ),
                   child: const Icon(
                     Icons.local_offer_outlined,

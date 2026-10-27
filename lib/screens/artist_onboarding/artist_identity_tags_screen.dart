@@ -2,11 +2,12 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist.dart';
+import '../../models/studio_information.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/adaptive_glass_container.dart';
-import '../../widgets/artist_stepper_header.dart';
+import '../../widgets/fade_page_route.dart';
 import '../../widgets/tattoo_background_wrapper.dart';
-import '../../widgets/skip_pill_button.dart';
+import '../../features/onboarding/shared/onboarding_step_scaffold.dart';
 import 'artist_choose_style_screen.dart';
 
 class ArtistIdentityTagsScreen extends StatefulWidget {
@@ -17,6 +18,9 @@ class ArtistIdentityTagsScreen extends StatefulWidget {
   final int minDeposit;
   final List<FlashArtwork> flashArtworks;
   final AuthService? authService;
+  final StudioInformation? studioInformation;
+  final String? artistBio;
+  final List<StudioPolicy>? policies;
 
   const ArtistIdentityTagsScreen({
     super.key,
@@ -27,6 +31,9 @@ class ArtistIdentityTagsScreen extends StatefulWidget {
     required this.minDeposit,
     this.flashArtworks = const [],
     this.authService,
+    this.studioInformation,
+    this.artistBio,
+    this.policies,
   });
 
   @override
@@ -91,10 +98,11 @@ class _ArtistIdentityTagsScreenState extends State<ArtistIdentityTagsScreen> {
   }
 
   void _proceedToChooseStyle([List<String>? tagsOverride]) {
+    FocusManager.instance.primaryFocus?.unfocus();
     final tags = tagsOverride ?? _selectedTags.toList();
     Navigator.push(
       context,
-      MaterialPageRoute(
+      FadePageRoute(
         builder: (_) => ArtistChooseStyleScreen(
           artistName: widget.artistName,
           photoBytes: widget.photoBytes,
@@ -104,6 +112,9 @@ class _ArtistIdentityTagsScreenState extends State<ArtistIdentityTagsScreen> {
           flashArtworks: widget.flashArtworks,
           identityTags: tags,
           authService: widget.authService,
+          studioInformation: widget.studioInformation,
+          artistBio: widget.artistBio,
+          policies: widget.policies,
         ),
       ),
     );
@@ -111,104 +122,40 @@ class _ArtistIdentityTagsScreenState extends State<ArtistIdentityTagsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      backgroundColor: const Color(0xFF121414),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: Center(
-              child: SkipPillButton(
-                key: const Key('skip_identity_tags_button'),
-                onPressed: () => _proceedToChooseStyle(const []),
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: TattooBackgroundWrapper(
-        child: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+    return OnboardingStepScaffold(
+      currentStep: 7,
+      totalSteps: 9,
+      onBack: Navigator.canPop(context)
+          ? () {
+              FocusManager.instance.primaryFocus?.unfocus();
+              Navigator.pop(context);
+            }
+          : null,
+      onSkip: () => _proceedToChooseStyle(const []),
+      skipKey: const Key('skip_identity_tags_button'),
+      skipText: 'Skip',
+      title: 'Tell them who\nyou are',
+      subtitle:
+          'Help clients find a space where they feel welcome by tagging your identity, vibe, and accommodations',
+      ctaText: 'DONE',
+      ctaKey: const Key('done_identity_button'),
+      onCtaPressed: _proceedToChooseStyle,
+      backgroundOverlay: const TattooBackgroundWrapper(child: SizedBox.expand()),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AdaptiveGlassContainer(
+            useGradient: false,
+            borderRadius: 16,
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const ArtistStepperHeader(currentStep: 2),
-                const SizedBox(height: 24),
-
-                Text(
-                  'Tell them who\nyou are',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFFF9FAFA),
-                    height: 1.15,
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                Text(
-                  'Help clients find a space where they feel welcome by tagging your identity, vibe, and accommodations',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 15,
-                    color: const Color(0xFF919696),
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 28),
-
-                // Categories List Container
-                AdaptiveGlassContainer(
-                  borderRadius: 16,
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ..._sections.entries.map((entry) => _buildSection(entry.key, entry.value)),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // DONE Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    key: const Key('done_identity_button'),
-                    onPressed: _proceedToChooseStyle,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEEC200),
-                      foregroundColor: const Color(0xFF121414),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(26),
-                      ),
-                    ),
-                    child: Text(
-                      'DONE',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 32),
+                ..._sections.entries.map((entry) => _buildSection(entry.key, entry.value)),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }

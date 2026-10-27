@@ -4,9 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
-import '../theme/app_buttons.dart';
 import '../widgets/adaptive_glass_container.dart';
-import '../widgets/skip_pill_button.dart';
+import '../widgets/flash_glass_app_bar.dart';
+import '../widgets/flash_snack_bar.dart';
+import '../widgets/pinned_bottom_action_scaffold.dart';
 import 'artist_onboarding/artist_info_screen.dart';
 import 'auth_routing.dart';
 import 'profile_setup_screen.dart';
@@ -48,23 +49,16 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
           }
         } else {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Email not verified yet. Please check your inbox.'),
-                backgroundColor: Color(0xFFEF4444),
-              ),
+            FlashSnackBar.showError(
+              context,
+              'Email not verified yet. Please check your inbox.',
             );
           }
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
+        FlashSnackBar.showError(context, e.toString());
       }
     } finally {
       if (mounted) {
@@ -82,21 +76,14 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       await _authService.sendEmailVerification();
       setState(() => _resendSuccess = true);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Verification email resent!'),
-            backgroundColor: Color(0xFF22C55E),
-          ),
+        FlashSnackBar.showSuccess(
+          context,
+          'Verification email resent!',
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
+        FlashSnackBar.showError(context, e.toString());
       }
     } finally {
       if (mounted) {
@@ -106,7 +93,12 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   }
 
   Future<void> _skipEmailVerification() async {
-    final user = FirebaseAuth.instance.currentUser ?? _authService.currentUser;
+    User? user;
+    try {
+      user = FirebaseAuth.instance.currentUser;
+    } catch (_) {
+      user = null;
+    }
     if (user != null) {
       await AuthRouting.routeUserAfterAuth(
         context,
@@ -139,37 +131,22 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    return Scaffold(
+    final user = _authService.currentUser;
+    return PinnedBottomActionScaffold(
       backgroundColor: const Color(0xFF121414),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFFF9FAFA)),
-          onPressed: () async {
-            // Sign out the unverified user and go back
-            await FirebaseAuth.instance.signOut();
-            if (context.mounted) {
-              Navigator.pop(context);
-            }
-          },
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: Center(
-              child: SkipPillButton(
-                onPressed: _skipEmailVerification,
-              ),
-            ),
-          ),
-        ],
-      ),
       extendBodyBehindAppBar: true,
-      body: Stack(
+      appBar: FlashGlassAppBar(
+        onBackPressed: () async {
+          // Sign out the unverified user and go back
+          await _authService.signOut();
+          if (context.mounted) {
+            Navigator.pop(context);
+          }
+        },
+        onSkipPressed: _skipEmailVerification,
+      ),
+      background: Stack(
         children: [
-          // Background Texture
           Positioned.fill(
             child: Image.asset(
               'assets/images/tattoo_setup.png',
@@ -181,68 +158,68 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
               color: Colors.black.withAlpha(200),
             ),
           ),
-          SafeArea(
-            child: Center(
-              child: Padding(
-                padding: AppPadding.screenHorizontal,
-                child: AdaptiveGlassContainer(
-                  padding: const EdgeInsets.all(AppSpacing.spaceXl),
-                  borderRadius: 20.0,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.mark_email_unread_outlined,
-                        size: 64,
-                        color: Color(0xFFEEC200),
-                      ),
-                      AppGaps.gapLg,
-                      Text(
-                        'Verify your email',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFFF9FAFA),
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      AppGaps.gapMd,
-                      Text(
-                        'We sent a verification link to:\n${user?.email ?? "your email"}',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFF919696),
-                          fontSize: 16,
-                          height: 1.4,
-                        ),
-                      ),
-                      AppGaps.gapXl,
-                      AppButtons.primaryCTA(
-                        onPressed: _isLoading ? null : _checkEmailVerified,
-                        text: "I've Verified My Email",
-                        isLoading: _isLoading && !_resendSuccess,
-                        backgroundColor: const Color(0xFFEEC200),
-                        foregroundColor: const Color(0xFF121414),
-                      ),
-                      AppGaps.gapLg,
-                      TextButton(
-                        onPressed: _isLoading ? null : _resendEmail,
-                        child: Text(
-                          _resendSuccess ? 'Link sent again' : 'Resend verification link',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: const Color(0xFFD8DDDD),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+        ],
+      ),
+      centerContent: false,
+      ctaText: "I've Verified My Email",
+      onCtaPressed: _checkEmailVerified,
+      isCtaLoading: _isLoading && !_resendSuccess,
+      isCtaEnabled: !_isLoading,
+      ctaBackgroundColor: const Color(0xFFEEC200),
+      ctaForegroundColor: const Color(0xFF121414),
+      secondaryAction: Center(
+        child: TextButton(
+          onPressed: _isLoading ? null : _resendEmail,
+          child: Text(
+            _resendSuccess ? 'Link sent again' : 'Resend verification link',
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFFD8DDDD),
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.underline,
             ),
           ),
-        ],
+        ),
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: AdaptiveGlassContainer(
+            useGradient: false,
+            padding: const EdgeInsets.all(AppSpacing.spaceXl),
+            borderRadius: 20.0,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.mark_email_unread_outlined,
+                  size: 64,
+                  color: Color(0xFFEEC200),
+                ),
+                AppGaps.gapLg,
+                Text(
+                  'Verify your email',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFFF9FAFA),
+                    fontSize: 34,
+                    fontWeight: FontWeight.w800,
+                    height: 1.15,
+                  ),
+                ),
+                AppGaps.gapSm,
+                Text(
+                  'We sent a verification link to:\n${user?.email ?? "your email"}',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFF919696),
+                    fontSize: 15,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

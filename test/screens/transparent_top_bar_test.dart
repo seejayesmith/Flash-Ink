@@ -8,7 +8,6 @@ import 'package:firebase_core_platform_interface/test.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_info_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_phone_verification_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_profile_photo_screen.dart';
-import 'package:flash_ink/screens/artist_onboarding/artist_instagram_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_set_price_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_flash_upload_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_identity_tags_screen.dart';
@@ -19,6 +18,9 @@ import 'package:flash_ink/screens/client_edit_profile_screen.dart';
 import 'package:flash_ink/screens/app_info_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_account_settings_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_edit_profile_screen.dart';
+import 'package:flash_ink/screens/profile_setup_screen.dart';
+import 'package:flash_ink/screens/phone_entry_screen.dart';
+import 'package:flash_ink/widgets/flash_glass_app_bar.dart';
 import 'package:flash_ink/services/auth_service.dart';
 
 class MockArtistUser extends Fake implements User {
@@ -87,24 +89,6 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ArtistProfilePhotoScreen(
-            artistName: 'OddMaree',
-            authService: FakeAuthService(),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-      expect(scaffold.extendBodyBehindAppBar, isTrue);
-
-      final appBar = tester.widget<AppBar>(find.byType(AppBar));
-      expect(appBar.backgroundColor, equals(Colors.transparent));
-    });
-
-    testWidgets('ArtistInstagramScreen has extendBodyBehindAppBar true and transparent AppBar', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: ArtistInstagramScreen(
             artistName: 'OddMaree',
             authService: FakeAuthService(),
           ),
@@ -258,6 +242,45 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.widget<AppBar>(find.byType(AppBar)).backgroundColor, equals(Colors.transparent));
+    });
+
+    testWidgets('ProfileSetupScreen has extendBodyBehindAppBar true and FlashGlassAppBar', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProfileSetupScreen(authService: FakeAuthService()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+      expect(scaffold.extendBodyBehindAppBar, isTrue);
+
+      expect(find.byType(FlashGlassAppBar), findsOneWidget);
+      expect(tester.widget<AppBar>(find.byType(AppBar)).backgroundColor, equals(Colors.transparent));
+    });
+
+    testWidgets('PhoneEntryScreen has extendBodyBehindAppBar true, transparent AppBar, and edge-to-edge background', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PhoneEntryScreen(
+            role: 'client',
+            authService: FakeAuthService(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+      expect(scaffold.extendBodyBehindAppBar, isTrue);
+      expect(scaffold.resizeToAvoidBottomInset, isFalse);
+
+      expect(find.byType(FlashGlassAppBar), findsOneWidget);
+      final appBar = tester.widget<AppBar>(find.byType(AppBar));
+      expect(appBar.backgroundColor, equals(Colors.transparent));
+
+      // Verify the background texture image is loaded edge-to-edge
+      expect(find.byType(Image), findsOneWidget);
+      expect(find.byType(TextFormField), findsOneWidget);
     });
   });
 }

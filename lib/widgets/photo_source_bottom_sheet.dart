@@ -1,10 +1,20 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import '../theme/app_radius.dart';
 import '../theme/app_theme.dart';
 import 'adaptive_glass_container.dart';
+import 'flash_snack_bar.dart';
 import 'photo_crop_screen.dart';
+
+enum _PhotoSourceAction {
+  camera,
+  gallery,
+  sample,
+  remove,
+}
 
 /// The result returned after a user picks/crops a photo or chooses to remove it.
 class ProfilePhotoResult {
@@ -15,7 +25,9 @@ class ProfilePhotoResult {
   const ProfilePhotoResult.removed() : croppedBytes = null, isRemoved = true;
 }
 
-/// Modern dark-onyx bottom sheet for selecting, cropping, or removing profile photos.
+/// Modern bottom sheet for selecting, cropping, or removing profile photos.
+/// Adapts to device-specific controls: CupertinoActionSheet on iOS,
+/// and dark-onyx bottom sheet on Android/other platforms.
 class PhotoSourceBottomSheet extends StatelessWidget {
   final bool hasExistingPhoto;
   final ImagePicker picker;
@@ -35,6 +47,14 @@ class PhotoSourceBottomSheet extends StatelessWidget {
   }) async {
     final effectivePicker = picker ?? ImagePicker();
 
+    if (Theme.of(context).platform == TargetPlatform.iOS) {
+      return _showCupertinoActionSheet(
+        context: context,
+        picker: effectivePicker,
+        hasExistingPhoto: hasExistingPhoto,
+      );
+    }
+
     return showModalBottomSheet<ProfilePhotoResult?>(
       context: context,
       isScrollControlled: true,
@@ -46,8 +66,60 @@ class PhotoSourceBottomSheet extends StatelessWidget {
     );
   }
 
-  Future<void> _pickAndCrop(
+  static Future<ProfilePhotoResult?> _showCupertinoActionSheet({
+    required BuildContext context,
+    required ImagePicker picker,
+    bool hasExistingPhoto = false,
+  }) async {
+    final choice = await showCupertinoModalPopup<_PhotoSourceAction>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: const Text('Profile Photo'),
+        message: const Text('Select or capture an image to represent your profile'),
+        actions: [
+          CupertinoActionSheetAction(
+            key: const Key('photo_source_camera'),
+            onPressed: () => Navigator.pop(sheetContext, _PhotoSourceAction.camera),
+            child: const Text('Take a Picture'),
+          ),
+          CupertinoActionSheetAction(
+            key: const Key('photo_source_gallery'),
+            onPressed: () => Navigator.pop(sheetContext, _PhotoSourceAction.gallery),
+            child: const Text('Upload a Photo'),
+          ),
+          if (hasExistingPhoto)
+            CupertinoActionSheetAction(
+              key: const Key('photo_source_remove'),
+              isDestructiveAction: true,
+              onPressed: () => Navigator.pop(sheetContext, _PhotoSourceAction.remove),
+              child: const Text('Remove Photo'),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.pop(sheetContext),
+          child: const Text('Cancel'),
+        ),
+      ),
+    );
+
+    if (choice == null || !context.mounted) return null;
+
+    switch (choice) {
+      case _PhotoSourceAction.camera:
+        return _pickAndCropStatic(context, picker, ImageSource.camera);
+      case _PhotoSourceAction.gallery:
+        return _pickAndCropStatic(context, picker, ImageSource.gallery);
+      case _PhotoSourceAction.remove:
+        return const ProfilePhotoResult.removed();
+      case _PhotoSourceAction.sample:
+        return _useSamplePhotoStatic(context);
+    }
+  }
+
+  static Future<ProfilePhotoResult?> _pickAndCropStatic(
     BuildContext context,
+    ImagePicker picker,
     ImageSource source,
   ) async {
     try {
@@ -60,6 +132,7 @@ class PhotoSourceBottomSheet extends StatelessWidget {
 
       if (pickedFile != null && context.mounted) {
         final bytes = await pickedFile.readAsBytes();
+        if (!context.mounted) return null;
         final croppedBytes = await Navigator.push<Uint8List?>(
           context,
           MaterialPageRoute(
@@ -67,23 +140,19 @@ class PhotoSourceBottomSheet extends StatelessWidget {
           ),
         );
 
-        if (croppedBytes != null && context.mounted) {
-          Navigator.pop(context, ProfilePhotoResult.cropped(croppedBytes));
+        if (croppedBytes != null) {
+          return ProfilePhotoResult.cropped(croppedBytes);
         }
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to select photo: $e'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
+        FlashSnackBar.showError(context, 'Failed to select photo: $e');
       }
     }
+    return null;
   }
 
-  Future<void> _useSamplePhoto(BuildContext context) async {
+  static Future<ProfilePhotoResult?> _useSamplePhotoStatic(BuildContext context) async {
     try {
       final byteData = await rootBundle.load('assets/images/flash_traditional_moth.jpg');
       final bytes = byteData.buffer.asUint8List();
@@ -99,19 +168,32 @@ class PhotoSourceBottomSheet extends StatelessWidget {
           ),
         );
 
-        if (croppedBytes != null && context.mounted) {
-          Navigator.pop(context, ProfilePhotoResult.cropped(croppedBytes));
+        if (croppedBytes != null) {
+          return ProfilePhotoResult.cropped(croppedBytes);
         }
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to load sample photo: $e'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
+        FlashSnackBar.showError(context, 'Failed to load sample photo: $e');
       }
+    }
+    return null;
+  }
+
+  Future<void> _pickAndCrop(
+    BuildContext context,
+    ImageSource source,
+  ) async {
+    final result = await _pickAndCropStatic(context, picker, source);
+    if (result != null && context.mounted) {
+      Navigator.pop(context, result);
+    }
+  }
+
+  Future<void> _useSamplePhoto(BuildContext context) async {
+    final result = await _useSamplePhotoStatic(context);
+    if (result != null && context.mounted) {
+      Navigator.pop(context, result);
     }
   }
 
@@ -124,7 +206,7 @@ class PhotoSourceBottomSheet extends StatelessWidget {
       unselectedBorderColor: AppTheme.goldBorder,
       selectedBorderWidth: 0.8,
       unselectedBorderWidth: 0.8,
-      topRadius: 24.0,
+      topRadius: AppRadius.radiusSheet,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Column(
@@ -138,7 +220,7 @@ class PhotoSourceBottomSheet extends StatelessWidget {
                   height: 4,
                   decoration: BoxDecoration(
                     color: const Color(0xFF4D5252),
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.circular(AppRadius.dragHandle),
                   ),
                 ),
               ),
@@ -235,12 +317,12 @@ class PhotoSourceBottomSheet extends StatelessWidget {
       child: InkWell(
         key: key,
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             color: backgroundColor ?? const Color(0xFF141616),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(AppRadius.radiusMd),
             border: Border.all(
               color: borderColor ?? AppTheme.darkBorder,
               width: 1.0,

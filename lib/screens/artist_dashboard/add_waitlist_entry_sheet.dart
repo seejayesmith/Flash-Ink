@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../models/waitlist_entry.dart';
+import '../../theme/app_radius.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
+import '../../widgets/flash_snack_bar.dart';
+import '../../widgets/keyboard_collapse_button.dart';
 
 /// Bottom sheet dialog for artists to add friends, family, or VIP clients to their waitlist.
 /// Supports both searching registered Flash users and manual entry for friends not yet on Flash.
@@ -143,11 +146,9 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
   void _handleSubmit() {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a name or select a Flash user.'),
-          backgroundColor: Color(0xFFEF4444),
-        ),
+      FlashSnackBar.showError(
+        context,
+        'Please enter a name or select a Flash user.',
       );
       return;
     }
@@ -189,22 +190,9 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
     widget.onSaved?.call();
     Navigator.pop(context);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          isEditing ? 'Waitlist entry updated!' : '$name added to your VIP waitlist!',
-          style: GoogleFonts.plusJakartaSans(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        backgroundColor: const Color(0xFF1E2121),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Color(0xFFEEC200), width: 1),
-        ),
-      ),
+    FlashSnackBar.showSuccess(
+      context,
+      isEditing ? 'Waitlist entry updated!' : '$name added to your VIP waitlist!',
     );
   }
 
@@ -222,7 +210,7 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
         unselectedBorderColor: const Color(0xFFEEC200),
         selectedBorderWidth: 1.5,
         unselectedBorderWidth: 1.5,
-        topRadius: 28.0,
+        topRadius: AppRadius.radiusSheet,
         child: Column(
         children: [
           // Drag handle
@@ -233,7 +221,7 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
               height: 4,
               decoration: BoxDecoration(
                 color: const Color(0xFF333838),
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: BorderRadius.circular(AppRadius.dragHandle),
               ),
             ),
           ),
@@ -253,9 +241,17 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
                     letterSpacing: -0.3,
                   ),
                 ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded, color: Color(0xFF8C9191)),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const KeyboardCollapseButton(),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      key: const Key('close_waitlist_sheet'),
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded, color: Color(0xFF8C9191)),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -266,7 +262,7 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
           // Body Form Scrollable
           Expanded(
             child: ListView(
-              padding: EdgeInsets.fromLTRB(22, 16, 22, bottomInset + 30),
+              padding: EdgeInsets.fromLTRB(22, 16, 22, bottomInset + 16),
               physics: const BouncingScrollPhysics(),
               children: [
                 // Mode Selector Tabs
@@ -274,7 +270,7 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
                     color: const Color(0xFF1B1E1E),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusFull),
                     border: Border.all(color: const Color(0xFF2E3333)),
                   ),
                   child: Row(
@@ -429,7 +425,7 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
                       backgroundColor: const Color(0xFFEEC200),
                       foregroundColor: const Color(0xFF121414),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(AppRadius.radiusLg),
                       ),
                       elevation: 0,
                     ),
@@ -455,13 +451,13 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
     final isSelected = _activeTabIndex == index;
     return InkWell(
       onTap: () => setState(() => _activeTabIndex = index),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppRadius.radiusFull),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFFEEC200) : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppRadius.radiusFull),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -510,11 +506,11 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
             filled: true,
             fillColor: const Color(0xFF1B1E1E),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.radiusSm),
               borderSide: const BorderSide(color: Color(0xFF2C3232)),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.radiusSm),
               borderSide: const BorderSide(color: Color(0xFFEEC200), width: 1.2),
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -531,13 +527,13 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
               final isSelected = _selectedFlashUserId == user['id'];
               return InkWell(
                 onTap: () => _selectFlashUser(user),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 6),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: isSelected ? const Color(0xFFEEC200).withAlpha(30) : const Color(0xFF1B1E1E),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                     border: Border.all(
                       color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF282D2D),
                     ),
@@ -669,15 +665,15 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
         filled: true,
         fillColor: const Color(0xFF1B1E1E),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.radiusSm),
           borderSide: const BorderSide(color: Color(0xFF2C3232)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.radiusSm),
           borderSide: const BorderSide(color: Color(0xFF2C3232)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.radiusSm),
           borderSide: const BorderSide(color: Color(0xFFEEC200), width: 1.2),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -689,13 +685,13 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
     final isSelected = _relationshipTag == label;
     return InkWell(
       onTap: () => setState(() => _relationshipTag = label),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppRadius.radiusFull),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFFEEC200).withAlpha(40) : const Color(0xFF1B1E1E),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppRadius.radiusFull),
           border: Border.all(
             color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF2E3333),
           ),
@@ -716,13 +712,13 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
     final isSelected = _availability == label;
     return InkWell(
       onTap: () => setState(() => _availability = label),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppRadius.radiusFull),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFF38BDF8).withAlpha(35) : const Color(0xFF1B1E1E),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppRadius.radiusFull),
           border: Border.all(
             color: isSelected ? const Color(0xFF38BDF8) : const Color(0xFF2E3333),
           ),
@@ -743,13 +739,13 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
     final isSelected = _designType == type;
     return InkWell(
       onTap: () => setState(() => _designType = type),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppRadius.radiusFull),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF1B1E1E),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.radiusFull),
           border: Border.all(
             color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF2E3333),
           ),
@@ -797,19 +793,19 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
                   _referenceImageUrl = isSelected ? null : img;
                 });
               },
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(AppRadius.radiusMd),
               child: Container(
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                   border: Border.all(
                     color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF2E3333),
                     width: isSelected ? 2 : 1,
                   ),
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
