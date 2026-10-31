@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,10 +25,17 @@ final firebaseFirestoreProvider = Provider<FirebaseFirestore?>((ref) {
   return null;
 });
 
+/// Optional injected [FirebaseFunctions] instance (overridden in tests with a fake/mock callable client).
+/// Returns `null` when not overridden so services resolve `FirebaseFunctions.instance` lazily.
+final firebaseFunctionsProvider = Provider<FirebaseFunctions?>((ref) {
+  return null;
+});
+
 /// Active [AuthService] instance.
 final authServiceProvider = Provider<AuthService>((ref) {
   final firestore = ref.watch(firebaseFirestoreProvider);
-  return AuthService(firestore: firestore);
+  final functions = ref.watch(firebaseFunctionsProvider);
+  return AuthService(firestore: firestore, functions: functions);
 });
 
 /// Tracks sign-out / session-switch epochs so user-scoped providers reset cleanly.

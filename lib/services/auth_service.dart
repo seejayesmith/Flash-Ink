@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
@@ -63,8 +64,13 @@ class RequiresRecentLoginException implements Exception {
 }
 
 class AuthService {
+  static final RegExp _recoveryEmailPattern = RegExp(
+    r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$',
+  );
+
   final FirebaseAuth? _authInstance;
   final FirebaseFirestore? _firestoreInstance;
+  final FirebaseFunctions? _functionsInstance;
   final User? _mockUser;
 
   String? _verificationId;
@@ -231,12 +237,178 @@ class AuthService {
   AuthService({
     FirebaseAuth? auth,
     FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
     this._mockUser,
   })  : _authInstance = auth,
-        _firestoreInstance = firestore;
+        _firestoreInstance = firestore,
+        _functionsInstance = functions;
 
   FirebaseAuth get _auth => _authInstance ?? FirebaseAuth.instance;
   FirebaseFirestore get _firestore => _firestoreInstance ?? FirebaseFirestore.instance;
+  FirebaseFunctions get _functions => _functionsInstance ?? FirebaseFunctions.instance;
+
+  /// Normalizes and validates a recovery identifier (email address or phone number).
+  static String normalizeRecoveryIdentifier(String rawIdentifier) {
+    final trimmed = rawIdentifier.trim();
+    if (trimmed.isEmpty) {
+      throw FirebaseAuthException(
+        code: 'invalid-email',
+        message: 'Please enter a valid email address or phone number.',
+      );
+    }
+
+    if (trimmed.contains('@')) {
+      final normalizedEmail = trimmed.toLowerCase();
+      if (!_recoveryEmailPattern.hasMatch(normalizedEmail)) {
+        throw FirebaseAuthException(
+          code: 'invalid-email',
+          message: 'Please enter a valid email address.',
+        );
+      }
+      return normalizedEmail;
+    }
+
+    final digitsOnly = trimmed.replaceAll(RegExp(r'\D'), '');
+    if (digitsOnly.length < 10 || digitsOnly.length > 15) {
+      throw FirebaseAuthException(
+        code: 'invalid-phone-number',
+        message: 'Please enter a valid phone number.',
+      );
+    }
+    return formatE164PhoneNumber(trimmed);
+  }
+
+  /// Maps a [FirebaseFunctionsException] thrown by recovery OTP callables into
+  /// a structured [FirebaseAuthException] for downstream UI/controller handling.
+  static FirebaseAuthException mapRecoveryFunctionsException(
+    FirebaseFunctionsException e, {
+    String? identifier,
+    bool isVerification = false,
+  }) {
+    final details = e.details;
+    final detailsCode =
+        details is Map ? (details['code'] as Object?)?.toString() : null;
+
+    if (detailsCode == 'too-many-requests' || e.code == 'resource-exhausted') {
+      return FirebaseAuthException(
+        code: 'too-many-requests',
+        message: (e.message != null && e.message!.isNotEmpty)
+            ? e.message
+            : 'Too many OTP requests or failed attempts. Please wait before trying again.',
+      );
+    }
+
+    if (detailsCode == 'session-expired' ||
+        e.code == 'not-found' ||
+        e.code == 'deadline-exceeded') {
+      return FirebaseAuthException(
+        code: 'session-expired',
+        message: (e.message != null && e.message!.isNotEmpty)
+            ? e.message
+            : 'The verification code has expired. Please request a new code.',
+      );
+    }
+
+    if (detailsCode == 'invalid-verification-code' ||
+        e.code == 'permission-denied') {
+      return FirebaseAuthException(
+        code: 'invalid-verification-code',
+        message: (e.message != null && e.message!.isNotEmpty)
+            ? e.message
+            : 'The verification code entered is invalid.',
+      );
+    }
+
+    if (e.code == 'invalid-argument') {
+      if (isVerification) {
+        return FirebaseAuthException(
+          code: 'invalid-verification-code',
+          message: (e.message != null && e.message!.isNotEmpty)
+              ? e.message
+              : 'The verification code entered is invalid.',
+        );
+      }
+      final isPhone = identifier != null && !identifier.contains('@');
+      return FirebaseAuthException(
+        code: isPhone ? 'invalid-phone-number' : 'invalid-email',
+        message: (e.message != null && e.message!.isNotEmpty)
+            ? e.message
+            : (isPhone
+                ? 'Please enter a valid phone number.'
+                : 'Please enter a valid email address.'),
+      );
+    }
+
+    if (e.code == 'unavailable') {
+      return FirebaseAuthException(
+        code: 'network-request-failed',
+        message: 'Network error. Please check your internet connection.',
+      );
+    }
+
+    return FirebaseAuthException(
+      code: e.code,
+      message: e.message ?? 'An authentication recovery error occurred.',
+    );
+  }
+
+  /// Requests a server-generated 6-digit recovery OTP via the `requestRecoveryOtp`
+  /// HTTPS Callable Cloud Function. Never reads or writes `auth_recovery_otps` directly.
+  Future<void> requestRecoveryOtp(String identifier) async {
+    final normalizedIdentifier = normalizeRecoveryIdentifier(identifier);
+    try {
+      final callable = _functions.httpsCallable('requestRecoveryOtp');
+      await callable.call<dynamic>({
+        'identifier': normalizedIdentifier,
+      });
+    } on FirebaseAuthException {
+      rethrow;
+    } on FirebaseFunctionsException catch (e) {
+      throw mapRecoveryFunctionsException(
+        e,
+        identifier: normalizedIdentifier,
+        isVerification: false,
+      );
+    }
+  }
+
+  /// Verifies a 6-digit recovery OTP `code` via the `verifyRecoveryOtp`
+  /// HTTPS Callable Cloud Function. Never reads or writes `auth_recovery_otps` directly.
+  Future<bool> verifyRecoveryOtp({
+    required String identifier,
+    required String code,
+  }) async {
+    final normalizedIdentifier = normalizeRecoveryIdentifier(identifier);
+    final sanitizedCode = code.trim();
+    if (sanitizedCode.length != 6 ||
+        !RegExp(r'^\d{6}$').hasMatch(sanitizedCode)) {
+      throw FirebaseAuthException(
+        code: 'invalid-verification-code',
+        message: 'The verification code entered is invalid.',
+      );
+    }
+
+    try {
+      final callable = _functions.httpsCallable('verifyRecoveryOtp');
+      final result = await callable.call<dynamic>({
+        'identifier': normalizedIdentifier,
+        'code': sanitizedCode,
+      });
+      final data = result.data;
+      if (data is Map) {
+        return data['verified'] == true || data['success'] == true;
+      }
+      return true;
+    } on FirebaseAuthException {
+      rethrow;
+    } on FirebaseFunctionsException catch (e) {
+      throw mapRecoveryFunctionsException(
+        e,
+        identifier: normalizedIdentifier,
+        isVerification: true,
+      );
+    }
+  }
 
   User? get currentUser {
     if (_mockUser != null) return _mockUser;

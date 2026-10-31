@@ -12,6 +12,8 @@ import 'package:flash_ink/features/auth/presentation/screens/support_escalation_
 import 'package:flash_ink/features/auth/presentation/sheets/account_collision_sheet.dart';
 import 'package:flash_ink/features/auth/presentation/sheets/delivery_troubleshooting_sheet.dart';
 
+import '../../../helpers/fake_recovery_functions.dart';
+
 class TestAuthCredential extends Fake implements AuthCredential {
   @override
   final String providerId = 'apple.com';
@@ -56,6 +58,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late FakeFirebaseFirestore fakeFirestore;
+  late FakeRecoveryFunctions fakeFunctions;
   late TestLinkedUser fakeUser;
   late AuthRecoveryService recoveryService;
 
@@ -69,11 +72,12 @@ void main() {
     });
 
     fakeFirestore = FakeFirebaseFirestore();
+    fakeFunctions = FakeRecoveryFunctions(otpGenerator: () => '123456');
     fakeUser = TestLinkedUser();
     recoveryService = AuthRecoveryService(
       firestore: fakeFirestore,
+      functions: fakeFunctions,
       currentUserOverride: fakeUser,
-      otpGenerator: () => '123456',
     );
   });
 
@@ -195,6 +199,51 @@ void main() {
         await tester.tap(find.byKey(const Key('hub_contact_support_option')));
         await tester.pumpAndSettle();
         expect(find.byType(SupportEscalationScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'AccountRecoveryHubScreen: changed-phone flow requests and verifies OTP via callables (no Firestore OTP access)',
+      (tester) async {
+        await tester.pumpWidget(
+          buildTestableWidget(child: const AccountRecoveryHubScreen()),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('hub_changed_phone_option')));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byKey(const Key('recovery_email_field')),
+          'Backup@Flash.Ink',
+        );
+        await tester.tap(find.byKey(const Key('recovery_send_otp_button')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(
+          fakeFunctions.callsTo('requestRecoveryOtp').single.data,
+          equals({'identifier': 'backup@flash.ink'}),
+        );
+        expect(find.byKey(const Key('recovery_otp_field')), findsOneWidget);
+
+        await tester.enterText(
+          find.byKey(const Key('recovery_otp_field')),
+          fakeFunctions.issuedCodes['backup@flash.ink']!,
+        );
+        await tester.tap(find.byKey(const Key('recovery_verify_otp_button')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        final verifyCalls = fakeFunctions.callsTo('verifyRecoveryOtp');
+        expect(verifyCalls, hasLength(1));
+        expect(verifyCalls.single.data['code'], equals('123456'));
+        expect(fakeFunctions.hasActiveChallenge('backup@flash.ink'), isFalse);
+        expect(find.byKey(const Key('recovery_new_phone_field')), findsOneWidget);
+
+        final otpDocs =
+            await fakeFirestore.collection('auth_recovery_otps').get();
+        expect(otpDocs.docs, isEmpty);
       },
     );
 

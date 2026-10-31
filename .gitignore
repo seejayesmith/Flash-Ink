@@ -54,3 +54,4 @@ app.*.map.json
 # Node / npm
 node_modules/
 
+functions/lib/

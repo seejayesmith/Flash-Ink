@@ -7,6 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flash_ink/features/auth/data/services/auth_recovery_service.dart';
 import 'package:flash_ink/features/auth/presentation/controllers/auth_troubleshooting_controller.dart';
+import 'package:flash_ink/services/auth_service.dart';
+
+import '../../../../helpers/fake_recovery_functions.dart';
 
 class FakeAuthCredential extends Fake implements AuthCredential {
   @override
@@ -99,8 +102,8 @@ class FakeControllableAuthRecoveryService extends AuthRecoveryService {
 
   FakeControllableAuthRecoveryService({
     super.firestore,
+    super.functions,
     super.currentUserOverride,
-    super.otpGenerator,
   });
 
   @override
@@ -140,16 +143,18 @@ class FakeControllableAuthRecoveryService extends AuthRecoveryService {
 void main() {
   group('AuthTroubleshootingController & AuthRecoveryService Unit Tests', () {
     late FakeFirebaseFirestore fakeFirestore;
+    late FakeRecoveryFunctions fakeFunctions;
     late FakeLinkedUser fakeUser;
     late FakeControllableAuthRecoveryService fakeService;
 
     setUp(() {
       fakeFirestore = FakeFirebaseFirestore();
+      fakeFunctions = FakeRecoveryFunctions(otpGenerator: () => '482910');
       fakeUser = FakeLinkedUser();
       fakeService = FakeControllableAuthRecoveryService(
         firestore: fakeFirestore,
+        functions: fakeFunctions,
         currentUserOverride: fakeUser,
-        otpGenerator: () => '482910',
       );
     });
 
@@ -545,5 +550,182 @@ void main() {
         expect(ticketDoc.data()?['status'], equals('open'));
       },
     );
+  });
+
+  group('Recovery OTP callable interface (Cloud Functions)', () {
+    late FakeFirebaseFirestore fakeFirestore;
+    late FakeRecoveryFunctions fakeFunctions;
+    late AuthRecoveryService service;
+    late DateTime now;
+
+    setUp(() {
+      now = DateTime(2026, 10, 31, 12);
+      fakeFirestore = FakeFirebaseFirestore();
+      fakeFunctions = FakeRecoveryFunctions(
+        otpGenerator: () => '246810',
+        clock: () => now,
+      );
+      service = AuthRecoveryService(
+        firestore: fakeFirestore,
+        functions: fakeFunctions,
+        currentUserOverride: FakeLinkedUser(),
+      );
+    });
+
+    test('sendSecondaryEmailOtp invokes requestRecoveryOtp with normalized identifier only', () async {
+      await service.sendSecondaryEmailOtp('  Client@Flash.Ink ');
+
+      final calls = fakeFunctions.callsTo('requestRecoveryOtp');
+      expect(calls, hasLength(1));
+      expect(calls.single.data, equals({'identifier': 'client@flash.ink'}));
+      // Client never submits or generates OTP material itself.
+      expect(calls.single.data.containsKey('code'), isFalse);
+    });
+
+    test('client never reads or writes auth_recovery_otps in Firestore', () async {
+      await service.sendSecondaryEmailOtp('client@flash.ink');
+      await expectLater(
+        service.verifySecondaryEmailOtp(email: 'client@flash.ink', code: '000000'),
+        throwsA(isA<FirebaseAuthException>()),
+      );
+      await service.verifySecondaryEmailOtp(email: 'client@flash.ink', code: '246810');
+
+      final otpDocs = await fakeFirestore.collection('auth_recovery_otps').get();
+      expect(otpDocs.docs, isEmpty);
+      expect(fakeFunctions.callsTo('verifyRecoveryOtp'), hasLength(2));
+    });
+
+    test('verifyRecoveryOtp success consumes the challenge so the code cannot be replayed', () async {
+      await service.requestRecoveryOtp('client@flash.ink');
+      expect(fakeFunctions.hasActiveChallenge('client@flash.ink'), isTrue);
+
+      final verified = await service.verifyRecoveryOtp(
+        identifier: 'client@flash.ink',
+        code: '246810',
+      );
+      expect(verified, isTrue);
+      expect(fakeFunctions.hasActiveChallenge('client@flash.ink'), isFalse);
+
+      await expectLater(
+        service.verifyRecoveryOtp(identifier: 'client@flash.ink', code: '246810'),
+        throwsA(isA<FirebaseAuthException>()
+            .having((e) => e.code, 'code', 'session-expired')),
+      );
+    });
+
+    test('phone identifiers are normalized to E.164 before invoking the callable', () async {
+      await service.requestRecoveryOtp('(555) 234-5678');
+      expect(
+        fakeFunctions.callsTo('requestRecoveryOtp').single.data['identifier'],
+        equals('+15552345678'),
+      );
+    });
+
+    test('wrong codes increment attempts server-side and lock out at 5', () async {
+      await service.requestRecoveryOtp('client@flash.ink');
+
+      for (var i = 1; i < FakeRecoveryFunctions.maxAttempts; i++) {
+        await expectLater(
+          service.verifyRecoveryOtp(identifier: 'client@flash.ink', code: '111111'),
+          throwsA(isA<FirebaseAuthException>()
+              .having((e) => e.code, 'code', 'invalid-verification-code')),
+        );
+        expect(fakeFunctions.attemptsFor('client@flash.ink'), equals(i));
+      }
+
+      await expectLater(
+        service.verifyRecoveryOtp(identifier: 'client@flash.ink', code: '111111'),
+        throwsA(isA<FirebaseAuthException>()
+            .having((e) => e.code, 'code', 'too-many-requests')),
+      );
+      // Even the correct code is rejected once locked out.
+      await expectLater(
+        service.verifyRecoveryOtp(identifier: 'client@flash.ink', code: '246810'),
+        throwsA(isA<FirebaseAuthException>()
+            .having((e) => e.code, 'code', 'too-many-requests')),
+      );
+    });
+
+    test('expired challenges (>= 10 minutes) map to session-expired', () async {
+      await service.requestRecoveryOtp('client@flash.ink');
+      now = now.add(const Duration(minutes: 10));
+
+      await expectLater(
+        service.verifyRecoveryOtp(identifier: 'client@flash.ink', code: '246810'),
+        throwsA(isA<FirebaseAuthException>()
+            .having((e) => e.code, 'code', 'session-expired')),
+      );
+    });
+
+    test('malformed codes are rejected client-side without invoking the callable', () async {
+      await expectLater(
+        service.verifyRecoveryOtp(identifier: 'client@flash.ink', code: '12ab'),
+        throwsA(isA<FirebaseAuthException>()
+            .having((e) => e.code, 'code', 'invalid-verification-code')),
+      );
+      expect(fakeFunctions.callsTo('verifyRecoveryOtp'), isEmpty);
+    });
+
+    test('resource-exhausted from requestRecoveryOtp drives controller into rateLimited', () async {
+      fakeFunctions.requestException = TestFunctionsException(
+        code: 'resource-exhausted',
+        message: 'Too many OTP requests or failed attempts. Please wait before trying again.',
+      );
+      final container = ProviderContainer(
+        overrides: [authRecoveryServiceProvider.overrideWithValue(service)],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(authTroubleshootingControllerProvider, (_, _) {});
+      addTearDown(sub.close);
+
+      await container
+          .read(authTroubleshootingControllerProvider.notifier)
+          .sendSecondaryEmailOtp('client@flash.ink', rateLimitSeconds: 0);
+
+      final state = container.read(authTroubleshootingControllerProvider).value;
+      expect(state, isA<AuthTroubleshootingRateLimited>());
+      expect(state?.errorCode, equals('too-many-requests'));
+    });
+
+    test('AuthService.requestRecoveryOtp / verifyRecoveryOtp use the same callables', () async {
+      final authService = AuthService(
+        firestore: fakeFirestore,
+        functions: fakeFunctions,
+        mockUser: FakeLinkedUser(),
+      );
+
+      await authService.requestRecoveryOtp('Artist@Flash.Ink');
+      final verified = await authService.verifyRecoveryOtp(
+        identifier: 'artist@flash.ink',
+        code: '246810',
+      );
+
+      expect(verified, isTrue);
+      expect(fakeFunctions.invocations.map((i) => i.name).toList(),
+          equals(['requestRecoveryOtp', 'verifyRecoveryOtp']));
+      final otpDocs = await fakeFirestore.collection('auth_recovery_otps').get();
+      expect(otpDocs.docs, isEmpty);
+    });
+
+    test('mapRecoveryFunctionsException maps server HttpsError codes', () {
+      FirebaseAuthException map(String code, {Object? details, bool verify = true}) =>
+          AuthService.mapRecoveryFunctionsException(
+            TestFunctionsException(code: code, message: 'x', details: details),
+            identifier: 'client@flash.ink',
+            isVerification: verify,
+          );
+
+      expect(map('resource-exhausted').code, 'too-many-requests');
+      expect(map('not-found').code, 'session-expired');
+      expect(map('deadline-exceeded').code, 'session-expired');
+      expect(map('permission-denied').code, 'invalid-verification-code');
+      expect(map('invalid-argument').code, 'invalid-verification-code');
+      expect(map('invalid-argument', verify: false).code, 'invalid-email');
+      expect(map('unavailable').code, 'network-request-failed');
+      expect(
+        map('internal', details: {'code': 'session-expired'}).code,
+        'session-expired',
+      );
+    });
   });
 }

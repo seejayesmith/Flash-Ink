@@ -1,79 +1,12 @@
-import 'dart:math';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../providers/app_providers.dart';
 import '../../../../services/auth_service.dart';
 
-/// Represents an in-flight secondary email OTP verification challenge.
-class SecondaryEmailOtpChallenge {
-  final String email;
-  final String code;
-  final DateTime createdAt;
-  final DateTime expiresAt;
-  final bool verified;
-  final int attempts;
-
-  const SecondaryEmailOtpChallenge({
-    required this.email,
-    required this.code,
-    required this.createdAt,
-    required this.expiresAt,
-    this.verified = false,
-    this.attempts = 0,
-  });
-
-  bool isExpired([DateTime? now]) => (now ?? DateTime.now()).isAfter(expiresAt);
-
-  SecondaryEmailOtpChallenge copyWith({
-    String? email,
-    String? code,
-    DateTime? createdAt,
-    DateTime? expiresAt,
-    bool? verified,
-    int? attempts,
-  }) {
-    return SecondaryEmailOtpChallenge(
-      email: email ?? this.email,
-      code: code ?? this.code,
-      createdAt: createdAt ?? this.createdAt,
-      expiresAt: expiresAt ?? this.expiresAt,
-      verified: verified ?? this.verified,
-      attempts: attempts ?? this.attempts,
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'email': email,
-      'code': code,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'expiresAt': Timestamp.fromDate(expiresAt),
-      'verified': verified,
-      'attempts': attempts,
-    };
-  }
-
-  factory SecondaryEmailOtpChallenge.fromMap(Map<String, dynamic> map) {
-    final createdRaw = map['createdAt'];
-    final expiresRaw = map['expiresAt'];
-    final now = DateTime.now();
-    return SecondaryEmailOtpChallenge(
-      email: (map['email'] as String?) ?? '',
-      code: (map['code'] as String?) ?? '',
-      createdAt: createdRaw is Timestamp ? createdRaw.toDate() : now,
-      expiresAt: expiresRaw is Timestamp
-          ? expiresRaw.toDate()
-          : now.add(const Duration(minutes: 10)),
-      verified: (map['verified'] as bool?) ?? false,
-      attempts: (map['attempts'] as num?)?.toInt() ?? 0,
-    );
-  }
-}
-
-/// Service responsible for login troubleshooting, secondary email OTP recovery,
+/// Service responsible for login troubleshooting, server-verified recovery OTPs,
 /// phone number updates, credential collision resolution, and support escalation.
 class AuthRecoveryService {
   static const int maxOtpAttempts = 5;
@@ -85,20 +18,19 @@ class AuthRecoveryService {
 
   final FirebaseAuth? _injectedAuth;
   final FirebaseFirestore? _injectedFirestore;
+  final FirebaseFunctions? _injectedFunctions;
   final User? currentUserOverride;
-  final String Function()? otpGenerator;
   final DateTime Function() _clock;
-
-  final Map<String, SecondaryEmailOtpChallenge> _memoryOtpStore = {};
 
   AuthRecoveryService({
     FirebaseAuth? auth,
     FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
     this.currentUserOverride,
-    this.otpGenerator,
     DateTime Function()? clock,
   })  : _injectedAuth = auth,
         _injectedFirestore = firestore,
+        _injectedFunctions = functions,
         _clock = clock ?? DateTime.now;
 
   FirebaseAuth? _resolveAuth() {
@@ -117,6 +49,10 @@ class AuthRecoveryService {
     } catch (_) {
       return null;
     }
+  }
+
+  FirebaseFunctions _resolveFunctions() {
+    return _injectedFunctions ?? FirebaseFunctions.instance;
   }
 
   User? get currentUser {
@@ -141,62 +77,81 @@ class AuthRecoveryService {
     return normalized;
   }
 
-  String _generateSixDigitOtp() {
-    if (otpGenerator != null) {
-      return otpGenerator!();
+  /// Normalizes and validates a recovery identifier (email address or phone number).
+  static String normalizeAndValidateIdentifier(String rawIdentifier) {
+    return AuthService.normalizeRecoveryIdentifier(rawIdentifier);
+  }
+
+  /// Requests a server-generated 6-digit recovery OTP for [identifier] (email or phone)
+  /// via the `requestRecoveryOtp` HTTPS Callable Cloud Function.
+  Future<void> requestRecoveryOtp(String identifier) async {
+    final normalizedIdentifier = normalizeAndValidateIdentifier(identifier);
+    try {
+      final callable = _resolveFunctions().httpsCallable('requestRecoveryOtp');
+      await callable.call<dynamic>({
+        'identifier': normalizedIdentifier,
+      });
+    } on FirebaseAuthException {
+      rethrow;
+    } on FirebaseFunctionsException catch (e) {
+      throw AuthService.mapRecoveryFunctionsException(
+        e,
+        identifier: normalizedIdentifier,
+        isVerification: false,
+      );
     }
-    final random = Random.secure();
-    final value = 100000 + random.nextInt(900000);
-    return value.toString();
   }
 
-  /// Returns the latest generated OTP for [email] in local memory (useful for test inspection).
-  String? peekGeneratedOtp(String email) {
-    return _memoryOtpStore[email.trim().toLowerCase()]?.code;
+  /// Verifies the 6-digit recovery OTP [code] for [identifier] (email or phone)
+  /// via the `verifyRecoveryOtp` HTTPS Callable Cloud Function.
+  Future<bool> verifyRecoveryOtp({
+    required String identifier,
+    required String code,
+  }) async {
+    final normalizedIdentifier = normalizeAndValidateIdentifier(identifier);
+    final sanitizedCode = code.trim();
+
+    if (sanitizedCode.length != 6 ||
+        !RegExp(r'^\d{6}$').hasMatch(sanitizedCode)) {
+      throw FirebaseAuthException(
+        code: 'invalid-verification-code',
+        message: 'The verification code entered is invalid.',
+      );
+    }
+
+    try {
+      final callable = _resolveFunctions().httpsCallable('verifyRecoveryOtp');
+      final result = await callable.call<dynamic>({
+        'identifier': normalizedIdentifier,
+        'code': sanitizedCode,
+      });
+      final data = result.data;
+      if (data is Map) {
+        return data['verified'] == true || data['success'] == true;
+      }
+      return true;
+    } on FirebaseAuthException {
+      rethrow;
+    } on FirebaseFunctionsException catch (e) {
+      throw AuthService.mapRecoveryFunctionsException(
+        e,
+        identifier: normalizedIdentifier,
+        isVerification: true,
+      );
+    }
   }
 
-  /// Dispatches a 6-digit OTP to a secondary/recovery email address and records
-  /// the verification challenge in Firestore (`auth_recovery_otps`).
+  /// Dispatches a server-generated 6-digit OTP to a secondary/recovery [email]
+  /// by invoking the `requestRecoveryOtp` HTTPS Callable Cloud Function.
   Future<void> sendSecondaryEmailOtp(String email) async {
     final normalizedEmail = normalizeAndValidateEmail(email);
-    final now = _clock();
-    final code = _generateSixDigitOtp();
-
-    final challenge = SecondaryEmailOtpChallenge(
-      email: normalizedEmail,
-      code: code,
-      createdAt: now,
-      expiresAt: now.add(otpExpiration),
-      verified: false,
-      attempts: 0,
-    );
-
-    _memoryOtpStore[normalizedEmail] = challenge;
-
-    final db = _resolveFirestore();
-    if (db != null) {
-      try {
-        await db
-            .collection('auth_recovery_otps')
-            .doc(normalizedEmail)
-            .set(challenge.toMap());
-      } on FirebaseAuthException {
-        rethrow;
-      } on FirebaseException catch (e) {
-        if (e.code == 'resource-exhausted' || e.code == 'too-many-requests') {
-          throw FirebaseAuthException(
-            code: 'too-many-requests',
-            message: 'Too many OTP requests. Please wait before trying again.',
-          );
-        }
-        rethrow;
-      }
-    }
+    await requestRecoveryOtp(normalizedEmail);
   }
 
-  /// Verifies the 6-digit OTP [code] sent to [email].
+  /// Verifies the 6-digit OTP [code] sent to [email] by invoking the
+  /// `verifyRecoveryOtp` HTTPS Callable Cloud Function.
   ///
-  /// Returns `true` when the code matches an active, unexpired challenge.
+  /// Returns `true` when the server confirms and consumes an active challenge.
   /// Throws a [FirebaseAuthException] with `invalid-verification-code`,
   /// `session-expired`, or `too-many-requests` on validation failure.
   Future<bool> verifySecondaryEmailOtp({
@@ -204,87 +159,10 @@ class AuthRecoveryService {
     required String code,
   }) async {
     final normalizedEmail = normalizeAndValidateEmail(email);
-    final sanitizedCode = code.trim();
-
-    if (sanitizedCode.length != 6 || !RegExp(r'^\d{6}$').hasMatch(sanitizedCode)) {
-      throw FirebaseAuthException(
-        code: 'invalid-verification-code',
-        message: 'The verification code entered is invalid.',
-      );
-    }
-
-    final db = _resolveFirestore();
-    SecondaryEmailOtpChallenge? challenge = _memoryOtpStore[normalizedEmail];
-
-    if (db != null) {
-      try {
-        final doc = await db
-            .collection('auth_recovery_otps')
-            .doc(normalizedEmail)
-            .get();
-        if (doc.exists && doc.data() != null) {
-          challenge = SecondaryEmailOtpChallenge.fromMap(doc.data()!);
-        }
-      } on FirebaseAuthException {
-        rethrow;
-      }
-    }
-
-    if (challenge == null) {
-      throw FirebaseAuthException(
-        code: 'session-expired',
-        message: 'No active verification code found. Please request a new code.',
-      );
-    }
-
-    if (challenge.attempts >= maxOtpAttempts) {
-      throw FirebaseAuthException(
-        code: 'too-many-requests',
-        message: 'Too many failed verification attempts. Please try again later.',
-      );
-    }
-
-    if (challenge.isExpired(_clock())) {
-      throw FirebaseAuthException(
-        code: 'session-expired',
-        message: 'The verification code has expired. Please request a new code.',
-      );
-    }
-
-    if (challenge.code != sanitizedCode) {
-      final updatedChallenge = challenge.copyWith(
-        attempts: challenge.attempts + 1,
-      );
-      _memoryOtpStore[normalizedEmail] = updatedChallenge;
-      if (db != null) {
-        await db
-            .collection('auth_recovery_otps')
-            .doc(normalizedEmail)
-            .set(updatedChallenge.toMap(), SetOptions(merge: true));
-      }
-      if (updatedChallenge.attempts >= maxOtpAttempts) {
-        throw FirebaseAuthException(
-          code: 'too-many-requests',
-          message: 'Too many failed verification attempts. Please try again later.',
-        );
-      }
-      throw FirebaseAuthException(
-        code: 'invalid-verification-code',
-        message: 'The verification code entered is invalid.',
-      );
-    }
-
-    final verifiedChallenge = challenge.copyWith(verified: true);
-    _memoryOtpStore[normalizedEmail] = verifiedChallenge;
-
-    if (db != null) {
-      await db
-          .collection('auth_recovery_otps')
-          .doc(normalizedEmail)
-          .set(verifiedChallenge.toMap(), SetOptions(merge: true));
-    }
-
-    return true;
+    return verifyRecoveryOtp(
+      identifier: normalizedEmail,
+      code: code,
+    );
   }
 
   /// Updates the authenticated user's phone number in Firebase Auth (when a
@@ -320,7 +198,8 @@ class AuthRecoveryService {
           message: 'Verification session has expired. Please request a new code.',
         );
       }
-      if (cleanSmsCode.length != 6 || !RegExp(r'^\d{6}$').hasMatch(cleanSmsCode)) {
+      if (cleanSmsCode.length != 6 ||
+          !RegExp(r'^\d{6}$').hasMatch(cleanSmsCode)) {
         throw FirebaseAuthException(
           code: 'invalid-verification-code',
           message: 'The verification code entered is invalid.',
@@ -337,7 +216,8 @@ class AuthRecoveryService {
       await user.updatePhoneNumber(effectiveCredential);
     }
 
-    final effectiveUid = uid?.trim().isNotEmpty == true ? uid!.trim() : user?.uid;
+    final effectiveUid =
+        uid?.trim().isNotEmpty == true ? uid!.trim() : user?.uid;
     final db = _resolveFirestore();
     if (db != null && effectiveUid != null && effectiveUid.isNotEmpty) {
       await db.collection('users').doc(effectiveUid).set({
@@ -364,7 +244,8 @@ class AuthRecoveryService {
     if (user == null && existingCredential != null) {
       final auth = _resolveAuth();
       if (auth != null) {
-        final signInResult = await auth.signInWithCredential(existingCredential);
+        final signInResult =
+            await auth.signInWithCredential(existingCredential);
         user = signInResult.user;
       }
     }
@@ -386,7 +267,8 @@ class AuthRecoveryService {
         'isAnonymous': false,
         if (linkedUser.email != null && linkedUser.email!.isNotEmpty)
           'email': linkedUser.email,
-        if (linkedUser.phoneNumber != null && linkedUser.phoneNumber!.isNotEmpty)
+        if (linkedUser.phoneNumber != null &&
+            linkedUser.phoneNumber!.isNotEmpty)
           'phoneNumber': linkedUser.phoneNumber,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
@@ -447,5 +329,9 @@ class AuthRecoveryService {
 /// Riverpod provider for [AuthRecoveryService].
 final authRecoveryServiceProvider = Provider<AuthRecoveryService>((ref) {
   final firestore = ref.watch(firebaseFirestoreProvider);
-  return AuthRecoveryService(firestore: firestore);
+  final functions = ref.watch(firebaseFunctionsProvider);
+  return AuthRecoveryService(
+    firestore: firestore,
+    functions: functions,
+  );
 });
