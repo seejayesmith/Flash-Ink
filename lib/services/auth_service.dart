@@ -853,11 +853,20 @@ class AuthService {
       } catch (_) {}
 
       // 2. Delete storage files if they exist (ignore errors if missing)
+      for (final path in [
+        'user_profiles/$uid.jpg',
+        'user_profiles/$uid.png',
+        'artist_profiles/$uid.jpg',
+        'artist_profiles/$uid.png',
+      ]) {
+        try {
+          await FirebaseStorage.instance.ref().child(path).delete();
+        } catch (_) {}
+      }
       try {
-        await FirebaseStorage.instance.ref().child('user_profiles/$uid.jpg').delete();
-      } catch (_) {}
-      try {
-        await FirebaseStorage.instance.ref().child('artist_profiles/$uid.jpg').delete();
+        await _deleteStorageFolderRecursively(
+          FirebaseStorage.instance.ref().child('artists/$uid/flash'),
+        );
       } catch (_) {}
 
       // 3. Delete the Auth account
@@ -876,6 +885,20 @@ class AuthService {
       throw _handleFirebaseAuthException(e);
     } catch (e) {
       throw Exception('Failed to delete account: ${e.toString()}');
+    }
+  }
+
+  Future<void> _deleteStorageFolderRecursively(Reference folderRef) async {
+    final listResult = await folderRef.listAll();
+    for (final item in listResult.items) {
+      try {
+        await item.delete();
+      } catch (_) {}
+    }
+    for (final prefix in listResult.prefixes) {
+      try {
+        await _deleteStorageFolderRecursively(prefix);
+      } catch (_) {}
     }
   }
 

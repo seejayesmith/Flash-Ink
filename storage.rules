@@ -1,24 +1,91 @@
 rules_version = '2';
+
 service firebase.storage {
   match /b/{bucket}/o {
-    match /user_profiles/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null;
+
+    // =========================================================================
+    // HELPER FUNCTIONS
+    // =========================================================================
+
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    match /artist_profiles/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null;
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
     }
 
-    match /flash_artworks/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null;
+    // Matches flat files named "{uid}.jpg", "{uid}.png", "{uid}.jpeg", or "{uid}.webp"
+    function isOwnFlatProfileFile(fileName) {
+      return isSignedIn() && (
+        fileName == request.auth.uid + '.jpg' ||
+        fileName == request.auth.uid + '.png' ||
+        fileName == request.auth.uid + '.jpeg' ||
+        fileName == request.auth.uid + '.webp'
+      );
     }
 
+    // Ensures uploads (create/update) are images under 10 MB; allows delete (request.resource == null)
+    function isValidImageWrite() {
+      return request.resource == null || (
+        request.resource.size < 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*')
+      );
+    }
+
+    // =========================================================================
+    // 1. CLIENT PROFILE PHOTOS
+    // =========================================================================
+
+    // Current flat structure: user_profiles/{uid}.png or user_profiles/{uid}.jpg
+    match /user_profiles/{fileName} {
+      allow read: if true;
+      allow write: if isOwnFlatProfileFile(fileName) && isValidImageWrite();
+    }
+
+    // Future-proof subfolder structure: user_profiles/{userId}/{fileName}
+    match /user_profiles/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isOwner(userId) && isValidImageWrite();
+    }
+
+    // =========================================================================
+    // 2. ARTIST PROFILE PHOTOS
+    // =========================================================================
+
+    // Current flat structure: artist_profiles/{uid}.jpg or artist_profiles/{uid}.png
+    match /artist_profiles/{fileName} {
+      allow read: if true;
+      allow write: if isOwnFlatProfileFile(fileName) && isValidImageWrite();
+    }
+
+    // Future-proof subfolder structure: artist_profiles/{artistId}/{fileName}
+    match /artist_profiles/{artistId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isOwner(artistId) && isValidImageWrite();
+    }
+
+    // =========================================================================
+    // 3. ARTIST FLASH ARTWORKS & PORTFOLIOS
+    // =========================================================================
+
+    // Actual path used in ArtistFlashUploadScreen: artists/{artistId}/flash/{itemId}.jpg
+    match /artists/{artistId}/flash/{allPaths=**} {
+      allow read: if true;
+      allow write: if isOwner(artistId) && isValidImageWrite();
+    }
+
+    // Optional portfolio subfolder if added later: artist_portfolios/{artistId}/{allPaths=**}
+    match /artist_portfolios/{artistId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isOwner(artistId) && isValidImageWrite();
+    }
+
+    // =========================================================================
+    // DEFAULT DENY ALL OTHER PATHS
+    // =========================================================================
     match /{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }

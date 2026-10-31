@@ -14,7 +14,6 @@ import '../../widgets/flash_switch.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/photo_source_bottom_sheet.dart';
-import '../../widgets/reauthentication_bottom_sheet.dart';
 import 'artist_edit_profile_screen.dart';
 import 'artist_account_settings_screen.dart';
 import '../app_info_screen.dart';
@@ -44,7 +43,6 @@ class ArtistAccountScreen extends StatefulWidget {
 class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
   late final AuthService _authService = widget.authService ?? AuthService();
 
-  bool _isDeleting = false;
   bool _isUploadingPhoto = false;
 
   // Profile fields
@@ -395,14 +393,14 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
           initialLocation: _location,
           onSave: (newName, newUsername, newBio, newLocation) async {
             setState(() {
-              _displayName = newName;
+              _displayName = newUsername;
               _username = newUsername;
               _bio = newBio;
               _location = newLocation;
             });
 
             await _updateProfileInFirestore(
-              name: newName,
+              name: newUsername,
               username: newUsername,
               bio: newBio,
               location: newLocation,
@@ -413,9 +411,10 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
     );
 
     if (result != null && mounted) {
+      final updatedUsername = result['username'] ?? (result['name'] ?? _username);
       setState(() {
-        _displayName = result['name'] ?? _displayName;
-        _username = result['username'] ?? _username;
+        _displayName = updatedUsername;
+        _username = updatedUsername;
         _bio = result['bio'] ?? _bio;
         _location = result['location'] ?? _location;
       });
@@ -456,7 +455,7 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
       MaterialPageRoute(
         builder: (_) => ArtistAccountSettingsScreen(
           email: _email,
-          onDeleteAccount: _handleDeleteAccount,
+          authService: _authService,
         ),
       ),
     );
@@ -521,149 +520,6 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
           (route) => false,
         );
       }
-    }
-  }
-
-  Future<void> _handleDeleteAccount() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        bool dialogDismissed = false;
-        return AlertDialog(
-          key: const Key('delete_account_dialog'),
-          backgroundColor: const Color(0xFF1E2020),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
-          ),
-          title: Text(
-            'Delete Account',
-            key: const Key('delete_account_modal_title'),
-            textAlign: TextAlign.center,
-            style: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFFF9FAFA),
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-            ),
-          ),
-          content: Text(
-            'Are you sure you want to delete your account? This action cannot be undone.',
-            key: const Key('delete_account_modal_message'),
-            textAlign: TextAlign.center,
-            style: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFF919696),
-              fontSize: 14,
-              height: 1.4,
-            ),
-          ),
-          actionsAlignment: MainAxisAlignment.spaceEvenly,
-          actions: [
-            TextButton(
-              key: const Key('delete_account_cancel_button'),
-              onPressed: () {
-                if (dialogDismissed) return;
-                dialogDismissed = true;
-                Navigator.of(dialogContext).pop(false);
-              },
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF919696),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              key: const Key('delete_account_confirm_button'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEF4444),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              onPressed: () {
-                if (dialogDismissed) return;
-                dialogDismissed = true;
-                Navigator.of(dialogContext).pop(true);
-              },
-              child: Text(
-                'Delete Account',
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed == true && mounted) {
-      setState(() => _isDeleting = true);
-      try {
-        await _authService.deleteAccount();
-        if (mounted) {
-          _onAccountDeletedSuccessfully();
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() => _isDeleting = false);
-          final isRequiresRecentLogin = e is RequiresRecentLoginException ||
-              (e is FirebaseAuthException && e.code == 'requires-recent-login') ||
-              e.toString().toLowerCase().contains('requires recent authentication') ||
-              e.toString().toLowerCase().contains('requires-recent-login');
-
-          final errorMsg = e is FirebaseAuthException
-              ? _authService.handleFirebaseAuthException(e).toString().replaceFirst('Exception: ', '')
-              : e.toString().replaceFirst('Exception: ', '');
-
-          if (isRequiresRecentLogin) {
-            _showReauthenticationSheet();
-          } else {
-            FlashSnackBar.showError(context, errorMsg);
-          }
-        }
-      }
-    }
-  }
-
-  void _onAccountDeletedSuccessfully() {
-    if (!mounted) return;
-    invalidateUserSessionFromContext(context);
-    FlashSnackBar.showSuccess(
-      context,
-      'Account deleted. A confirmation email has been sent.',
-      duration: const Duration(seconds: 4),
-    );
-
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const SplashScreen()),
-      (route) => false,
-    );
-  }
-
-  Future<void> _showReauthenticationSheet() async {
-    final deleted = await ReauthenticationBottomSheet.show(
-      context: context,
-      authService: _authService,
-    );
-
-    if (deleted == true && mounted) {
-      _onAccountDeletedSuccessfully();
-    } else if (mounted) {
-      FlashSnackBar.showError(
-        context,
-        'This action requires recent authentication. Please log in again before deleting your account.',
-        action: SnackBarAction(
-          label: 'Verify',
-          textColor: AppTheme.gold,
-          onPressed: () => _showReauthenticationSheet(),
-        ),
-      );
     }
   }
 
@@ -749,14 +605,6 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
             _buildSectionHeader('PERSONAL INFORMATION'),
             const SizedBox(height: 10),
             _buildSettingsContainer([
-              _buildSettingsTile(
-                icon: Icons.person_outline,
-                title: 'Display Name',
-                subtitle: _displayName,
-                trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
-                onTap: _showEditProfileDialog,
-              ),
-              const Divider(color: AppTheme.darkBorder, height: 1),
               _buildSettingsTile(
                 icon: Icons.alternate_email,
                 title: 'Username',
@@ -926,12 +774,8 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
 
             const SizedBox(height: 32),
 
-            // Account Actions: Sign Out & Delete Account
+            // Account Actions: Sign Out
             _buildSignOutButton(),
-
-            const SizedBox(height: 12),
-
-            _buildDeleteAccountButton(),
 
             const SizedBox(height: 24),
 
@@ -1241,46 +1085,6 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
           padding: const EdgeInsets.symmetric(vertical: 14),
           backgroundColor: AppTheme.onyxContainer,
           side: const BorderSide(color: AppTheme.goldBorder, width: 1.2),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDeleteAccountButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        key: const Key('artist_account_delete_account_button'),
-        onPressed: _isDeleting ? null : _handleDeleteAccount,
-        icon: const Icon(
-          Icons.delete_outline,
-          color: Color(0xFFEF4444),
-          size: 18,
-        ),
-        label: _isDeleting
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFEF4444)),
-                ),
-              )
-            : Text(
-                'Delete Account',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFEF4444),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          backgroundColor: const Color(0x11EF4444),
-          side: const BorderSide(color: Color(0x55EF4444), width: 1.0),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),

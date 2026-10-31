@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
 import '../core/utils/distance_calculator.dart';
 import '../models/artist.dart';
 import '../models/studio_information.dart';
@@ -288,10 +291,70 @@ class ArtistRepository {
       // Best-effort if custom claim not yet minted on strict emulator rules.
     }
 
+    // 4. Invoke the `completeArtistOnboarding` callable Cloud Function and force-refresh token claims.
+    await invokeCompleteArtistOnboarding(
+      name: artist.name,
+      instagramHandle: normalizedHandle,
+      bio: artist.bio,
+      city: locationDisplay,
+      studioType: hydratedStudio.studioType,
+      minDeposit: minDeposit,
+      tags: mergedTags,
+      phoneNumber: phoneNumber.trim(),
+    );
+
     final savedSnapshot = await artistRef.get();
     if (savedSnapshot.exists && savedSnapshot.data() != null) {
       return Artist.fromMap(savedSnapshot.data()!, savedSnapshot.id);
     }
     return artist;
+  }
+
+  /// Invokes the `completeArtistOnboarding` callable Cloud Function to stamp
+  /// `{ role: 'artist', verifiedArtist: true }` custom claims and immediately
+  /// refreshes the client's Firebase Auth token claims.
+  static Future<void> invokeCompleteArtistOnboarding({
+    required String name,
+    String instagramHandle = '',
+    String bio = '',
+    String city = '',
+    String studioType = '',
+    int minDeposit = 100,
+    List<String> tags = const [],
+    String phoneNumber = '',
+  }) async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      final idToken = await currentUser?.getIdToken();
+      if (idToken != null && idToken.isNotEmpty) {
+        await http
+            .post(
+              Uri.parse(
+                'https://us-central1-flash-ink-app.cloudfunctions.net/completeArtistOnboarding',
+              ),
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer $idToken',
+              },
+              body: jsonEncode({
+                'data': {
+                  'name': name,
+                  'instagramHandle': instagramHandle,
+                  'bio': bio,
+                  'city': city,
+                  'studioType': studioType,
+                  'minDeposit': minDeposit,
+                  'tags': tags,
+                  'phoneNumber': phoneNumber,
+                },
+              }),
+            )
+            .timeout(const Duration(seconds: 4));
+      }
+    } catch (_) {}
+
+    try {
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
+    } catch (_) {}
   }
 }

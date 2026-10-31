@@ -66,6 +66,9 @@ class ArtistShareLinkScreen extends StatelessWidget {
     return 'Resident artist specializing in flash & custom illustrative blackwork.';
   }
 
+  Future<void> _finishOnboarding(BuildContext context) =>
+      _completeOnboarding(context);
+
   Future<void> _completeOnboarding(BuildContext context) async {
     final effectiveAuth = authService ?? AuthService();
     User? user = effectiveAuth.currentUser;
@@ -152,6 +155,19 @@ class ArtistShareLinkScreen extends StatelessWidget {
             )
             .timeout(const Duration(seconds: 10));
 
+        await ArtistRepository.invokeCompleteArtistOnboarding(
+          name: cleanDisplayName,
+          instagramHandle: _displayHandle,
+          bio: _artistBio,
+          city: effectiveLocation,
+          studioType: hydratedStudio.studioType,
+          minDeposit: deposit,
+          tags: <String>{...styleTags, ...identityTags}.toList(),
+          phoneNumber: userPhone,
+        );
+        try {
+          await FirebaseAuth.instance.currentUser?.getIdToken(true);
+        } catch (_) {}
         try {
           await user.getIdToken(true).timeout(const Duration(seconds: 4));
         } catch (_) {}
@@ -333,13 +349,13 @@ class ArtistShareLinkScreen extends StatelessWidget {
               Navigator.pop(context);
             }
           : null,
-      onSkip: () => _completeOnboarding(context),
+      onSkip: () => _finishOnboarding(context),
       skipKey: const Key('skip_share_link_button'),
       skipText: 'Skip',
       title: 'Tell em where to\nfind you',
       ctaText: 'DONE',
       ctaKey: const Key('done_share_button'),
-      onCtaPressed: () => _completeOnboarding(context),
+      onCtaPressed: () => _finishOnboarding(context),
       backgroundOverlay: const TattooBackgroundWrapper(child: SizedBox.expand()),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

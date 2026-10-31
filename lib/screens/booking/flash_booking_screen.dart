@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -218,9 +219,23 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     if (paymentResult.isSuccess) {
       BookingSyncService.claimedFlashPieceIds.add(widget.flash.id);
 
-      // 1. Instantiate domain FlashBooking record
+      String clientId;
+      try {
+        clientId = FirebaseAuth.instance.currentUser!.uid;
+      } catch (_) {
+        clientId = BookingSyncService.resolveCurrentUid();
+      }
+      final artistId = (widget.artist?.id != null && widget.artist!.id.trim().isNotEmpty)
+          ? widget.artist!.id.trim()
+          : (widget.flash.artistId.trim().isNotEmpty
+              ? widget.flash.artistId.trim()
+              : 'artist_unknown');
+
+      // 1. Instantiate domain FlashBooking record and persist to /bookings/{bookingId}
       final booking = FlashBooking(
         id: _confirmationCode,
+        clientId: clientId,
+        artistId: artistId,
         flash: widget.flash,
         artist: widget.artist,
         selectedDate: _selectedDate,
@@ -237,9 +252,30 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         createdAt: DateTime.now(),
       );
 
+      BookingSyncService.syncBookingToCloud(
+        bookingId: booking.id,
+        flashId: widget.flash.id,
+        artistId: artistId,
+        clientId: clientId,
+        depositAmount: booking.depositAmount,
+        totalAmount: booking.totalAmount,
+        flashTitle: widget.flash.title,
+        selectedDate: booking.selectedDate.toIso8601String(),
+        selectedTimeSlot: booking.selectedTimeSlot,
+        placement: booking.placement,
+        clientName: booking.clientName,
+        clientEmail: booking.clientEmail,
+        clientPhone: booking.clientPhone,
+        clientNotes: booking.clientNotes,
+        isSilentAppointment: booking.isSilentAppointment,
+        status: 'pending',
+      );
+
       // 2. Synchronize to Artist Calendar schedule
       final calendarApt = DashboardAppointment(
         id: 'cal_${booking.id}',
+        clientId: clientId,
+        artistId: artistId,
         clientName: booking.clientName,
         serviceType: 'Flash: ${widget.flash.title}',
         duration: widget.flash.estimatedTime,

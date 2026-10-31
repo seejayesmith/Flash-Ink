@@ -124,7 +124,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('PERSONAL INFORMATION'), findsOneWidget);
-      expect(find.text('Display Name'), findsOneWidget);
+      expect(find.text('Display Name'), findsNothing);
       expect(find.text('Username'), findsOneWidget);
       expect(find.text('Email Address'), findsOneWidget);
       expect(find.text('Phone Number'), findsOneWidget);
@@ -159,24 +159,39 @@ void main() {
       expect(find.text('Health & Safety Protocol'), findsNothing);
     });
 
-    testWidgets('Tapping Display Name opens edit profile bottom sheet and updates fields', (tester) async {
+    testWidgets('Tapping Username opens edit profile screen and updates fields', (tester) async {
       await tester.pumpWidget(buildTestWidget());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Display Name'));
+      await tester.tap(find.text('Username'));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('edit_profile_sheet_title')), findsOneWidget);
-      expect(find.byKey(const Key('edit_profile_name_field')), findsOneWidget);
+      expect(find.byKey(const Key('edit_profile_username_field')), findsOneWidget);
       expect(find.byKey(const Key('edit_profile_bio_field')), findsOneWidget);
       expect(find.byKey(const Key('save_profile_button')), findsOneWidget);
 
-      await tester.enterText(find.byKey(const Key('edit_profile_name_field')), 'OddMaree Studio');
+      await tester.enterText(find.byKey(const Key('edit_profile_username_field')), 'oddmaree_studio');
       await tester.tap(find.byKey(const Key('save_profile_button')));
       await tester.pumpAndSettle();
       await tester.pump(const Duration(milliseconds: 700));
 
-      expect(find.text('OddMaree Studio'), findsWidgets);
+      expect(find.text('oddmaree_studio'), findsWidgets);
+      expect(find.text('@oddmaree_studio'), findsWidgets);
+    });
+
+    testWidgets('Edit profile shows error and prevents saving when username is empty', (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Username'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byKey(const Key('edit_profile_username_field')), '');
+      await tester.tap(find.byKey(const Key('save_profile_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Username cannot be empty'), findsOneWidget);
+      expect(find.byKey(const Key('edit_profile_sheet_title')), findsOneWidget);
     });
 
     testWidgets('Renders Support & Legal section and footer', (tester) async {

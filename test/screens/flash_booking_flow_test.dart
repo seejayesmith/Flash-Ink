@@ -392,6 +392,7 @@ void main() {
           slotDurationMinutes: 60,
           bufferDurationMinutes: 30,
         ),
+        artistId: testArtist.id,
       );
 
       final generated = ArtistDashboardRepository.booksSchedule.generateTimeSlots();

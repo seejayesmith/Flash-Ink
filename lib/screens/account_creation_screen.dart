@@ -209,13 +209,18 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
     setState(() => _isLoading = true);
     try {
       final credential = await _authService.signInAnonymously();
-      // Save role for anonymous user
+      // Save onboardingRole and default client role for anonymous user
       if (credential.user != null) {
         try {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(credential.user!.uid)
-              .set({'role': widget.role, 'isAnonymous': true}, SetOptions(merge: true));
+          final uid = credential.user!.uid;
+          final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+          final existing = await userRef.get();
+          await userRef.set({
+            'uid': uid,
+            if (!existing.exists) 'role': 'client',
+            'onboardingRole': widget.role,
+            'isAnonymous': true,
+          }, SetOptions(merge: true));
         } catch (_) {}
       }
 

@@ -26,6 +26,8 @@ class BookingTimeSlot {
 /// Represents a confirmed or in-progress flash tattoo booking.
 class FlashBooking {
   final String id;
+  final String? clientId;
+  final String? artistId;
   final FlashArtwork flash;
   final Artist? artist;
   final DateTime selectedDate;
@@ -45,6 +47,8 @@ class FlashBooking {
 
   const FlashBooking({
     required this.id,
+    this.clientId,
+    this.artistId,
     required this.flash,
     this.artist,
     required this.selectedDate,

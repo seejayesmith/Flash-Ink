@@ -1,8 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/artist.dart';
 import '../models/artist_dashboard_data.dart';
+import '../services/booking_sync_service.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/flash_snack_bar.dart';
 import '../widgets/flash_switch.dart';
@@ -120,8 +122,20 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
         ? widget.artist.flashArtworks.first.imageUrl
         : 'assets/images/flash_traditional_panther.jpg';
 
+    String clientId;
+    try {
+      clientId = FirebaseAuth.instance.currentUser!.uid;
+    } catch (_) {
+      clientId = BookingSyncService.resolveCurrentUid();
+    }
+    final artistId = widget.artist.id.trim().isNotEmpty
+        ? widget.artist.id.trim()
+        : 'artist_unknown';
+
     final newRequest = BookingRequest(
       id: reqId,
+      clientId: clientId,
+      artistId: artistId,
       clientName: 'Alex Rivers',
       timeAgo: 'Just now',
       conceptDescription: _conceptController.text.trim(),

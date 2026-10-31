@@ -90,10 +90,14 @@ class _EmailAuthScreenState extends State<EmailAuthScreen> {
 
       if (mounted && credential.user != null) {
         try {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(credential.user!.uid)
-              .set({'role': widget.role}, SetOptions(merge: true));
+          final uid = credential.user!.uid;
+          final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+          final existing = await userRef.get();
+          await userRef.set({
+            'uid': uid,
+            if (!existing.exists) 'role': 'client',
+            'onboardingRole': widget.role,
+          }, SetOptions(merge: true));
         } catch (_) {}
 
         if (!mounted) return;

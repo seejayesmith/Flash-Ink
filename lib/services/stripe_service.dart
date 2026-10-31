@@ -251,9 +251,14 @@ class StripeService {
             ? int.tryParse(metadata['total_price'].toString()) ?? (depositDollars * 3)
             : (depositDollars * 3);
 
+        final clientId = (metadata['client_id'] ?? 'client_unknown').toString();
+        final artistId = (metadata['artist_id'] ?? 'artist_unknown').toString();
+
         ArtistDashboardRepository.addCalendarAppointment(
           DashboardAppointment(
             id: calId,
+            clientId: clientId,
+            artistId: artistId,
             clientName: customerName,
             serviceType: 'Flash: $flashTitle',
             duration: '2.0 hrs',

@@ -8,6 +8,8 @@ import '../services/booking_sync_service.dart';
 /// Represents a scheduled appointment for an artist.
 class DashboardAppointment {
   final String id;
+  final String? clientId;
+  final String? artistId;
   final String clientName;
   final String serviceType;
   final String duration;
@@ -25,6 +27,8 @@ class DashboardAppointment {
 
   const DashboardAppointment({
     required this.id,
+    this.clientId,
+    this.artistId,
     required this.clientName,
     required this.serviceType,
     required this.duration,
@@ -43,6 +47,8 @@ class DashboardAppointment {
 
   DashboardAppointment copyWith({
     String? id,
+    String? clientId,
+    String? artistId,
     String? clientName,
     String? serviceType,
     String? duration,
@@ -60,6 +66,8 @@ class DashboardAppointment {
   }) {
     return DashboardAppointment(
       id: id ?? this.id,
+      clientId: clientId ?? this.clientId,
+      artistId: artistId ?? this.artistId,
       clientName: clientName ?? this.clientName,
       serviceType: serviceType ?? this.serviceType,
       duration: duration ?? this.duration,
@@ -115,6 +123,8 @@ class DashboardAppointment {
 /// Represents an incoming booking / custom request waiting for artist review.
 class BookingRequest {
   final String id;
+  final String? clientId;
+  final String? artistId;
   final String clientName;
   final String timeAgo;
   final String conceptDescription;
@@ -131,6 +141,8 @@ class BookingRequest {
 
   const BookingRequest({
     required this.id,
+    this.clientId,
+    this.artistId,
     required this.clientName,
     required this.timeAgo,
     required this.conceptDescription,
@@ -148,6 +160,8 @@ class BookingRequest {
 
   BookingRequest copyWith({
     String? id,
+    String? clientId,
+    String? artistId,
     String? clientName,
     String? timeAgo,
     String? conceptDescription,
@@ -164,6 +178,8 @@ class BookingRequest {
   }) {
     return BookingRequest(
       id: id ?? this.id,
+      clientId: clientId ?? this.clientId,
+      artistId: artistId ?? this.artistId,
       clientName: clientName ?? this.clientName,
       timeAgo: timeAgo ?? this.timeAgo,
       conceptDescription: conceptDescription ?? this.conceptDescription,
@@ -437,9 +453,15 @@ class ArtistDashboardRepository {
     locationNote: 'OddMaree Studio • Portland, OR',
   );
 
-  static void updateBooksSchedule(ArtistBooksSchedule updated) {
+  static void updateBooksSchedule(
+    ArtistBooksSchedule updated, {
+    required String artistId,
+  }) {
     booksSchedule = updated;
-    BookingSyncService.syncBooksScheduleToCloud(updated);
+    BookingSyncService.syncBooksScheduleToCloud(
+      updated,
+      artistId: artistId,
+    );
   }
 
   /// In-memory VIP waitlist entries
@@ -670,20 +692,33 @@ class ArtistDashboardRepository {
 
   /// Adds a newly submitted custom tattoo brief to the artist's pending requests queue.
   static void addPendingRequest(BookingRequest request) {
-    pendingRequests = [request, ...pendingRequests];
+    final resolvedClientId = request.clientId ?? BookingSyncService.resolveCurrentUid();
+    final resolvedArtistId = request.artistId ?? 'artist_unknown';
+    final enrichedRequest = request.copyWith(
+      clientId: resolvedClientId,
+      artistId: resolvedArtistId,
+    );
+    pendingRequests = [enrichedRequest, ...pendingRequests];
     _stats = ArtistDashboardStats(
       bookingsThisWeek: _stats.bookingsThisWeek,
       newRequests: _stats.newRequests + 1,
       pendingCount: pendingRequests.length,
     );
     notifyPendingRequestsChanged();
-    BookingSyncService.syncCustomRequestToCloud(request, status: 'pending');
+    BookingSyncService.syncCustomRequestToCloud(
+      enrichedRequest,
+      clientId: resolvedClientId,
+      artistId: resolvedArtistId,
+      status: 'pending',
+    );
     BookingSyncService.sendBookingNotification(
-      recipientName: request.artistName,
-      title: 'New Custom Request • ${request.clientName}',
-      body: '${request.category} (${request.placement}) • Est. \$${request.estimatedPrice}',
+      senderId: resolvedClientId,
+      recipientId: resolvedArtistId,
+      recipientName: enrichedRequest.artistName,
+      title: 'New Custom Request • ${enrichedRequest.clientName}',
+      body: '${enrichedRequest.category} (${enrichedRequest.placement}) • Est. \$${enrichedRequest.estimatedPrice}',
       category: 'custom_request',
-      appointmentId: request.id,
+      appointmentId: enrichedRequest.id,
     );
   }
 
@@ -743,8 +778,12 @@ class ArtistDashboardRepository {
     notifyPendingRequestsChanged();
 
     // 4. Create & register Artist Calendar appointment
+    final resolvedArtistId = request.artistId ?? BookingSyncService.resolveCurrentUid('artist_1');
+    final resolvedClientId = request.clientId ?? 'client_unknown';
     final calendarApt = DashboardAppointment(
       id: 'cal_custom_${request.id}',
+      clientId: resolvedClientId,
+      artistId: resolvedArtistId,
       clientName: request.clientName,
       serviceType: 'Custom: ${request.category}',
       duration: durationLabel,
@@ -760,8 +799,15 @@ class ArtistDashboardRepository {
       dotColor: const Color(0xFF22C55E),
     );
     addCalendarAppointment(calendarApt);
-    BookingSyncService.syncCustomRequestToCloud(request, status: 'accepted');
+    BookingSyncService.syncCustomRequestToCloud(
+      request,
+      clientId: resolvedClientId,
+      artistId: resolvedArtistId,
+      status: 'accepted',
+    );
     BookingSyncService.sendBookingNotification(
+      senderId: resolvedArtistId,
+      recipientId: resolvedClientId,
       recipientName: request.clientName,
       title: 'Custom Request Confirmed!',
       body: '${request.artistName} scheduled your ${request.category} session on $formattedDate at $effectiveTimeSlot.',
@@ -847,7 +893,12 @@ class ArtistDashboardRepository {
       );
       notifyPendingRequestsChanged();
       if (matching.isNotEmpty) {
-        BookingSyncService.syncCustomRequestToCloud(matching.first, status: 'declined');
+        BookingSyncService.syncCustomRequestToCloud(
+          matching.first,
+          clientId: matching.first.clientId,
+          artistId: matching.first.artistId,
+          status: 'declined',
+        );
       }
     }
   }
@@ -1135,18 +1186,31 @@ class ArtistDashboardRepository {
 
   /// Adds a confirmed booking appointment to the artist's calendar schedule.
   static void addCalendarAppointment(DashboardAppointment appointment) {
-    calendarAppointments.add(appointment);
-    BookingSyncService.syncAppointmentToCloud(appointment, status: 'confirmed');
+    final resolvedClientId = appointment.clientId ?? BookingSyncService.resolveCurrentUid();
+    final resolvedArtistId = appointment.artistId ?? BookingSyncService.resolveCurrentUid('artist_unknown');
+    final enrichedApt = appointment.copyWith(
+      clientId: resolvedClientId,
+      artistId: resolvedArtistId,
+    );
+    calendarAppointments.add(enrichedApt);
+    BookingSyncService.syncAppointmentToCloud(
+      enrichedApt,
+      clientId: resolvedClientId,
+      artistId: resolvedArtistId,
+      status: 'confirmed',
+    );
     final alreadyNotified = BookingSyncService.sentNotifications.any(
-      (n) => n.appointmentId == appointment.id && n.category == 'booking_confirmed',
+      (n) => n.appointmentId == enrichedApt.id && n.category == 'booking_confirmed',
     );
     if (!alreadyNotified) {
       BookingSyncService.sendBookingNotification(
-        recipientName: appointment.clientName,
+        senderId: resolvedClientId,
+        recipientId: resolvedArtistId,
+        recipientName: enrichedApt.clientName,
         title: 'Booking Confirmed!',
-        body: '${appointment.serviceType} scheduled for ${appointment.date} at ${appointment.time}.',
+        body: '${enrichedApt.serviceType} scheduled for ${enrichedApt.date} at ${enrichedApt.time}.',
         category: 'booking_confirmed',
-        appointmentId: appointment.id,
+        appointmentId: enrichedApt.id,
       );
     }
   }
@@ -1262,8 +1326,15 @@ class ArtistDashboardRepository {
     );
 
     // 6. Sync to Cloud Firestore & send notification
-    BookingSyncService.syncAppointmentToCloud(updatedApt, status: 'rescheduled');
+    BookingSyncService.syncAppointmentToCloud(
+      updatedApt,
+      clientId: updatedApt.clientId,
+      artistId: updatedApt.artistId,
+      status: 'rescheduled',
+    );
     BookingSyncService.sendBookingNotification(
+      senderId: updatedApt.artistId ?? BookingSyncService.resolveCurrentUid(),
+      recipientId: updatedApt.clientId ?? 'client_unknown',
       recipientName: updatedApt.clientName,
       title: 'Appointment Rescheduled',
       body: '${updatedApt.serviceType} moved to $formattedDate at $newTimeSlot.',
@@ -1355,8 +1426,15 @@ class ArtistDashboardRepository {
       ),
     );
 
-    BookingSyncService.syncAppointmentToCloud(removedApt, status: 'cancelled');
+    BookingSyncService.syncAppointmentToCloud(
+      removedApt,
+      clientId: removedApt.clientId,
+      artistId: removedApt.artistId,
+      status: 'cancelled',
+    );
     BookingSyncService.sendBookingNotification(
+      senderId: removedApt.artistId ?? BookingSyncService.resolveCurrentUid(),
+      recipientId: removedApt.clientId ?? 'client_unknown',
       recipientName: removedApt.clientName,
       title: 'Appointment Cancelled',
       body: 'Your ${removedApt.serviceType} session on ${removedApt.date} at ${removedApt.time} was cancelled.',

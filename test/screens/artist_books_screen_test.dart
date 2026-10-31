@@ -68,6 +68,7 @@ void main() {
           acceptTouchUps: true,
           locationNote: 'OddMaree Studio • Portland, OR',
         ),
+        artistId: 'test_artist',
       );
     });
 

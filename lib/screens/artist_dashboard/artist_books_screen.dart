@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/widgets/flash_bottom_nav_bar.dart';
@@ -195,16 +196,28 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
           : _locationController.text.trim(),
     );
 
-    // 1. Update in-memory repository
-    ArtistDashboardRepository.updateBooksSchedule(updated);
-
-    // 2. Hybrid sync with Firestore if authenticated
+    String artistUid;
     try {
-      final user = _authService.currentUser;
-      if (user != null) {
+      final injectedUser = _authService.currentUser;
+      artistUid = (injectedUser != null && injectedUser.uid.isNotEmpty)
+          ? injectedUser.uid
+          : FirebaseAuth.instance.currentUser!.uid;
+    } catch (_) {
+      artistUid = widget.artist?.id ?? '';
+    }
+
+    // 1. Update in-memory repository and sync to /artist_schedules/{uid}
+    ArtistDashboardRepository.updateBooksSchedule(
+      updated,
+      artistId: artistUid,
+    );
+
+    // 2. Sync isBooksOpen and booksSchedule to public /artists/{uid} document
+    try {
+      if (artistUid.isNotEmpty) {
         await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
+            .collection('artists')
+            .doc(artistUid)
             .set({
           'isBooksOpen': _isBooksOpen,
           'booksSchedule': updated.toMap(),
