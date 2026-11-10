@@ -125,12 +125,30 @@ final liveGpsCoordinatesProvider =
   LiveCoordinatesNotifier.new,
 );
 
+class UseLiveLocationNotifier extends Notifier<bool> {
+  @override
+  bool build() => true;
+
+  void setEnabled(bool enabled) {
+    state = enabled;
+  }
+}
+
+/// In-app user preference for querying live GPS coordinates.
+final useLiveLocationPreferenceProvider =
+    NotifierProvider<UseLiveLocationNotifier, bool>(
+  UseLiveLocationNotifier.new,
+);
+
 /// Combines live permitted Client GPS coordinates with a graceful fallback to
 /// the Client's persisted `/users/{uid}` profile coordinates (`latitude`/`longitude`).
 final effectiveClientCoordinatesProvider = Provider<GeoPointCoords?>((ref) {
-  final liveCoords = ref.watch(liveGpsCoordinatesProvider);
-  if (liveCoords != null && liveCoords.isValid) {
-    return liveCoords;
+  final useLive = ref.watch(useLiveLocationPreferenceProvider);
+  if (useLive) {
+    final liveCoords = ref.watch(liveGpsCoordinatesProvider);
+    if (liveCoords != null && liveCoords.isValid) {
+      return liveCoords;
+    }
   }
   final profile = ref.watch(currentUserProfileProvider).maybeWhen(
         data: (u) => u,
@@ -149,6 +167,34 @@ final artistDiscoveryStreamProvider = StreamProvider<List<Artist>>((ref) {
   return ref.watch(artistRepositoryProvider).watchActiveArtists();
 });
 
+/// Resolves the active authenticated user's unified profile photo URL (if any)
+/// from `/users/{uid}` or Firebase Auth `photoURL`.
+final activeUserPhotoUrlProvider = Provider<String?>((ref) {
+  final activeUid = ref.watch(activeUidProvider);
+  if (activeUid == null || activeUid.isEmpty) return null;
+
+  final profilePhoto = ref.watch(currentUserProfileProvider).maybeWhen(
+        data: (u) => u?.photoUrl,
+        orElse: () => null,
+      );
+  if (profilePhoto != null &&
+      profilePhoto.trim().isNotEmpty &&
+      !profilePhoto.trim().startsWith('local://')) {
+    return profilePhoto.trim();
+  }
+
+  try {
+    final authPhoto = ref.read(authServiceProvider).currentUser?.photoURL;
+    if (authPhoto != null &&
+        authPhoto.trim().isNotEmpty &&
+        !authPhoto.trim().startsWith('local://')) {
+      return authPhoto.trim();
+    }
+  } catch (_) {}
+
+  return null;
+});
+
 /// Reactive Artist discovery feed enriched with live Haversine distance (`e.g., 4.2 mi away`)
 /// computed against [effectiveClientCoordinatesProvider]. Recomputes dynamically whenever
 /// either the Artist's coordinates or the Client's coordinates change.
@@ -162,11 +208,27 @@ final artistsWithDistanceProvider = Provider<AsyncValue<List<Artist>>>((ref) {
           .toList(growable: false),
     );
   }
+  final activeUid = ref.watch(activeUidProvider);
+  final activePhotoUrl = ref.watch(activeUserPhotoUrlProvider);
   final artistsAsync = ref.watch(artistDiscoveryStreamProvider);
   return artistsAsync.whenData(
-    (artists) => artists
-        .map((artist) => artist.withLiveDistanceFrom(clientCoords))
-        .toList(growable: false),
+    (artists) => artists.map((artist) {
+      var resolved = artist;
+      if (activeUid != null &&
+          artist.id == activeUid &&
+          artist.avatarUrl.trim().isEmpty &&
+          activePhotoUrl != null &&
+          activePhotoUrl.isNotEmpty) {
+        resolved = artist.copyWith(avatarUrl: activePhotoUrl);
+        ArtistRepository.syncUnifiedProfilePhoto(
+          uid: activeUid,
+          photoUrl: activePhotoUrl,
+          firestore: ref.read(firebaseFirestoreProvider),
+          createArtistIfMissing: true,
+        );
+      }
+      return resolved.withLiveDistanceFrom(clientCoords);
+    }).toList(growable: false),
   );
 });
 
@@ -184,18 +246,34 @@ final artistDetailWithDistanceProvider =
     return Stream<Artist?>.value(match);
   }
 
+  final activeUid = ref.watch(activeUidProvider);
+  final activePhotoUrl = ref.watch(activeUserPhotoUrlProvider);
+
   return ref
       .watch(artistRepositoryProvider)
       .watchArtist(artistId)
-      .map((artist) => artist?.withLiveDistanceFrom(clientCoords));
+      .map((artist) {
+    if (artist == null) return null;
+    var resolved = artist;
+    if (activeUid != null &&
+        artist.id == activeUid &&
+        artist.avatarUrl.trim().isEmpty &&
+        activePhotoUrl != null &&
+        activePhotoUrl.isNotEmpty) {
+      resolved = artist.copyWith(avatarUrl: activePhotoUrl);
+      ArtistRepository.syncUnifiedProfilePhoto(
+        uid: activeUid,
+        photoUrl: activePhotoUrl,
+        firestore: ref.read(firebaseFirestoreProvider),
+        createArtistIfMissing: true,
+      );
+    }
+    return resolved.withLiveDistanceFrom(clientCoords);
+  });
 });
 
-/// Live Explore studios derived from onboarded Artists (or mock studios when [mockModeProvider] is enabled).
+/// Live Explore studios derived from onboarded Artists.
 final exploreStudiosProvider = Provider<AsyncValue<List<ExploreStudio>>>((ref) {
-  final useMock = ref.watch(mockModeProvider);
-  if (useMock) {
-    return const AsyncValue.data(MockFixtures.studios);
-  }
   final artistsAsync = ref.watch(artistsWithDistanceProvider);
   return artistsAsync.whenData((artists) {
     final groupedByName = <String, List<Artist>>{};
@@ -218,12 +296,77 @@ final exploreStudiosProvider = Provider<AsyncValue<List<ExploreStudio>>>((ref) {
   });
 });
 
+/// Represents the active persona view for dual-role users.
+enum AppMode {
+  client('client'),
+  artist('artist');
+
+  final String value;
+  const AppMode(this.value);
+
+  static AppMode fromString(String? raw, {AppMode fallback = AppMode.client}) {
+    if (raw == 'artist') return AppMode.artist;
+    if (raw == 'client') return AppMode.client;
+    return fallback;
+  }
+}
+
+/// Real-time `/artists/{uid}` profile stream for the active authenticated user (if an artist document exists).
+final currentArtistProfileProvider = StreamProvider<Artist?>((ref) {
+  final uid = ref.watch(activeUidProvider);
+  if (uid == null || uid.isEmpty) {
+    return Stream<Artist?>.value(null);
+  }
+  return ref.watch(artistRepositoryProvider).watchArtist(uid);
+});
+
+/// Reactive notifier tracking whether a dual-role user is currently operating in Client or Artist mode.
+class ActiveAppModeNotifier extends Notifier<AppMode> {
+  @override
+  AppMode build() {
+    ref.watch(sessionEpochProvider);
+    final inMemory = AuthService.activeAppMode;
+    if (inMemory != null) {
+      return AppMode.fromString(inMemory);
+    }
+    final userProfile = ref.watch(currentUserProfileProvider).maybeWhen(
+          data: (u) => u,
+          orElse: () => null,
+        );
+    if (userProfile?.activeMode != null) {
+      return AppMode.fromString(userProfile!.activeMode);
+    }
+    if (userProfile?.isArtist == true) {
+      return AppMode.artist;
+    }
+    return AppMode.client;
+  }
+
+  Future<void> switchMode(AppMode newMode) async {
+    state = newMode;
+    final uid = ref.read(activeUidProvider);
+    final firestore = ref.read(firebaseFirestoreProvider);
+    await AuthService.setActiveAppMode(
+      newMode.value,
+      uid: uid,
+      firestore: firestore,
+    );
+  }
+}
+
+final activeAppModeProvider =
+    NotifierProvider<ActiveAppModeNotifier, AppMode>(
+  ActiveAppModeNotifier.new,
+);
+
 /// Explicitly invalidates all user-scoped Riverpod providers on sign-out.
 void invalidateUserSessionProviders(WidgetRef ref) {
   ref.invalidate(sessionEpochProvider);
   ref.invalidate(authStateStreamProvider);
   ref.invalidate(activeUidProvider);
   ref.invalidate(currentUserProfileProvider);
+  ref.invalidate(currentArtistProfileProvider);
+  ref.invalidate(activeAppModeProvider);
   ref.invalidate(liveGpsCoordinatesProvider);
   ref.invalidate(effectiveClientCoordinatesProvider);
 }
@@ -236,6 +379,8 @@ void invalidateUserSessionFromContext(BuildContext context) {
     container.invalidate(authStateStreamProvider);
     container.invalidate(activeUidProvider);
     container.invalidate(currentUserProfileProvider);
+    container.invalidate(currentArtistProfileProvider);
+    container.invalidate(activeAppModeProvider);
     container.invalidate(liveGpsCoordinatesProvider);
     container.invalidate(effectiveClientCoordinatesProvider);
   } catch (_) {

@@ -2,9 +2,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../core/mock/mock_data_config.dart';
 import '../models/artist.dart';
 import '../models/artist_dashboard_data.dart';
 import '../services/booking_sync_service.dart';
+import '../theme/app_buttons.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/flash_snack_bar.dart';
 import '../widgets/flash_switch.dart';
@@ -123,8 +125,15 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
         : 'assets/images/flash_traditional_panther.jpg';
 
     String clientId;
+    String clientName = MockDataConfig.isEnabled ? 'Alex Rivers' : 'Client';
     try {
-      clientId = FirebaseAuth.instance.currentUser!.uid;
+      final user = FirebaseAuth.instance.currentUser;
+      clientId = user?.uid ?? BookingSyncService.resolveCurrentUid();
+      if (user?.displayName != null && user!.displayName!.trim().isNotEmpty) {
+        clientName = user.displayName!.trim();
+      } else if (user?.email != null && user!.email!.trim().isNotEmpty) {
+        clientName = user.email!.split('@').first;
+      }
     } catch (_) {
       clientId = BookingSyncService.resolveCurrentUid();
     }
@@ -136,7 +145,7 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
       id: reqId,
       clientId: clientId,
       artistId: artistId,
-      clientName: 'Alex Rivers',
+      clientName: clientName,
       timeAgo: 'Just now',
       conceptDescription: _conceptController.text.trim(),
       placement: _selectedPlacement,
@@ -424,38 +433,13 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
                     ),
                     const SizedBox(height: 32),
                     // Submit Button (Inline, no gray bar)
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        onPressed: _isSubmitting ? null : _submitBrief,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFEEC200),
-                          foregroundColor: const Color(0xFF121414),
-                          disabledBackgroundColor: const Color(0xFF4D4530),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: _isSubmitting
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  color: Color(0xFF121414),
-                                ),
-                              )
-                            : Text(
-                                'SUBMIT CUSTOM BRIEF',
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.8,
-                                ),
-                              ),
-                      ),
+                    AppButtons.primaryCTA(
+                      onPressed: _isSubmitting ? null : _submitBrief,
+                      text: 'SUBMIT CUSTOM BRIEF',
+                      isLoading: _isSubmitting,
+                      backgroundColor: const Color(0xFFEEC200),
+                      foregroundColor: const Color(0xFF121414),
+                      disabledBackgroundColor: const Color(0xFF4D4530),
                     ),
                     const SizedBox(height: 24),
                   ],

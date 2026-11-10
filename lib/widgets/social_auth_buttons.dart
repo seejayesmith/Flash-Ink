@@ -110,7 +110,7 @@ class CircularSocialIconButton extends StatelessWidget {
     required this.icon,
     required this.backgroundColor,
     this.borderColor = Colors.transparent,
-    this.size = 52.0,
+    this.size = 44.0,
     this.isLoading = false,
     this.loadingColor = Colors.white,
     required this.semanticsLabel,
@@ -148,10 +148,10 @@ class CircularSocialIconButton extends StatelessWidget {
               child: Center(
                 child: isLoading
                     ? SizedBox(
-                        width: 22,
-                        height: 22,
+                        width: 18,
+                        height: 18,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2.2,
+                          strokeWidth: 2.0,
                           valueColor: AlwaysStoppedAnimation<Color>(loadingColor),
                         ),
                       )
@@ -175,7 +175,7 @@ class CircularGoogleSignInButton extends StatelessWidget {
     super.key,
     required this.onPressed,
     this.isLoading = false,
-    this.size = 52.0,
+    this.size = 44.0,
   });
 
   @override
@@ -190,7 +190,7 @@ class CircularGoogleSignInButton extends StatelessWidget {
       loadingColor: const Color(0xFF4285F4),
       semanticsLabel: 'Sign in with Google',
       tooltip: 'Continue with Google',
-      icon: const GoogleLogo(size: 22),
+      icon: const GoogleLogo(size: 20),
     );
   }
 }
@@ -205,7 +205,7 @@ class CircularAppleSignInButton extends StatelessWidget {
     super.key,
     required this.onPressed,
     this.isLoading = false,
-    this.size = 52.0,
+    this.size = 44.0,
   });
 
   @override
@@ -223,7 +223,7 @@ class CircularAppleSignInButton extends StatelessWidget {
       icon: const Icon(
         Icons.apple,
         color: Colors.white,
-        size: 26,
+        size: 22,
       ),
     );
   }
@@ -279,7 +279,7 @@ class SocialAuthRow extends StatelessWidget {
     this.isAppleLoading = false,
     this.isLoading = false,
     this.gap = 20.0,
-    this.buttonSize = 52.0,
+    this.buttonSize = 44.0,
   });
 
   @override

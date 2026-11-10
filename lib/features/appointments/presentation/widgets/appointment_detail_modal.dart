@@ -221,7 +221,7 @@ class AppointmentDetailModal extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: AppButtons.secondaryCTA(
                     onPressed: () {
                       Navigator.pop(context);
                       final unlocked = appointment.isExactLocationUnlocked();
@@ -233,20 +233,10 @@ class AppointmentDetailModal extends StatelessWidget {
                         duration: const Duration(seconds: 2),
                       );
                     },
-                    icon: const Icon(Icons.directions, color: AppTheme.gold, size: 18),
-                    label: Text(
-                      'DIRECTIONS',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: AppTheme.gold,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: AppTheme.goldBorder),
-                      minimumSize: const Size.fromHeight(42),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.radiusMd)),
-                    ),
+                    icon: Icons.directions,
+                    text: 'DIRECTIONS',
+                    borderColor: AppTheme.goldBorder,
+                    foregroundColor: AppTheme.gold,
                   ),
                 ),
                 const SizedBox(width: 12),

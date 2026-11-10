@@ -1,4 +1,5 @@
 import Flutter
+import GoogleMaps
 import UIKit
 
 class NativeVisualEffectViewFactory: NSObject, FlutterPlatformViewFactory {
@@ -71,6 +72,7 @@ class NativeVisualEffectView: NSObject, FlutterPlatformView {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    GMSServices.provideAPIKey("AIzaSyAMPnEDNfBY3i5RfEjcsMeJ6M6ScWt3OJ8")
     let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
     
     return result

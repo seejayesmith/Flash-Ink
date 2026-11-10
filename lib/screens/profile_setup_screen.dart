@@ -8,6 +8,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import '../config/dev_config.dart';
 import '../providers/app_providers.dart';
+import '../repositories/artist_repository.dart';
 import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
 import '../theme/app_buttons.dart';
@@ -178,6 +179,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 setClientRoleOnCreate: true,
               )
               .timeout(timeoutDuration);
+          if (photoUrl != null) {
+            await ArtistRepository.syncUnifiedProfilePhoto(
+              uid: user.uid,
+              photoUrl: photoUrl,
+              firestore: injectedDb,
+              timeout: timeoutDuration,
+            );
+          }
         } catch (_) {}
       }
 
@@ -491,21 +500,18 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   ),
                 ),
               ),
-              Padding(
-                padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 250),
-                  switchInCurve: Curves.easeInOut,
-                  switchOutCurve: Curves.easeInOut,
-                  transitionBuilder: (child, animation) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-                  child: KeyedSubtree(
-                    key: ValueKey<int>(_currentPage),
-                    child: _currentPage == 0
-                        ? _buildUsernameStep()
-                        : _buildPhotoStep(),
-                  ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                switchInCurve: Curves.easeInOut,
+                switchOutCurve: Curves.easeInOut,
+                transitionBuilder: (child, animation) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+                child: KeyedSubtree(
+                  key: ValueKey<int>(_currentPage),
+                  child: _currentPage == 0
+                      ? _buildUsernameStep()
+                      : _buildPhotoStep(),
                 ),
               ),
             ],

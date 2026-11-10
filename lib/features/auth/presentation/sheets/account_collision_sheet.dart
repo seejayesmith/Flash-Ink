@@ -46,18 +46,13 @@ class AccountCollisionSheet extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: AccountCollisionSheet(
-          email: email,
-          existingProvider: existingProvider,
-          newProvider: newProvider,
-          pendingCredential: pendingCredential,
-          existingCredential: existingCredential,
-          onCollisionResolved: onCollisionResolved,
-        ),
+      builder: (context) => AccountCollisionSheet(
+        email: email,
+        existingProvider: existingProvider,
+        newProvider: newProvider,
+        pendingCredential: pendingCredential,
+        existingCredential: existingCredential,
+        onCollisionResolved: onCollisionResolved,
       ),
     );
   }
@@ -110,6 +105,7 @@ class AccountCollisionSheet extends ConsumerWidget {
           ),
           child: SingleChildScrollView(
             physics: const ClampingScrollPhysics(),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,

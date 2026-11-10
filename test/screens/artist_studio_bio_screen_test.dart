@@ -203,5 +203,36 @@ void main() {
       // Verify Private Studio switch turned on
       expect(find.byKey(const Key('private_studio_switch')), findsOneWidget);
     });
+
+    testWidgets('Studio setup chips fit within container without overflowing and have no checkmarks', (tester) async {
+      tester.view.physicalSize = const Size(375, 812);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      // Check all 3 chips exist and have showCheckmark set to false
+      for (final type in ['Street Shop', 'Private Studio', 'Guest Spot']) {
+        final chipFinder = find.byKey(Key('studio_type_chip_$type'));
+        expect(chipFinder, findsOneWidget);
+        final chipWidget = tester.widget<ChoiceChip>(chipFinder);
+        expect(chipWidget.showCheckmark, isFalse);
+      }
+
+      // Verify that the right edge of the last chip ('Guest Spot') does not bleed over the 375px screen
+      final guestSpotBox = tester.getRect(find.byKey(const Key('studio_type_chip_Guest Spot')));
+      expect(guestSpotBox.right, lessThanOrEqualTo(375.0));
+
+      // Tap each chip and ensure no overflow occurs
+      for (final type in ['Private Studio', 'Guest Spot', 'Street Shop']) {
+        await tester.tap(find.byKey(Key('studio_type_chip_$type')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      }
+    });
   });
 }

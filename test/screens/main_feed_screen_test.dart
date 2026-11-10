@@ -17,7 +17,7 @@ void main() {
       // Check all 4 navigation tabs in bottom bar
       expect(find.text('Feed'), findsOneWidget);
       expect(find.text('Explore'), findsOneWidget);
-      expect(find.text('Appointments'), findsOneWidget);
+      expect(find.text('Bookings'), findsOneWidget);
       expect(find.text('Messages'), findsOneWidget);
 
       // Verify BrowseArtistsScreen is displayed

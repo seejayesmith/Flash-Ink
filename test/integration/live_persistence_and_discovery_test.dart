@@ -325,7 +325,6 @@ void main() {
           email: 'maya@collector.ink',
           username: 'mayacollects',
           aesthetics: const ['blackwork', 'fineline'],
-          placements: const ['Forearm', 'Collarbone'],
           zipCode: '97132',
           travelRadiusMiles: 35,
           notificationsEnabled: true,
@@ -338,7 +337,6 @@ void main() {
         expect(hydratedClient.role, 'client');
         expect(hydratedClient.username, 'mayacollects');
         expect(hydratedClient.aesthetics, equals(['blackwork', 'fineline']));
-        expect(hydratedClient.placements, equals(['Forearm', 'Collarbone']));
         expect(hydratedClient.travelRadiusMiles, 35);
         expect(hydratedClient.cityState, 'Newberg, OR');
         expect(hydratedClient.savedCoordinates, isNotNull);
@@ -480,7 +478,6 @@ void main() {
               email: 'liam@newberg.org',
               username: 'liam_or',
               aesthetics: const ['neotraditional', 'blackwork'],
-              placements: const ['Upper Arm'],
               zipCode: '97132',
               cityState: 'Newberg, OR',
               latitude: 45.3001,
@@ -534,7 +531,7 @@ void main() {
 
         expect(find.byType(ArtistCard), findsOneWidget);
         expect(find.text('Rowan Vale'), findsOneWidget);
-        expect(find.text('20.6 mi away'), findsOneWidget);
+        expect(find.text('20.6 mi'), findsOneWidget);
 
         // Real-time stream verification: A 2nd Artist completes onboarding in Beaverton, OR
         // while the Client discovery screen is open (no restart!).
@@ -579,7 +576,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byType(ArtistProfileScreen), findsOneWidget);
-        expect(find.text('20.6 mi away'), findsOneWidget);
+        expect(find.text('20.6 mi'), findsOneWidget);
 
         // Dynamically update Client's live GPS coordinates (simulating Client driving into Downtown Portland)
         container.read(liveGpsCoordinatesProvider.notifier).setCoordinates(
@@ -597,12 +594,12 @@ void main() {
           endLongitude: -122.6784,
         );
         final updatedDowntownLabel =
-            DistanceCalculator.formatMilesAway(updatedDowntownMiles);
+            DistanceCalculator.stripAwaySuffix(DistanceCalculator.formatMilesAway(updatedDowntownMiles));
         expect(updatedDowntownMiles, closeTo(0.45, 0.1));
 
         // ArtistProfileScreen reactively updates to the new live distance without navigation or restart!
         expect(find.text(updatedDowntownLabel), findsOneWidget);
-        expect(find.text('20.6 mi away'), findsNothing);
+        expect(find.text('20.6 mi'), findsNothing);
       },
     );
   });

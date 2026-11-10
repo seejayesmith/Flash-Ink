@@ -50,6 +50,18 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
   String? _verifiedPhoneNumber;
   bool _isPhoneVerified = false;
 
+  bool get _isGoogleUser {
+    final user = _authService.currentUser;
+    if (user != null && AuthService.isGoogleAuthUser(user)) {
+      return true;
+    }
+    final email = widget.initialEmail ?? user?.email ?? '';
+    if (email.toLowerCase().endsWith('@gmail.com') || email.toLowerCase().endsWith('@googlemail.com')) {
+      return true;
+    }
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -68,12 +80,16 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
     _nameFocusNode.addListener(_handleNameFocusChange);
 
     String? rawPhone = widget.initialPhone;
-    if (rawPhone == null || rawPhone.isEmpty) {
-      try {
-        rawPhone = _authService.currentUser?.phoneNumber;
-      } catch (_) {
-        rawPhone = null;
+    if (!_isGoogleUser) {
+      if (rawPhone == null || rawPhone.isEmpty) {
+        try {
+          rawPhone = _authService.currentUser?.phoneNumber;
+        } catch (_) {
+          rawPhone = null;
+        }
       }
+    } else {
+      rawPhone = null;
     }
     _verifiedPhoneNumber = rawPhone;
     final formattedPhone = AuthService.formatDisplayPhoneNumber(rawPhone);
@@ -155,7 +171,7 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
     });
 
     final name = _nameController.text.trim();
-    final formattedPhone = _formatPhoneNumber(_phoneController.text.trim());
+    final formattedPhone = _isGoogleUser ? '' : _formatPhoneNumber(_phoneController.text.trim());
     final currentUser = _authService.currentUser;
     final uid = currentUser?.uid ?? 'artist_${DateTime.now().millisecondsSinceEpoch}';
     final email = widget.initialEmail ?? currentUser?.email ?? '';
@@ -186,16 +202,27 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
             : const Duration(milliseconds: 200);
 
         final userDoc = db.collection('users').doc(uid);
-        await userDoc.set({
+        final existingUserSnap = await userDoc.get().timeout(timeoutDuration);
+        final existingUserData = existingUserSnap.data();
+        final bool clientAlreadyCompleted =
+            existingUserData?['profileCompleted'] == true;
+        final bool hasClientName =
+            (existingUserData?['displayName'] as String?)?.trim().isNotEmpty ==
+                true;
+
+        final userUpdates = <String, dynamic>{
           'uid': uid,
-          'displayName': name,
-          'email': email,
-          'phoneNumber': formattedPhone,
-          'phoneVerified': _isPhoneVerified,
+          if (!hasClientName) 'displayName': name,
+          if (email.isNotEmpty) 'email': email,
+          if (!_isGoogleUser && formattedPhone.isNotEmpty) 'phoneNumber': formattedPhone,
+          if (!_isGoogleUser) 'phoneVerified': _isPhoneVerified,
           'onboardingRole': 'artist',
-          'profileCompleted': false,
+          'activeMode': 'artist',
+          if (!clientAlreadyCompleted) 'profileCompleted': false,
           'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true)).timeout(timeoutDuration);
+        };
+
+        await userDoc.set(userUpdates, SetOptions(merge: true)).timeout(timeoutDuration);
 
         final cleanUsername = name.replaceAll('@', '');
         final artistDoc = db.collection('artists').doc(uid);
@@ -209,20 +236,25 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
           'rating': 5.0,
           'availablePieces': 0,
           'minDeposit': 50,
-          if (_isPhoneVerified) 'phoneVerified': true,
+          if (!_isGoogleUser && _isPhoneVerified) 'phoneVerified': true,
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true)).timeout(timeoutDuration);
 
-        await artistDoc.collection('private').doc('settings').set({
+        final privateSettings = <String, dynamic>{
           'email': email,
-          'phoneNumber': formattedPhone,
-          if (_isPhoneVerified) 'phoneVerified': true,
+          if (!_isGoogleUser && formattedPhone.isNotEmpty) 'phoneNumber': formattedPhone,
+          if (!_isGoogleUser && _isPhoneVerified) 'phoneVerified': true,
           'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true)).timeout(timeoutDuration);
+        };
+
+        await artistDoc.collection('private').doc('settings').set(
+          privateSettings,
+          SetOptions(merge: true),
+        ).timeout(timeoutDuration);
       } catch (_) {}
 
-      // If phone is already verified, bypass SMS verification and proceed to Profile Photo
-      if (_isPhoneVerified) {
+      // If Google user or phone is already verified, bypass SMS verification and proceed to Profile Photo
+      if (_isGoogleUser || _isPhoneVerified) {
         if (!mounted) return;
         setState(() => _isLoading = false);
         FocusManager.instance.primaryFocus?.unfocus();
@@ -434,7 +466,9 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
         skipKey: const Key('skip_artist_info_button'),
         skipText: 'Skip',
         title: 'Artist Profile',
-        subtitle: 'Enter your artist name and contact number to get set up.',
+        subtitle: _isGoogleUser
+            ? 'Enter your artist name to get set up.'
+            : 'Enter your artist name and contact number to get set up.',
         ctaText: 'CONTINUE',
         ctaIcon: Icons.arrow_forward,
         ctaKey: const Key('continue_artist_info_button'),
@@ -443,7 +477,9 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
         backgroundOverlay: const TattooBackgroundWrapper(child: SizedBox.expand()),
         child: FlowPageLayout(
           title: 'Artist Profile',
-          subtitle: 'Enter your artist name and contact number to get set up.',
+          subtitle: _isGoogleUser
+              ? 'Enter your artist name to get set up.'
+              : 'Enter your artist name and contact number to get set up.',
           ctaText: 'CONTINUE',
           ctaKey: const Key('continue_artist_info_button'),
           onCtaPressed: _isLoading ? null : _handleContinue,
@@ -480,46 +516,47 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
-
-                  // Phone Number
-                  _buildTextField(
-                    label: 'Phone Number',
-                    controller: _phoneController,
-                    hintText: '(555) 000-0000',
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: const [PhoneNumberInputFormatter()],
-                    trailingLabelWidget: _isPhoneVerified
-                        ? Container(
-                            key: const Key('artist_phone_verified_badge'),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0x2222C55E),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFF22C55E), width: 0.8),
-                            ),
-                            child: Text(
-                              'VERIFIED',
-                              style: GoogleFonts.plusJakartaSans(
-                                color: const Color(0xFF22C55E),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.6,
+                  if (!_isGoogleUser) ...[
+                    const SizedBox(height: 16),
+                    // Phone Number
+                    _buildTextField(
+                      label: 'Phone Number',
+                      controller: _phoneController,
+                      hintText: '(555) 000-0000',
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: const [PhoneNumberInputFormatter()],
+                      trailingLabelWidget: _isPhoneVerified
+                          ? Container(
+                              key: const Key('artist_phone_verified_badge'),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0x2222C55E),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFF22C55E), width: 0.8),
                               ),
-                            ),
-                          )
-                        : null,
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Please enter your phone number for SMS verification';
-                      }
-                      final digits = value.replaceAll(RegExp(r'\D'), '');
-                      if (digits.length < 10) {
-                        return 'Please enter a valid 10-digit phone number';
-                      }
-                      return null;
-                    },
-                  ),
+                              child: Text(
+                                'VERIFIED',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: const Color(0xFF22C55E),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.6,
+                                ),
+                              ),
+                            )
+                          : null,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Please enter your phone number for SMS verification';
+                        }
+                        final digits = value.replaceAll(RegExp(r'\D'), '');
+                        if (digits.length < 10) {
+                          return 'Please enter a valid 10-digit phone number';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
                   const SizedBox(height: 16),
 
                   // Terms and Privacy Checkbox

@@ -4,11 +4,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 // ignore: depend_on_referenced_packages
 import 'package:firebase_core_platform_interface/test.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 
 import 'package:flash_ink/screens/splash_screen.dart';
 import 'package:flash_ink/screens/role_selection_screen.dart';
 import 'package:flash_ink/screens/main_feed_screen.dart';
 import 'package:flash_ink/screens/email_verification_screen.dart';
+import 'package:flash_ink/screens/artist_onboarding/artist_info_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
 
 class TestMockUser extends Fake implements User {
@@ -17,6 +19,10 @@ class TestMockUser extends Fake implements User {
   @override
   final String? email;
   @override
+  final String? displayName;
+  @override
+  final String? phoneNumber;
+  @override
   final bool isAnonymous;
   @override
   final bool emailVerified;
@@ -24,6 +30,8 @@ class TestMockUser extends Fake implements User {
   TestMockUser({
     required this.uid,
     this.email,
+    this.displayName,
+    this.phoneNumber,
     this.isAnonymous = false,
     this.emailVerified = true,
   });
@@ -109,5 +117,45 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(EmailVerificationScreen), findsOneWidget);
     });
+
+    testWidgets(
+      'Resumes artist onboarding to ArtistInfoScreen when reopening app during OAuth signup before artist doc creation',
+      (WidgetTester tester) async {
+        AuthService.invalidateSessionState();
+        final fakeDb = FakeFirebaseFirestore();
+        final oauthUser = TestMockUser(
+          uid: 'artist_oauth_uid',
+          email: 'artist@gmail.com',
+          displayName: 'Tattoo Art',
+          isAnonymous: false,
+          emailVerified: true,
+        );
+
+        // User signed up via OAuth with role: 'artist', but closed app before ArtistInfoScreen was completed.
+        // Therefore /users/{uid} exists with activeMode: 'artist' / onboardingRole: 'artist',
+        // but /artists/{uid} has NOT been created yet.
+        await fakeDb.collection('users').doc(oauthUser.uid).set({
+          'uid': oauthUser.uid,
+          'role': 'client',
+          'activeMode': 'artist',
+          'onboardingRole': 'artist',
+        });
+
+        final auth = TestAuthService(mockUser: oauthUser);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: SplashScreen(
+              delay: Duration.zero,
+              authService: auth,
+              firestore: fakeDb,
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+        expect(find.byType(ArtistInfoScreen), findsOneWidget);
+      },
+    );
   });
 }

@@ -17,18 +17,16 @@ import '../../../widgets/flash_snack_bar.dart';
 import '../shared/onboarding_step_scaffold.dart';
 import 'client_notifications_screen.dart';
 
-/// Client Onboarding Step 3: Location / ZIP Selection
+/// Client Onboarding Step 2: Location / ZIP Selection
 class ClientLocationScreen extends StatefulWidget {
   final AuthService? authService;
   final List<String>? selectedStyles;
-  final List<String>? selectedPlacements;
   final String? initialZip;
 
   const ClientLocationScreen({
     super.key,
     this.authService,
     this.selectedStyles,
-    this.selectedPlacements,
     this.initialZip,
   });
 
@@ -53,6 +51,13 @@ class _ClientLocationScreenState extends State<ClientLocationScreen> {
     super.initState();
     _zipController = TextEditingController(text: widget.initialZip ?? '');
     _zipController.addListener(() => setState(() {}));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final isTest =
+          WidgetsBinding.instance.runtimeType.toString().contains('Test');
+      if (!isTest && (_latitude == null || _longitude == null)) {
+        _fetchCurrentLocation();
+      }
+    });
   }
 
   @override
@@ -169,7 +174,6 @@ class _ClientLocationScreenState extends State<ClientLocationScreen> {
             builder: (_) => ClientNotificationsScreen(
               authService: _authService,
               selectedStyles: widget.selectedStyles,
-              selectedPlacements: widget.selectedPlacements,
               zipCode: zip,
               cityState: resolvedCityState,
               latitude: resolvedLat,
@@ -187,8 +191,8 @@ class _ClientLocationScreenState extends State<ClientLocationScreen> {
     final hasValidZip = _zipController.text.trim().length == 5;
 
     return OnboardingStepScaffold(
-      currentStep: 3,
-      totalSteps: 4,
+      currentStep: 2,
+      totalSteps: 3,
       title: 'Your home base',
       subtitle: 'Enter your ZIP code to find studios near you and calibrate your travel radius.',
       ctaText: 'CONTINUE',

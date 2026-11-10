@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flash_ink/core/mock/mock_data_config.dart';
 import 'package:flash_ink/models/artist_dashboard_data.dart';
 import 'package:flash_ink/models/waitlist_entry.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_waitlist_screen.dart';
@@ -8,6 +9,14 @@ import 'package:flash_ink/screens/artist_dashboard/early_access_outreach_sheet.d
 import 'package:flash_ink/features/messages/presentation/widgets/vip_waitlist_invitation_card.dart';
 
 void main() {
+  setUp(() {
+    MockDataConfig.debugOverride = true;
+  });
+
+  tearDown(() {
+    MockDataConfig.resetDebugOverride();
+  });
+
   group('WaitlistEntry Domain Model Tests', () {
     test('Correctly serializes to and from Map', () {
       final now = DateTime(2026, 10, 6, 12, 0);

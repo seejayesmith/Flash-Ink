@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/mock/mock_data_config.dart';
 import '../../core/widgets/flash_bottom_nav_bar.dart';
 import '../../models/artist.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../services/auth_service.dart';
+import '../../services/booking_sync_service.dart';
+import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
-import '../../widgets/tattoo_machine_icon.dart';
+import '../../widgets/artist_top_bar.dart';
 import 'appointment_detail_screen.dart';
 import 'artist_account_screen.dart';
+import '../../features/messages/presentation/screens/messages_screen.dart';
 
 /// Enum representing the active view within the Artist Earnings screen.
 enum ArtistEarningsTab {
@@ -46,7 +50,7 @@ class ArtistEarningsScreen extends StatefulWidget {
 
 class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
   late final AuthService _authService = widget.authService ?? AuthService();
-  late final ArtistEarningsData _earningsData =
+  ArtistEarningsData get _earningsData =>
       widget.earningsData ?? ArtistDashboardRepository.earningsData;
 
   ArtistEarningsTab _selectedTab = ArtistEarningsTab.overview;
@@ -54,7 +58,24 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
   String _searchQuery = '';
 
   @override
+  void initState() {
+    super.initState();
+    ArtistDashboardRepository.pendingRequestsNotifier.addListener(_onRepositoryChanged);
+    final uid = widget.artist?.id ?? _authService.currentUser?.uid;
+    if (uid != null && uid.isNotEmpty) {
+      BookingSyncService.hydrateArtistDataFromCloud(uid);
+    }
+  }
+
+  void _onRepositoryChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
   void dispose() {
+    ArtistDashboardRepository.pendingRequestsNotifier.removeListener(_onRepositoryChanged);
     _searchController.dispose();
     super.dispose();
   }
@@ -63,18 +84,28 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
     if (widget.artist != null && widget.artist!.name.isNotEmpty) {
       return widget.artist!.name;
     }
-    final user = _authService.currentUser;
-    if (user != null && user.displayName != null && user.displayName!.isNotEmpty) {
-      return user.displayName!;
-    }
-    return 'OddMaree';
+    try {
+      final user = _authService.currentUser;
+      if (user != null && user.displayName != null && user.displayName!.isNotEmpty) {
+        return user.displayName!;
+      }
+    } catch (_) {}
+    return MockDataConfig.isEnabled ? 'OddMaree' : 'Artist';
   }
 
   String get _avatarUrl {
     if (widget.artist != null && widget.artist!.avatarUrl.isNotEmpty) {
       return widget.artist!.avatarUrl;
     }
-    return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
+    try {
+      final user = _authService.currentUser;
+      if (user?.photoURL != null && user!.photoURL!.isNotEmpty) {
+        return user.photoURL!;
+      }
+    } catch (_) {}
+    return MockDataConfig.isEnabled
+        ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'
+        : '';
   }
 
   Widget _buildAvatarWidget({double radius = 18}) {
@@ -395,32 +426,17 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(sheetContext);
-                      FlashSnackBar.showInfo(
-                        context,
-                        'Bank verification & routing tools are active.',
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEEC200),
-                      foregroundColor: const Color(0xFF121414),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-                      ),
-                    ),
-                    child: Text(
-                      'Update Payout Method',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
+                AppButtons.primaryCTA(
+                  onPressed: () {
+                    Navigator.pop(sheetContext);
+                    FlashSnackBar.showInfo(
+                      context,
+                      'Bank verification & routing tools are active.',
+                    );
+                  },
+                  text: 'Update Payout Method',
+                  backgroundColor: const Color(0xFFEEC200),
+                  foregroundColor: const Color(0xFF121414),
                 ),
                 const SizedBox(height: 8),
               ],
@@ -624,33 +640,18 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    key: const Key('confirm_instant_transfer_button'),
-                    onPressed: () {
-                      Navigator.pop(sheetContext);
-                      FlashSnackBar.showSuccess(
-                        context,
-                        'Transfer of \$${netAmount.toStringAsFixed(2)} initiated via Stripe Direct Deposit.',
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.gold,
-                      foregroundColor: const Color(0xFF121414),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-                      ),
-                    ),
-                    child: Text(
-                      'Transfer \$${netAmount.toStringAsFixed(2)} Now via Stripe',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
+                AppButtons.primaryCTA(
+                  key: const Key('confirm_instant_transfer_button'),
+                  onPressed: () {
+                    Navigator.pop(sheetContext);
+                    FlashSnackBar.showSuccess(
+                      context,
+                      'Transfer of \$${netAmount.toStringAsFixed(2)} initiated via Stripe Direct Deposit.',
+                    );
+                  },
+                  text: 'Transfer \$${netAmount.toStringAsFixed(2)} Now via Stripe',
+                  backgroundColor: AppTheme.gold,
+                  foregroundColor: const Color(0xFF121414),
                 ),
                 const SizedBox(height: 10),
                 Center(
@@ -680,81 +681,8 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
       );
   }
 
-  List<DashboardAppointment> get _allHistoryAppointments {
-    return [
-      ...ArtistDashboardRepository.calendarAppointments,
-      const DashboardAppointment(
-        id: 'hist_alex_m',
-        clientName: 'Alex M.',
-        serviceType: 'Full Sleeve Session',
-        duration: '4 hrs',
-        time: '1:00 PM',
-        date: 'Oct 24, 2023',
-        placement: 'Full Right Arm',
-        notes: 'Japanese dragon sleeve completion session. Shading and background waves finalized.',
-        depositPaid: 150,
-        fullPrice: 800,
-        artworkImageUrl: 'https://images.unsplash.com/photo-1598371839696-5c5bb00bdc28?auto=format&fit=crop&w=400&q=80',
-        visitType: 'Session Inking',
-      ),
-      const DashboardAppointment(
-        id: 'hist_sarah_t',
-        clientName: 'Sarah T.',
-        serviceType: 'Custom Flash',
-        duration: '1.5 hrs',
-        time: '3:30 PM',
-        date: 'Oct 22, 2023',
-        placement: 'Forearm',
-        notes: 'Floral flash with fine line botanicals.',
-        depositPaid: 50,
-        fullPrice: 250,
-        artworkImageUrl: 'https://images.unsplash.com/photo-1562962230-16e4623d36e6?auto=format&fit=crop&w=400&q=80',
-        visitType: 'Flash Tattoo',
-      ),
-      const DashboardAppointment(
-        id: 'hist_marcus_k',
-        clientName: 'Marcus K.',
-        serviceType: 'Fine Line Floral',
-        duration: '2 hrs',
-        time: '11:00 AM',
-        date: 'Oct 15, 2023',
-        placement: 'Ribs',
-        notes: 'Delicate fine line peony.',
-        depositPaid: 60,
-        fullPrice: 320,
-        artworkImageUrl: 'https://images.unsplash.com/photo-1543852786-1cf6624b9987?auto=format&fit=crop&w=400&q=80',
-        visitType: 'Fine Line',
-      ),
-      const DashboardAppointment(
-        id: 'hist_elena_r',
-        clientName: 'Elena R.',
-        serviceType: 'Micro Realism Eye',
-        duration: '2.5 hrs',
-        time: '4:00 PM',
-        date: 'Oct 10, 2023',
-        placement: 'Bicep',
-        notes: 'Realistic eye portrait with geometric framing.',
-        depositPaid: 90,
-        fullPrice: 450,
-        artworkImageUrl: 'https://images.unsplash.com/photo-1568515045052-f9a854d70bfd?auto=format&fit=crop&w=400&q=80',
-        visitType: 'Custom Tattoo',
-      ),
-      const DashboardAppointment(
-        id: 'hist_dave_l',
-        clientName: 'Dave L.',
-        serviceType: 'Traditional Dagger',
-        duration: '2 hrs',
-        time: '2:30 PM',
-        date: 'Sep 29, 2023',
-        placement: 'Calf',
-        notes: 'Classic bold line dagger piercing a black rose.',
-        depositPaid: 60,
-        fullPrice: 300,
-        artworkImageUrl: 'https://images.unsplash.com/photo-1611501275019-9b5cda994e8d?auto=format&fit=crop&w=400&q=80',
-        visitType: 'Traditional',
-      ),
-    ];
-  }
+  List<DashboardAppointment> get _allHistoryAppointments =>
+      ArtistDashboardRepository.historyAppointments;
 
   List<DashboardAppointment> get _filteredHistoryAppointments {
     final query = _searchQuery.toLowerCase().trim();
@@ -1185,42 +1113,33 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
 
   /// Top action bar with tattoo machine logo on the left and artist avatar on the right
   Widget _buildTopActionBar() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        if (!widget.isEmbeddedInTab && Navigator.canPop(context))
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-            onPressed: () {
-              if (widget.onBack != null) {
-                widget.onBack!();
-              } else {
-                Navigator.pop(context);
-              }
-            },
-          )
-        else
-          const TattooMachineIcon(
-            key: Key('earnings_tattoo_logo'),
-            size: 43,
-            color: Color(0xFFEEC200),
-          ),
-        GestureDetector(
-          key: const Key('earnings_avatar_button'),
-          onTap: _navigateToAccountScreen,
-          child: Container(
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: const Color(0xFFEEC200).withAlpha(120),
-                width: 1.5,
-              ),
-            ),
-            child: _buildAvatarWidget(radius: 18),
-          ),
-        ),
-      ],
+    final canGoBack = !widget.isEmbeddedInTab && Navigator.canPop(context);
+
+    return ArtistTopBar(
+      leadingWidget: canGoBack
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+              onPressed: () {
+                if (widget.onBack != null) {
+                  widget.onBack!();
+                } else {
+                  Navigator.pop(context);
+                }
+              },
+            )
+          : null,
+      logoKey: const Key('earnings_tattoo_logo'),
+      messagesKey: const Key('earnings_messages_button'),
+      avatarKey: const Key('earnings_avatar_button'),
+      onMessagesTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MessagesScreen()),
+        );
+      },
+      onAvatarTap: _navigateToAccountScreen,
+      avatarChild: _buildAvatarWidget(radius: 18),
+      artistId: widget.artist?.id ?? widget.authService?.currentUser?.uid,
     );
   }
 
@@ -1400,36 +1319,13 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
           ),
           const SizedBox(height: 18),
           // Primary Transfer to Bank CTA
-          SizedBox(
-            width: double.infinity,
-            height: 46,
-            child: ElevatedButton(
-              key: const Key('instant_transfer_button'),
-              onPressed: () => _showInstantTransferModal(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.gold,
-                foregroundColor: const Color(0xFF121414),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.bolt_rounded, size: 20, color: Color(0xFF121414)),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Transfer to Bank',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          AppButtons.primaryCTA(
+            key: const Key('instant_transfer_button'),
+            onPressed: () => _showInstantTransferModal(context),
+            text: 'Transfer to Bank',
+            icon: Icons.bolt_rounded,
+            backgroundColor: AppTheme.gold,
+            foregroundColor: const Color(0xFF121414),
           ),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 18),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
+import '../theme/app_buttons.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_theme.dart';
 import 'adaptive_glass_container.dart';
@@ -28,14 +29,9 @@ class ReauthenticationBottomSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: ReauthenticationBottomSheet(
-          authService: authService,
-          onSuccess: onSuccess,
-        ),
+      builder: (context) => ReauthenticationBottomSheet(
+        authService: authService,
+        onSuccess: onSuccess,
       ),
     );
   }
@@ -231,6 +227,7 @@ class _ReauthenticationBottomSheetState extends State<ReauthenticationBottomShee
       child: Padding(
         padding: const EdgeInsets.fromLTRB(22, 14, 22, 28),
         child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -458,36 +455,11 @@ class _ReauthenticationBottomSheetState extends State<ReauthenticationBottomShee
           onSubmitted: (_) => _submitPassword(),
         ),
         const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: ElevatedButton(
-            key: const Key('reauth_confirm_button'),
-            onPressed: _isSubmitting ? null : _submitPassword,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-              ),
-            ),
-            child: _isSubmitting
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : Text(
-                    'Verify & Delete Account',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-          ),
+        AppButtons.destructiveCTA(
+          key: const Key('reauth_confirm_button'),
+          onPressed: _isSubmitting ? null : _submitPassword,
+          text: 'Verify & Delete Account',
+          isLoading: _isSubmitting,
         ),
       ],
     );
@@ -509,37 +481,14 @@ class _ReauthenticationBottomSheetState extends State<ReauthenticationBottomShee
           const SizedBox(height: 12),
         ],
         if (!_isCodeSent) ...[
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton.icon(
-              key: const Key('reauth_send_code_button'),
-              onPressed: _isSendingCode ? null : _sendPhoneCode,
-              icon: const Icon(Icons.sms_outlined, size: 20),
-              label: _isSendingCode
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                      ),
-                    )
-                  : Text(
-                      'Send Verification SMS',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.gold,
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-                ),
-              ),
-            ),
+          AppButtons.primaryCTA(
+            key: const Key('reauth_send_code_button'),
+            onPressed: _isSendingCode ? null : _sendPhoneCode,
+            icon: Icons.sms_outlined,
+            text: 'Send Verification SMS',
+            isLoading: _isSendingCode,
+            backgroundColor: AppTheme.gold,
+            foregroundColor: Colors.black,
           ),
         ] else ...[
           Text(
@@ -589,36 +538,11 @@ class _ReauthenticationBottomSheetState extends State<ReauthenticationBottomShee
             onSubmitted: (_) => _submitPhoneCode(),
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton(
-              key: const Key('reauth_confirm_button'),
-              onPressed: _isSubmitting ? null : _submitPhoneCode,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEF4444),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-                ),
-              ),
-              child: _isSubmitting
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : Text(
-                      'Verify & Delete Account',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-            ),
+          AppButtons.destructiveCTA(
+            key: const Key('reauth_confirm_button'),
+            onPressed: _isSubmitting ? null : _submitPhoneCode,
+            text: 'Verify & Delete Account',
+            isLoading: _isSubmitting,
           ),
           const SizedBox(height: 8),
           Center(
@@ -654,74 +578,24 @@ class _ReauthenticationBottomSheetState extends State<ReauthenticationBottomShee
           ),
           const SizedBox(height: 12),
         ],
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: ElevatedButton.icon(
-            key: const Key('reauth_google_button'),
-            onPressed: _isSubmitting ? null : _submitGoogle,
-            icon: const Icon(Icons.g_mobiledata, size: 28),
-            label: _isSubmitting
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : Text(
-                    'Verify with Google & Delete',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-              ),
-            ),
-          ),
+        AppButtons.destructiveCTA(
+          key: const Key('reauth_google_button'),
+          onPressed: _isSubmitting ? null : _submitGoogle,
+          icon: Icons.g_mobiledata,
+          text: 'Verify with Google & Delete',
+          isLoading: _isSubmitting,
         ),
       ],
     );
   }
 
   Widget _buildAppleButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 48,
-      child: ElevatedButton.icon(
-        key: const Key('reauth_apple_button'),
-        onPressed: _isSubmitting ? null : _submitApple,
-        icon: const Icon(Icons.apple, size: 22),
-        label: _isSubmitting
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              )
-            : Text(
-                'Verify with Apple & Delete',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFEF4444),
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-          ),
-        ),
-      ),
+    return AppButtons.destructiveCTA(
+      key: const Key('reauth_apple_button'),
+      onPressed: _isSubmitting ? null : _submitApple,
+      icon: Icons.apple,
+      text: 'Verify with Apple & Delete',
+      isLoading: _isSubmitting,
     );
   }
 }

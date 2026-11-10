@@ -4,6 +4,8 @@ import '../../../../theme/app_buttons.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
+import '../../../../widgets/client_empty_state.dart';
+import '../../../../widgets/flash_tab_header.dart';
 import '../../domain/models/appointment_item.dart';
 import '../widgets/appointment_card.dart';
 
@@ -40,25 +42,14 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
 
     return Scaffold(
       backgroundColor: AppTheme.onyxBackground,
-      appBar: AppBar(
-        backgroundColor: AppTheme.onyxBackground,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleSpacing: AppSpacing.screenGutter,
-        title: Text(
-          'Appointments',
-          style: GoogleFonts.plusJakartaSans(
-            color: AppTheme.textPrimary,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        centerTitle: false,
-      ),
       body: SafeArea(
         bottom: false,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const FlashTabHeader(
+              title: 'Appointments',
+            ),
             // Segmented Control (Upcoming vs Past)
             _buildSegmentedControl(),
             const SizedBox(height: 16),
@@ -150,60 +141,24 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   Widget _buildEmptyState() {
     final isUpcoming = _selectedTabIndex == 0;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceXl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppTheme.onyxContainer,
-                border: Border.all(color: AppTheme.darkBorder),
-              ),
-              child: const Icon(
-                Icons.calendar_today_outlined,
-                color: AppTheme.gold,
-                size: 32,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              isUpcoming ? 'No Upcoming Appointments' : 'No Past Sessions',
-              style: GoogleFonts.plusJakartaSans(
-                color: AppTheme.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              isUpcoming
-                  ? 'Ready for your next tattoo? Explore available flash drops from top artists.'
-                  : 'Your completed tattoo sessions and receipts will appear here.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.plusJakartaSans(
-                color: AppTheme.navInactive,
-                fontSize: 13,
-                height: 1.4,
-              ),
-            ),
-            if (isUpcoming) ...[
-              const SizedBox(height: 20),
-              AppButtons.primaryCTA(
-                onPressed: widget.onExploreTap,
-                text: 'BROWSE FLASH DESIGNS',
-                width: 220,
-                backgroundColor: AppTheme.gold,
-                foregroundColor: AppTheme.onyxBackground,
-              ),
-            ],
-          ],
-        ),
-      ),
+    return ClientEmptyState(
+      icon: Icons.calendar_today_outlined,
+      title: isUpcoming ? 'No Upcoming Appointments' : 'No Past Sessions',
+      subtitle: isUpcoming
+          ? 'Ready for your next tattoo? Explore available flash drops from top artists.'
+          : 'Your completed tattoo sessions and receipts will appear here.',
+      action: isUpcoming
+          ? AppButtons.primaryCTA(
+              onPressed: widget.onExploreTap,
+              text: 'BROWSE FLASH DESIGNS',
+              width: 220,
+              backgroundColor: AppTheme.gold,
+              foregroundColor: AppTheme.onyxBackground,
+            )
+          : null,
+      reserveActionSpace: !isUpcoming,
+      minTitleHeight: 52.0,
+      minSubtitleHeight: 72.0,
     );
   }
 }

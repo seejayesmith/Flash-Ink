@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../services/booking_sync_service.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
 import '../../domain/models/message_thread.dart';
 import '../widgets/booking_receipt_message_tile.dart';
 
-/// Interactive conversation screen for chatting directly with a tattoo artist.
+/// Interactive conversation screen for chatting directly between a client and a tattoo artist.
 class ChatConversationScreen extends StatefulWidget {
   final MessageThread thread;
+  final bool isArtistView;
 
   const ChatConversationScreen({
     super.key,
     required this.thread,
+    this.isArtistView = false,
   });
 
   @override
@@ -28,6 +31,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   void initState() {
     super.initState();
     _messages = List.from(widget.thread.messages);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      MessageThread.markThreadAsRead(widget.thread.id);
+    });
   }
 
   @override
@@ -41,18 +47,25 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
 
+    final senderId = BookingSyncService.resolveCurrentUid(
+      widget.isArtistView ? widget.thread.artistId : 'client_user',
+    );
+    final newMessage = ChatMessage(
+      id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
+      senderId: senderId,
+      senderName: widget.isArtistView ? widget.thread.artistName : 'You',
+      text: text,
+      timestamp: DateTime.now(),
+      isFromArtist: widget.isArtistView,
+    );
+
     setState(() {
-      _messages.add(
-        ChatMessage(
-          id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
-          senderId: 'client_user',
-          senderName: 'You',
-          text: text,
-          timestamp: DateTime.now(),
-          isFromArtist: false,
-        ),
-      );
+      _messages.add(newMessage);
     });
+    BookingSyncService.appendAndSyncChatMessage(
+      threadId: widget.thread.id,
+      message: newMessage,
+    );
 
     _textController.clear();
     Future.delayed(const Duration(milliseconds: 100), () {
@@ -75,6 +88,15 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final headerTitle = widget.isArtistView
+        ? (widget.thread.clientName?.isNotEmpty == true
+            ? widget.thread.clientName!
+            : 'Client Inquiry')
+        : widget.thread.artistName;
+    final headerSubtitle = widget.isArtistView
+        ? (widget.thread.flashTitleContext ?? 'Direct Consultation')
+        : (widget.thread.isOnline ? 'Online now' : widget.thread.studioName);
+
     return Scaffold(
       backgroundColor: AppTheme.onyxBackground,
       appBar: AppBar(
@@ -95,14 +117,19 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 border: Border.all(color: AppTheme.goldBorder, width: 1.5),
               ),
               child: ClipOval(
-                child: Image.network(
-                  widget.thread.artistAvatar,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: AppTheme.onyxContainer,
-                    child: const Icon(Icons.person, color: AppTheme.gold, size: 20),
-                  ),
-                ),
+                child: widget.thread.artistAvatar.isNotEmpty
+                    ? Image.network(
+                        widget.thread.artistAvatar,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: AppTheme.onyxContainer,
+                          child: const Icon(Icons.person, color: AppTheme.gold, size: 20),
+                        ),
+                      )
+                    : Container(
+                        color: AppTheme.onyxContainer,
+                        child: const Icon(Icons.person, color: AppTheme.gold, size: 20),
+                      ),
               ),
             ),
             const SizedBox(width: 12),
@@ -111,7 +138,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.thread.artistName,
+                    headerTitle,
                     style: GoogleFonts.plusJakartaSans(
                       color: AppTheme.textPrimary,
                       fontSize: 15,
@@ -119,13 +146,15 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                     ),
                   ),
                   Text(
-                    widget.thread.isOnline ? 'Online now' : widget.thread.studioName,
+                    headerSubtitle,
                     style: GoogleFonts.plusJakartaSans(
-                      color: widget.thread.isOnline
+                      color: !widget.isArtistView && widget.thread.isOnline
                           ? const Color(0xFF4ADE80)
                           : AppTheme.navInactive,
                       fontSize: 11,
-                      fontWeight: widget.thread.isOnline ? FontWeight.w600 : FontWeight.normal,
+                      fontWeight: !widget.isArtistView && widget.thread.isOnline
+                          ? FontWeight.w600
+                          : FontWeight.normal,
                     ),
                   ),
                 ],

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'flash_image.dart';
 
 /// Custom painter for the dashed circular guide ring around the profile avatar.
 class DashedCirclePainter extends CustomPainter {
@@ -131,6 +132,7 @@ class AvatarSilhouettePainter extends CustomPainter {
 /// - Selected state: Clean circular image with solid gold border and edit badge
 class ProfileAvatarPlaceholder extends StatelessWidget {
   final Uint8List? imageBytes;
+  final String? imageUrl;
   final VoidCallback? onTap;
   final VoidCallback? onBadgeTap;
   final double diameter;
@@ -139,6 +141,7 @@ class ProfileAvatarPlaceholder extends StatelessWidget {
   const ProfileAvatarPlaceholder({
     super.key,
     required this.imageBytes,
+    this.imageUrl,
     this.onTap,
     this.onBadgeTap,
     this.diameter = 160.0,
@@ -147,7 +150,8 @@ class ProfileAvatarPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool hasImage = imageBytes != null;
+    final bool hasUrl = imageUrl != null && imageUrl!.trim().isNotEmpty;
+    final bool hasImage = imageBytes != null || hasUrl;
 
     if (!hasImage) {
       return GestureDetector(
@@ -269,12 +273,19 @@ class ProfileAvatarPlaceholder extends StatelessWidget {
                 ],
               ),
               child: ClipOval(
-                child: Image.memory(
-                  imageBytes!,
-                  width: diameter,
-                  height: diameter,
-                  fit: BoxFit.cover,
-                ),
+                child: imageBytes != null
+                    ? Image.memory(
+                        imageBytes!,
+                        width: diameter,
+                        height: diameter,
+                        fit: BoxFit.cover,
+                      )
+                    : FlashImage(
+                        urlOrPath: imageUrl!,
+                        width: diameter,
+                        height: diameter,
+                        fit: BoxFit.cover,
+                      ),
               ),
             ),
 

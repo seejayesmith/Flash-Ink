@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/appointments/presentation/screens/appointments_screen.dart';
 import '../features/explore/presentation/screens/explore_screen.dart';
@@ -59,6 +60,24 @@ class _MainFeedContentState extends ConsumerState<_MainFeedContent> {
   void initState() {
     super.initState();
     _activeTabIndex = widget.initialIndex;
+    MessageThread.unreadUpdateNotifier.addListener(_onUnreadUpdate);
+  }
+
+  void _onUnreadUpdate() {
+    if (!mounted) return;
+    if (WidgetsBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    } else {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    MessageThread.unreadUpdateNotifier.removeListener(_onUnreadUpdate);
+    super.dispose();
   }
 
   void _navigateToTab(int index) {

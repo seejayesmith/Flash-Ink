@@ -11,6 +11,7 @@ import 'package:flash_ink/widgets/photo_crop_screen.dart';
 import 'package:flash_ink/widgets/photo_source_bottom_sheet.dart';
 import 'package:flash_ink/screens/client_account_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_account_screen.dart';
+import 'package:flash_ink/screens/artist_onboarding/artist_flash_upload_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
 
 final samplePngBytes = Uint8List.fromList([
@@ -60,7 +61,7 @@ void main() {
   });
 
   group('PhotoCropScreen Widget Tests', () {
-    testWidgets('Renders PhotoCropScreen with controls, titles, and action buttons', (tester) async {
+    testWidgets('Renders PhotoCropScreen with controls, titles, and action button', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: PhotoCropScreen(
@@ -73,14 +74,14 @@ void main() {
 
       expect(find.text('TEST CROP'), findsOneWidget);
       expect(find.byKey(const Key('photo_crop_cancel_button')), findsOneWidget);
-      expect(find.byKey(const Key('photo_crop_reset_button')), findsOneWidget);
-      expect(find.byKey(const Key('photo_crop_rotate_button')), findsOneWidget);
+      expect(find.byKey(const Key('photo_crop_reset_button')), findsNothing);
+      expect(find.byKey(const Key('photo_crop_rotate_button')), findsNothing);
       expect(find.byKey(const Key('confirm_crop_button')), findsOneWidget);
       expect(find.text('APPLY & USE PHOTO'), findsOneWidget);
       expect(find.byType(InteractiveViewer), findsOneWidget);
     });
 
-    testWidgets('Tapping Rotate 90° button updates rotation quarterTurns', (tester) async {
+    testWidgets('Configures InteractiveViewer with auto-fill constraints and cover sizing', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: PhotoCropScreen(
@@ -90,25 +91,77 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final rotateBtn = find.byKey(const Key('photo_crop_rotate_button'));
-      expect(rotateBtn, findsOneWidget);
+      final viewerFinder = find.byType(InteractiveViewer);
+      expect(viewerFinder, findsOneWidget);
+      final viewer = tester.widget<InteractiveViewer>(viewerFinder);
 
-      await tester.tap(rotateBtn);
+      expect(viewer.constrained, isFalse);
+      expect(viewer.boundaryMargin, equals(EdgeInsets.zero));
+      expect(viewer.minScale, equals(1.0));
+      expect(viewer.maxScale, equals(4.0));
+
+      final imageFinder = find.byType(Image);
+      expect(imageFinder, findsOneWidget);
+      final image = tester.widget<Image>(imageFinder);
+      expect(image.fit, equals(BoxFit.cover));
+    });
+
+    testWidgets('Tapping cancel button pops navigator with null', (tester) async {
+      Uint8List? returnedBytes = samplePngBytes;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () async {
+                final result = await Navigator.push<Uint8List?>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PhotoCropScreen(imageBytes: samplePngBytes),
+                  ),
+                );
+                returnedBytes = result;
+              },
+              child: const Text('Open Cropper'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Cropper'));
       await tester.pumpAndSettle();
 
-      // Find RotatedBox and verify 1 quarterTurn
-      final rotatedBoxFinder = find.byType(RotatedBox);
-      expect(rotatedBoxFinder, findsOneWidget);
-      final rotatedBox = tester.widget<RotatedBox>(rotatedBoxFinder);
-      expect(rotatedBox.quarterTurns, 1);
-
-      // Tap Reset button
-      final resetBtn = find.byKey(const Key('photo_crop_reset_button'));
-      await tester.tap(resetBtn);
+      final cancelBtn = find.byKey(const Key('photo_crop_cancel_button'));
+      expect(cancelBtn, findsOneWidget);
+      await tester.tap(cancelBtn);
       await tester.pumpAndSettle();
 
-      final resetRotatedBox = tester.widget<RotatedBox>(rotatedBoxFinder);
-      expect(resetRotatedBox.quarterTurns, 0);
+      expect(returnedBytes, isNull);
+    });
+
+    testWidgets('Photo fills circle crop area without empty margins', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PhotoCropScreen(
+            imageBytes: samplePngBytes,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final clipOvalFinder = find.byType(ClipOval);
+      expect(clipOvalFinder, findsOneWidget);
+
+      final imageSizedBox = find.descendant(
+        of: find.byType(InteractiveViewer),
+        matching: find.byType(SizedBox),
+      );
+      expect(imageSizedBox, findsOneWidget);
+      final renderedSizedBox = tester.widget<SizedBox>(imageSizedBox);
+      expect(renderedSizedBox.width, isNotNull);
+      expect(renderedSizedBox.height, isNotNull);
+      expect(renderedSizedBox.width!, greaterThanOrEqualTo(240.0));
+      expect(renderedSizedBox.height!, greaterThanOrEqualTo(240.0));
     });
 
     testWidgets('Tapping APPLY & USE PHOTO pops navigator with bytes', (tester) async {
@@ -296,6 +349,222 @@ void main() {
       expect(find.byKey(const Key('photo_source_sheet_title')), findsOneWidget);
       expect(find.text('Take Photo'), findsOneWidget);
       expect(find.text('Choose from Library'), findsOneWidget);
+    });
+  });
+
+  group('PhotoCropScreen Rectangular Flash Artwork Tests', () {
+    testWidgets('Renders rectangular cropper with aspect ratio chips and ClipRRect', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PhotoCropScreen(
+            imageBytes: samplePngBytes,
+            title: 'CROP & RESIZE FLASH',
+            cropShape: CropShape.rectangle,
+            subtitle: 'Pinch to zoom • Drag to frame your flash artwork',
+            ctaText: 'APPLY & USE FLASH',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('CROP & RESIZE FLASH'), findsOneWidget);
+      expect(find.text('Pinch to zoom • Drag to frame your flash artwork'), findsOneWidget);
+      expect(find.text('APPLY & USE FLASH'), findsOneWidget);
+
+      // Check aspect ratio selector chips
+      expect(find.byKey(const Key('aspect_ratio_4_3')), findsOneWidget);
+      expect(find.byKey(const Key('aspect_ratio_1_1')), findsOneWidget);
+      expect(find.byKey(const Key('aspect_ratio_4_5')), findsOneWidget);
+      expect(find.byKey(const Key('aspect_ratio_3_2')), findsOneWidget);
+
+      // Rectangular clipping uses ClipRRect instead of ClipOval
+      expect(find.byType(ClipRRect), findsOneWidget);
+      expect(find.byType(ClipOval), findsNothing);
+
+      // InteractiveViewer is configured for zooming and pan framing
+      final viewerFinder = find.byType(InteractiveViewer);
+      expect(viewerFinder, findsOneWidget);
+      final viewer = tester.widget<InteractiveViewer>(viewerFinder);
+      expect(viewer.constrained, isFalse);
+      expect(viewer.minScale, equals(1.0));
+      expect(viewer.maxScale, equals(4.0));
+      expect(viewer.boundaryMargin, equals(EdgeInsets.zero));
+    });
+
+    testWidgets('Tapping aspect ratio chips switches active framing ratio', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PhotoCropScreen(
+            imageBytes: samplePngBytes,
+            title: 'CROP & RESIZE FLASH',
+            cropShape: CropShape.rectangle,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap 1:1 Square
+      await tester.tap(find.byKey(const Key('aspect_ratio_1_1')));
+      await tester.pumpAndSettle();
+
+      // Tap 4:5 Portrait
+      await tester.tap(find.byKey(const Key('aspect_ratio_4_5')));
+      await tester.pumpAndSettle();
+
+      // Tap 3:2 Wide
+      await tester.tap(find.byKey(const Key('aspect_ratio_3_2')));
+      await tester.pumpAndSettle();
+
+      // Tap back to 4:3 Card
+      await tester.tap(find.byKey(const Key('aspect_ratio_4_3')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ClipRRect), findsOneWidget);
+    });
+
+    testWidgets('Tapping APPLY & USE FLASH in rectangular mode pops navigator with bytes', (tester) async {
+      Uint8List? returnedBytes;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () async {
+                final result = await Navigator.push<Uint8List?>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PhotoCropScreen(
+                      imageBytes: samplePngBytes,
+                      cropShape: CropShape.rectangle,
+                      title: 'CROP & RESIZE FLASH',
+                      ctaText: 'APPLY & USE FLASH',
+                    ),
+                  ),
+                );
+                returnedBytes = result;
+              },
+              child: const Text('Open Flash Cropper'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Flash Cropper'));
+      await tester.pumpAndSettle();
+
+      final applyBtn = find.byKey(const Key('confirm_crop_button'));
+      expect(applyBtn, findsOneWidget);
+      await tester.tap(applyBtn);
+      await tester.pumpAndSettle();
+
+      expect(returnedBytes, isNotNull);
+    });
+  });
+
+  group('ArtistFlashUploadScreen Cropping & Framing Tests', () {
+    testWidgets('Renders Resize & Crop button and edit button on flash preview', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ArtistFlashUploadScreen(
+            artistName: 'OddMaree',
+            instagramHandle: '@OddMaree',
+            minDeposit: 100,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open upload source picker
+      await tester.tap(find.byKey(const Key('upload_flash_trigger')));
+      await tester.pumpAndSettle();
+
+      // Load sample flash
+      await tester.tap(find.text('Use Sample Flash: Traditional Panther'));
+      await tester.pumpAndSettle();
+
+      // Details card is now visible
+      expect(find.text('Upload Flash: Item Details'), findsOneWidget);
+
+      // Verify Resize & Crop button is present on the preview card
+      expect(find.byKey(const Key('crop_flash_image_button')), findsOneWidget);
+      expect(find.text('Resize & Crop'), findsOneWidget);
+
+      // Verify edit pencil button is present
+      expect(find.byKey(const Key('edit_flash_image_button')), findsOneWidget);
+    });
+
+    testWidgets('Tapping Resize & Crop button opens PhotoCropScreen in rectangular mode', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ArtistFlashUploadScreen(
+            artistName: 'OddMaree',
+            instagramHandle: '@OddMaree',
+            minDeposit: 100,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open upload source picker & load sample flash
+      await tester.tap(find.byKey(const Key('upload_flash_trigger')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use Sample Flash: Traditional Panther'));
+      await tester.pumpAndSettle();
+
+      // Tap Resize & Crop button
+      await tester.tap(find.byKey(const Key('crop_flash_image_button')));
+      await tester.pumpAndSettle();
+
+      // Verifies PhotoCropScreen opened with rectangular controls
+      expect(find.text('CROP & RESIZE FLASH'), findsOneWidget);
+      expect(find.text('APPLY & USE FLASH'), findsOneWidget);
+      expect(find.byKey(const Key('aspect_ratio_4_3')), findsOneWidget);
+      expect(find.byKey(const Key('aspect_ratio_1_1')), findsOneWidget);
+
+      // Confirm crop to return to item details
+      await tester.tap(find.byKey(const Key('confirm_crop_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Upload Flash: Item Details'), findsOneWidget);
+    });
+
+    testWidgets('Tapping edit pencil button opens options sheet with Resize & Crop Framing option', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ArtistFlashUploadScreen(
+            artistName: 'OddMaree',
+            instagramHandle: '@OddMaree',
+            minDeposit: 100,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open upload source picker & load sample flash
+      await tester.tap(find.byKey(const Key('upload_flash_trigger')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use Sample Flash: Traditional Panther'));
+      await tester.pumpAndSettle();
+
+      // Tap pencil edit button
+      await tester.tap(find.byKey(const Key('edit_flash_image_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit Flash Photo'), findsOneWidget);
+      expect(find.byKey(const Key('photo_option_crop')), findsOneWidget);
+      expect(find.text('Resize & Crop Framing'), findsOneWidget);
+
+      // Tap Resize & Crop Framing from sheet
+      await tester.tap(find.byKey(const Key('photo_option_crop')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('CROP & RESIZE FLASH'), findsOneWidget);
+
+      // Close cropper
+      await tester.tap(find.byKey(const Key('photo_crop_cancel_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Upload Flash: Item Details'), findsOneWidget);
     });
   });
 }

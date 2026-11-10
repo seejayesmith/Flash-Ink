@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../core/utils/distance_calculator.dart';
 import '../core/widgets/flash_bottom_nav_bar.dart';
 import '../models/artist.dart';
@@ -10,6 +9,7 @@ import '../models/user.dart';
 import '../providers/app_providers.dart';
 import '../services/auth_service.dart';
 import '../services/location_service.dart';
+import '../theme/app_buttons.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
@@ -17,11 +17,10 @@ import '../widgets/adaptive_glass_container.dart';
 import '../widgets/artist_card.dart';
 import '../widgets/flash_snack_bar.dart';
 import '../widgets/flash_switch.dart';
+import '../widgets/flash_tab_header.dart';
 import 'artist_profile_screen.dart';
-import 'splash_screen.dart';
 import 'client_account_screen.dart';
 import '../widgets/guest_auth_prompt_bottom_sheet.dart';
-import '../widgets/reauthentication_bottom_sheet.dart';
 
 enum ArtistSortOption {
   recommended('Recommended', 'Sort by', 'Sort by'),
@@ -81,7 +80,6 @@ class _BrowseArtistsContent extends ConsumerStatefulWidget {
 class _BrowseArtistsContentState extends ConsumerState<_BrowseArtistsContent> {
   AuthService get _authService =>
       widget.authService ?? ref.read(authServiceProvider);
-  bool _isDeleting = false;
   final Map<String, bool> _favoriteOverrides = <String, bool>{};
   String? _lastObservedUid;
   int _activeNavIndex = 0;
@@ -396,17 +394,17 @@ class _BrowseArtistsContentState extends ConsumerState<_BrowseArtistsContent> {
 
                       if (displayArtists.isEmpty) {
                         return ListView(
-                          padding: const EdgeInsets.only(
+                          padding: EdgeInsets.only(
                             left: AppSpacing.screenGutter,
                             right: AppSpacing.screenGutter,
                             top: topOffset,
+                            bottom: bottomReserved,
                           ),
                           children: [
                             _buildEmptyState(
-                              bottomReserved: 16.0,
+                              bottomReserved: bottomReserved,
                               hasAnyArtistsInDb: allArtists.isNotEmpty,
                             ),
-                            _buildDeleteAccountFooter(bottomReserved),
                           ],
                         );
                       }
@@ -419,11 +417,8 @@ class _BrowseArtistsContentState extends ConsumerState<_BrowseArtistsContent> {
                           top: topOffset,
                           bottom: bottomPadding,
                         ),
-                        itemCount: displayArtists.length + 1,
+                        itemCount: displayArtists.length,
                         itemBuilder: (context, index) {
-                          if (index == displayArtists.length) {
-                            return _buildDeleteAccountFooter(bottomReserved);
-                          }
                           final artist = displayArtists[index];
                           return SizedBox(
                             height: itemExtent,
@@ -464,26 +459,10 @@ class _BrowseArtistsContentState extends ConsumerState<_BrowseArtistsContent> {
 
   /// Sticky Header: "Browse Artists" bold title + user avatar
   Widget _buildHeader(String? avatarUrl) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.screenGutter,
-        vertical: AppSpacing.spaceSm,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            'Browse Artists',
-            style: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFFF9FAFA),
-              fontSize: 30,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
-            ),
-          ),
-          GestureDetector(
-            key: const Key('client_avatar_button'),
+    return FlashTabHeader(
+      title: 'Browse Artists',
+      action: GestureDetector(
+        key: const Key('client_avatar_button'),
             onTap: () async {
               await Navigator.push(
                 context,
@@ -538,9 +517,7 @@ class _BrowseArtistsContentState extends ConsumerState<_BrowseArtistsContent> {
               ),
             ),
           ),
-        ],
-      ),
-    );
+        );
   }
 
   /// Sticky Search Bar: Dark rounded pill container matching Explore design language
@@ -1054,7 +1031,7 @@ class _BrowseArtistsContentState extends ConsumerState<_BrowseArtistsContent> {
                     _buildModalSwitchTile(
                       icon: Icons.location_on_outlined,
                       title: 'Nearby (Local Artists)',
-                      subtitle: 'Artists located in Los Angeles area',
+                      subtitle: 'Artists located near you',
                       value: tempNearby,
                       onChanged: (val) => setModalState(() => tempNearby = val),
                     ),
@@ -1149,16 +1126,10 @@ class _BrowseArtistsContentState extends ConsumerState<_BrowseArtistsContent> {
                     const SizedBox(height: 20),
 
                     // Apply Button
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFEEC200),
-                        foregroundColor: const Color(0xFF121414),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-                        ),
-                        elevation: 0,
-                      ),
+                    AppButtons.primaryCTA(
+                      text: 'Apply Filters',
+                      backgroundColor: const Color(0xFFEEC200),
+                      foregroundColor: const Color(0xFF121414),
                       onPressed: () {
                         setState(() {
                           _filterBooksOpen = tempBooksOpen;
@@ -1174,13 +1145,6 @@ class _BrowseArtistsContentState extends ConsumerState<_BrowseArtistsContent> {
                         });
                         Navigator.pop(modalContext);
                       },
-                      child: Text(
-                        'Apply Filters',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
                     ),
                   ],
                 ),
@@ -1518,203 +1482,6 @@ class _BrowseArtistsContentState extends ConsumerState<_BrowseArtistsContent> {
         ),
       ),
     );
-  }
-
-  /// Delete Account Footer at the bottom of the artist feed
-  Widget _buildDeleteAccountFooter(double bottomReserved) {
-    return Padding(
-      padding: EdgeInsets.only(
-        top: AppSpacing.spaceLg,
-        bottom: bottomReserved + 24.0,
-        left: AppSpacing.spaceMd,
-        right: AppSpacing.spaceMd,
-      ),
-      child: Center(
-        child: OutlinedButton.icon(
-          key: const Key('delete_account_button'),
-          onPressed: _isDeleting ? null : _confirmDeleteAccount,
-          icon: const Icon(
-            Icons.delete_outline,
-            color: Color(0xFFEF4444),
-            size: 18,
-          ),
-          label: _isDeleting
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFEF4444)),
-                  ),
-                )
-              : Text(
-                  'Delete Account',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFFEF4444),
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-          style: OutlinedButton.styleFrom(
-            backgroundColor: const Color(0xFF1E2020),
-            side: BorderSide(
-              color: const Color(0xFFEF4444).withAlpha(128),
-              width: 1.5,
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Displays a centered confirmation dialog for account deletion
-  Future<void> _confirmDeleteAccount() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      builder: (BuildContext dialogContext) {
-        bool dialogDismissed = false;
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1E2020),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.radiusLg),
-          ),
-          title: Center(
-            child: Text(
-              'Delete Account',
-              key: const Key('delete_account_modal_title'),
-              style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFFF9FAFA),
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-          ),
-          content: Text(
-            'Are you sure you want to delete your account? This action cannot be undone.',
-            key: const Key('delete_account_modal_message'),
-            textAlign: TextAlign.center,
-            style: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFF919696),
-              fontSize: 14,
-              height: 1.4,
-            ),
-          ),
-          actionsAlignment: MainAxisAlignment.spaceEvenly,
-          actions: [
-            TextButton(
-              key: const Key('delete_account_cancel_button'),
-              onPressed: () {
-                if (dialogDismissed) return;
-                dialogDismissed = true;
-                Navigator.of(dialogContext).pop(false);
-              },
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF919696),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              key: const Key('delete_account_confirm_button'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEF4444),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-                ),
-              ),
-              onPressed: () {
-                if (dialogDismissed) return;
-                dialogDismissed = true;
-                Navigator.of(dialogContext).pop(true);
-              },
-              child: Text(
-                'Delete Account',
-                style: GoogleFonts.plusJakartaSans(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed == true && mounted) {
-      await _performDeleteAccount();
-    }
-  }
-
-  /// Executes account deletion, displays simulated email SnackBar, and routes to SplashScreen
-  Future<void> _performDeleteAccount() async {
-    setState(() => _isDeleting = true);
-    try {
-      await _authService.deleteAccount();
-      if (mounted) {
-        invalidateUserSessionProviders(ref);
-        FlashSnackBar.showSuccess(
-          context,
-          'Account deleted. A confirmation email has been sent.',
-        );
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const SplashScreen()),
-          (route) => false,
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        final errorMessage = e is FirebaseAuthException
-            ? _authService.handleFirebaseAuthException(e).toString().replaceFirst('Exception: ', '')
-            : e.toString().replaceFirst('Exception: ', '');
-        final isRecentLogin = errorMessage.contains('requires recent authentication') ||
-            (e is FirebaseAuthException && e.code == 'requires-recent-login');
-
-        FlashSnackBar.showError(
-          context,
-          errorMessage,
-          action: isRecentLogin
-              ? SnackBarAction(
-                  label: 'Verify',
-                  textColor: AppTheme.gold,
-                  onPressed: () {
-                    ReauthenticationBottomSheet.show(
-                      context: context,
-                      authService: _authService,
-                      onSuccess: () {
-                        invalidateUserSessionProviders(ref);
-                        FlashSnackBar.showSuccess(
-                          context,
-                          'Account deleted. A confirmation email has been sent.',
-                        );
-                        Navigator.pushAndRemoveUntil(
-                          context,
-                          MaterialPageRoute(builder: (_) => const SplashScreen()),
-                          (route) => false,
-                        );
-                      },
-                    );
-                  },
-                )
-              : null,
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isDeleting = false);
-      }
-    }
   }
 }
 

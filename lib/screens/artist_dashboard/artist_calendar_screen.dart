@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/mock/mock_data_config.dart';
 import '../../models/artist.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../services/auth_service.dart';
+import '../../services/booking_sync_service.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/tattoo_machine_icon.dart';
+import '../../widgets/artist_top_bar.dart';
 import 'appointment_detail_screen.dart';
 import 'artist_account_screen.dart';
+import '../../features/messages/presentation/screens/messages_screen.dart';
 
 /// Interactive artist calendar screen matching the Flash.Ink dark aesthetic.
 ///
@@ -59,24 +63,51 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
     final baseDate = widget.initialDate ?? DateTime.now();
     _activeMonth = DateTime(baseDate.year, baseDate.month, 1);
     _selectedDate = DateTime(baseDate.year, baseDate.month, baseDate.day);
+    ArtistDashboardRepository.pendingRequestsNotifier.addListener(_onRepositoryChanged);
+    final uid = widget.artist?.id ?? _authService.currentUser?.uid;
+    if (uid != null && uid.isNotEmpty) {
+      BookingSyncService.hydrateArtistDataFromCloud(uid);
+    }
+  }
+
+  @override
+  void dispose() {
+    ArtistDashboardRepository.pendingRequestsNotifier.removeListener(_onRepositoryChanged);
+    super.dispose();
+  }
+
+  void _onRepositoryChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   String get _artistDisplayName {
     if (widget.artist != null && widget.artist!.name.isNotEmpty) {
       return widget.artist!.name;
     }
-    final user = _authService.currentUser;
-    if (user != null && user.displayName != null && user.displayName!.isNotEmpty) {
-      return user.displayName!;
-    }
-    return 'OddMaree';
+    try {
+      final user = _authService.currentUser;
+      if (user != null && user.displayName != null && user.displayName!.isNotEmpty) {
+        return user.displayName!;
+      }
+    } catch (_) {}
+    return MockDataConfig.isEnabled ? 'OddMaree' : 'Artist';
   }
 
   String get _avatarUrl {
     if (widget.artist != null && widget.artist!.avatarUrl.isNotEmpty) {
       return widget.artist!.avatarUrl;
     }
-    return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
+    try {
+      final user = _authService.currentUser;
+      if (user?.photoURL != null && user!.photoURL!.isNotEmpty) {
+        return user.photoURL!;
+      }
+    } catch (_) {}
+    return MockDataConfig.isEnabled
+        ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'
+        : '';
   }
 
   void _selectMonth(int month) {
@@ -183,50 +214,37 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
   Widget _buildTopActionBar() {
     final canGoBack = !widget.isEmbeddedInTab && Navigator.canPop(context);
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        if (canGoBack)
-          IconButton(
-            key: const Key('calendar_back_button'),
-            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 22),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            onPressed: () {
-              if (widget.onBack != null) {
-                widget.onBack!();
-              } else {
-                Navigator.pop(context);
-              }
-            },
-          )
-        else
-          GestureDetector(
-            key: const Key('calendar_tattoo_machine_logo'),
-            onTap: () {
-              if (canGoBack) Navigator.pop(context);
-            },
-            child: const TattooMachineIcon(
-              size: 43,
-              color: Color(0xFFEEC200),
-            ),
-          ),
-        GestureDetector(
-          key: const Key('calendar_artist_avatar_button'),
-          onTap: _navigateToAccountScreen,
-          child: Container(
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: const Color(0xFFEEC200).withAlpha(120),
-                width: 1.5,
-              ),
-            ),
-            child: _buildAvatarWidget(radius: 18),
-          ),
-        ),
-      ],
+    return ArtistTopBar(
+      leadingWidget: canGoBack
+          ? IconButton(
+              key: const Key('calendar_back_button'),
+              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 22),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: () {
+                if (widget.onBack != null) {
+                  widget.onBack!();
+                } else {
+                  Navigator.pop(context);
+                }
+              },
+            )
+          : null,
+      logoKey: const Key('calendar_tattoo_machine_logo'),
+      onLogoTap: () {
+        if (canGoBack) Navigator.pop(context);
+      },
+      messagesKey: const Key('calendar_messages_button'),
+      avatarKey: const Key('calendar_artist_avatar_button'),
+      onMessagesTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MessagesScreen()),
+        );
+      },
+      onAvatarTap: _navigateToAccountScreen,
+      avatarChild: _buildAvatarWidget(radius: 18),
+      artistId: widget.artist?.id ?? _authService.currentUser?.uid,
     );
   }
 

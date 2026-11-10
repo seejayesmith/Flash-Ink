@@ -13,7 +13,6 @@ class UserProfile {
   final String? onboardingRole;
   final bool profileCompleted;
   final List<String> aesthetics;
-  final List<String> placements;
   final String? zipCode;
   final String? cityState;
   final int travelRadiusMiles;
@@ -24,6 +23,8 @@ class UserProfile {
   final String? instagramHandle;
   final bool phoneVerified;
   final bool isAnonymous;
+  final bool isArtist;
+  final String? activeMode;
 
   const UserProfile({
     required this.uid,
@@ -37,7 +38,6 @@ class UserProfile {
     this.onboardingRole,
     this.profileCompleted = false,
     this.aesthetics = const [],
-    this.placements = const [],
     this.zipCode,
     this.cityState,
     this.travelRadiusMiles = 50,
@@ -48,6 +48,8 @@ class UserProfile {
     this.instagramHandle,
     this.phoneVerified = false,
     this.isAnonymous = false,
+    this.isArtist = false,
+    this.activeMode,
   });
 
   /// Saved geographic coordinates for this user, if valid.
@@ -97,7 +99,6 @@ class UserProfile {
       onboardingRole: json['onboardingRole']?.toString(),
       profileCompleted: json['profileCompleted'] == true,
       aesthetics: _parseStringList(json['aesthetics']),
-      placements: _parseStringList(json['placements']),
       zipCode: json['zipCode']?.toString(),
       cityState: json['cityState']?.toString(),
       travelRadiusMiles: (json['travelRadiusMiles'] is num)
@@ -110,6 +111,8 @@ class UserProfile {
       instagramHandle: json['instagramHandle']?.toString(),
       phoneVerified: json['phoneVerified'] == true,
       isAnonymous: json['isAnonymous'] == true,
+      isArtist: json['isArtist'] == true || json['role'] == 'artist',
+      activeMode: json['activeMode']?.toString(),
     );
   }
 
@@ -125,9 +128,9 @@ class UserProfile {
       if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
       if (role != null) 'role': role,
       if (onboardingRole != null) 'onboardingRole': onboardingRole,
+      if (activeMode != null) 'activeMode': activeMode,
       'profileCompleted': profileCompleted,
       'aesthetics': aesthetics,
-      'placements': placements,
       if (zipCode != null) 'zipCode': zipCode,
       if (cityState != null) 'cityState': cityState,
       'travelRadiusMiles': travelRadiusMiles,
@@ -153,7 +156,6 @@ class UserProfile {
     String? onboardingRole,
     bool? profileCompleted,
     List<String>? aesthetics,
-    List<String>? placements,
     String? zipCode,
     String? cityState,
     int? travelRadiusMiles,
@@ -164,6 +166,8 @@ class UserProfile {
     String? instagramHandle,
     bool? phoneVerified,
     bool? isAnonymous,
+    bool? isArtist,
+    String? activeMode,
   }) {
     return UserProfile(
       uid: uid ?? this.uid,
@@ -177,7 +181,6 @@ class UserProfile {
       onboardingRole: onboardingRole ?? this.onboardingRole,
       profileCompleted: profileCompleted ?? this.profileCompleted,
       aesthetics: aesthetics ?? this.aesthetics,
-      placements: placements ?? this.placements,
       zipCode: zipCode ?? this.zipCode,
       cityState: cityState ?? this.cityState,
       travelRadiusMiles: travelRadiusMiles ?? this.travelRadiusMiles,
@@ -188,6 +191,8 @@ class UserProfile {
       instagramHandle: instagramHandle ?? this.instagramHandle,
       phoneVerified: phoneVerified ?? this.phoneVerified,
       isAnonymous: isAnonymous ?? this.isAnonymous,
+      isArtist: isArtist ?? this.isArtist,
+      activeMode: activeMode ?? this.activeMode,
     );
   }
 }

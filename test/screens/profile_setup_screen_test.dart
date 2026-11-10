@@ -248,5 +248,44 @@ void main() {
       currentScope = FocusScope.of(tester.element(find.byType(TextField)));
       expect(currentScope.hasFocus, isFalse);
     });
+
+    testWidgets('Full-bleed layout without external keyboard bottom padding when keyboard opens', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(
+              size: Size(390, 844),
+              viewInsets: EdgeInsets.only(bottom: 300),
+            ),
+            child: ProfileSetupScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Ensure AnimatedSwitcher is not wrapped in Padding(bottom: 300)
+      final switcher = find.byType(AnimatedSwitcher);
+      expect(switcher, findsOneWidget);
+
+      final ancestorPaddingFinder = find.ancestor(
+        of: switcher,
+        matching: find.byWidgetPredicate(
+          (w) => w is Padding && w.padding == const EdgeInsets.only(bottom: 300),
+        ),
+      );
+      expect(ancestorPaddingFinder, findsNothing);
+
+      // Verify FlowPageLayout SingleChildScrollView has keyboardDismissBehavior.onDrag
+      final scrollView = tester.widget<SingleChildScrollView>(
+        find.descendant(
+          of: find.byType(ProfileSetupScreen),
+          matching: find.byType(SingleChildScrollView),
+        ),
+      );
+      expect(
+        scrollView.keyboardDismissBehavior,
+        equals(ScrollViewKeyboardDismissBehavior.onDrag),
+      );
+    });
   });
 }

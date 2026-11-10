@@ -10,6 +10,7 @@ import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/reauthentication_bottom_sheet.dart';
 import '../../services/auth_service.dart';
 import '../../providers/app_providers.dart';
+import '../location_settings_screen.dart';
 import '../splash_screen.dart';
 
 class ArtistAccountSettingsScreen extends StatefulWidget {
@@ -317,6 +318,35 @@ class _ArtistAccountSettingsScreenState extends State<ArtistAccountSettingsScree
                             ),
                           ),
                           trailing: const Icon(Icons.check_circle, color: Color(0xFF22C55E), size: 18),
+                        ),
+                        const Divider(color: AppTheme.darkBorder, height: 1),
+                        ListTile(
+                          key: const Key('artist_settings_location_permissions_tile'),
+                          leading: const Icon(Icons.location_on_outlined, color: AppTheme.gold),
+                          title: Text(
+                            'Location Permissions',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Manage device location permissions and map preferences',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF919696),
+                              fontSize: 13,
+                            ),
+                          ),
+                          trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const LocationSettingsScreen(),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../models/artist_dashboard_data.dart';
 import '../../../../models/waitlist_entry.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
+import '../../../../widgets/client_empty_state.dart';
+import '../../../../widgets/flash_tab_header.dart';
 import '../../domain/models/message_thread.dart';
 import '../widgets/message_thread_tile.dart';
 import '../widgets/vip_waitlist_invitation_card.dart';
@@ -31,7 +34,25 @@ class _MessagesScreenState extends State<MessagesScreen> {
       widget.mockThreads ?? MessageThread.activeThreads;
 
   @override
+  void initState() {
+    super.initState();
+    MessageThread.unreadUpdateNotifier.addListener(_onUnreadUpdate);
+  }
+
+  void _onUnreadUpdate() {
+    if (!mounted) return;
+    if (WidgetsBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    } else {
+      setState(() {});
+    }
+  }
+
+  @override
   void dispose() {
+    MessageThread.unreadUpdateNotifier.removeListener(_onUnreadUpdate);
     _searchController.dispose();
     super.dispose();
   }
@@ -56,56 +77,47 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
     return Scaffold(
       backgroundColor: AppTheme.onyxBackground,
-      appBar: AppBar(
-        backgroundColor: AppTheme.onyxBackground,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleSpacing: AppSpacing.screenGutter,
-        title: Row(
-          children: [
-            Text(
-              'Messages',
-              style: GoogleFonts.plusJakartaSans(
-                color: AppTheme.textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            if (_totalUnreadCount > 0) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppTheme.gold,
-                  borderRadius: BorderRadius.circular(AppRadius.radiusFull),
-                ),
-                child: Text(
-                  '$_totalUnreadCount NEW',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: AppTheme.onyxBackground,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-        centerTitle: false,
-      ),
       body: SafeArea(
         bottom: false,
         child: Column(
           children: [
-            // Search Input
+            FlashTabHeader(
+              title: 'Messages',
+              titleAccessory: _totalUnreadCount > 0
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.gold,
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.radiusFull),
+                      ),
+                      child: Text(
+                        '$_totalUnreadCount NEW',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: AppTheme.onyxBackground,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    )
+                  : null,
+            ),
+
+            // Standardized Search Input
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.screenGutter,
+                vertical: AppSpacing.spaceXs,
+              ),
               child: Container(
-                height: 42,
+                height: 46,
                 decoration: BoxDecoration(
                   color: AppTheme.cardBackground,
                   borderRadius: BorderRadius.circular(AppRadius.radiusFull),
-                  border: Border.all(color: AppTheme.cardBorder),
+                  border: Border.all(color: AppTheme.cardBorder, width: 1.2),
                 ),
                 child: TextField(
                   controller: _searchController,
@@ -117,24 +129,26 @@ class _MessagesScreenState extends State<MessagesScreen> {
                   },
                   style: GoogleFonts.plusJakartaSans(
                     color: AppTheme.textPrimary,
-                    fontSize: 13,
+                    fontSize: 14,
                   ),
                   decoration: InputDecoration(
                     isDense: true,
                     hintText: 'Search conversations...',
                     hintStyle: GoogleFonts.plusJakartaSans(
                       color: AppTheme.navInactive,
-                      fontSize: 12,
+                      fontSize: 13,
                     ),
-                    prefixIcon: const Icon(Icons.search, color: AppTheme.navInactive, size: 18),
-                    prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 42),
+                    prefixIcon: const Icon(Icons.search,
+                        color: AppTheme.gold, size: 20),
+                    prefixIconConstraints:
+                        const BoxConstraints(minWidth: 48, minHeight: 46),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
 
             // Exclusive VIP Waitlist Early Access Invitation Card
             Builder(
@@ -153,14 +167,16 @@ class _MessagesScreenState extends State<MessagesScreen> {
             // Threads List
             Expanded(
               child: filtered.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No conversations found',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: AppTheme.navInactive,
-                          fontSize: 13,
-                        ),
-                      ),
+                  ? ClientEmptyState(
+                      icon: _query.trim().isEmpty
+                          ? Icons.chat_bubble_outline_rounded
+                          : Icons.search_off_rounded,
+                      title: _query.trim().isEmpty
+                          ? 'No Conversations Yet'
+                          : 'No Conversations Found',
+                      subtitle: _query.trim().isEmpty
+                          ? 'When you book an appointment or message an artist, your conversations will appear here.'
+                          : 'No messages match "$_query". Try a different search.',
                     )
                   : ListView.builder(
                       padding: EdgeInsets.fromLTRB(

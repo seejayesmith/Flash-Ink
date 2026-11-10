@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../features/messages/domain/models/message_thread.dart';
 import '../../models/nav_destination_item.dart';
 import '../../theme/app_radius.dart';
 import '../../theme/app_theme.dart';
@@ -95,114 +96,119 @@ class FlashBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final navItems = resolvedItems;
-    final radius = BorderRadius.circular(borderRadius);
+    return ValueListenableBuilder<int>(
+      valueListenable: MessageThread.unreadUpdateNotifier,
+      builder: (context, _, child) {
+        final navItems = resolvedItems;
+        final radius = BorderRadius.circular(borderRadius);
 
-    return Semantics(
-      container: true,
-      label: 'Bottom Navigation',
-      child: Container(
-        height: height,
-        decoration: BoxDecoration(
-          borderRadius: radius,
-          boxShadow: AppTheme.navBarShadow,
-        ),
-        child: ClipRRect(
-          borderRadius: radius,
-          child: BackdropFilter(
-            // Silky liquid diffusion
-            filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-            child: Stack(
-              children: [
-                // Layer 1: Enhanced translucent liquid glass tint (flat background, increased transparency, no gradient)
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: radius,
-                      color: backgroundColor ?? AppTheme.onyxBackground.withAlpha(65), // ~25% opacity for slightly higher transparency
-                    ),
-                  ),
-                ),
-
-                // Layer 2: Subtle border stroke, gliding active pill, and destination items row
-                Positioned.fill(
-                  child: Container(
-                    padding: AppTheme.navBarPadding,
-                    decoration: BoxDecoration(
-                      borderRadius: radius,
-                      border: Border.all(
-                        color: AppTheme.glassBorderColor.withAlpha(120),
-                        width: AppTheme.glassBorderWidth,
+        return Semantics(
+          container: true,
+          label: 'Bottom Navigation',
+          child: Container(
+            height: height,
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              boxShadow: AppTheme.navBarShadow,
+            ),
+            child: ClipRRect(
+              borderRadius: radius,
+              child: BackdropFilter(
+                // Silky liquid diffusion
+                filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+                child: Stack(
+                  children: [
+                    // Layer 1: Enhanced translucent liquid glass tint (flat background, increased transparency, no gradient)
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: radius,
+                          color: backgroundColor ?? AppTheme.onyxBackground.withAlpha(65), // ~25% opacity for slightly higher transparency
+                        ),
                       ),
                     ),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final itemCount = navItems.length;
-                        final totalWidth = constraints.hasBoundedWidth
-                            ? constraints.maxWidth
-                            : (itemCount * 80.0);
-                        final slotWidth =
-                            itemCount > 0 ? totalWidth / itemCount : 0.0;
-                        final hasValidSelection =
-                            currentIndex >= 0 && currentIndex < itemCount;
 
-                        return Stack(
-                          children: [
-                            // Gliding liquid glass indicator pill
-                            if (hasValidSelection && slotWidth > 0)
-                              AnimatedPositioned(
-                                duration: AppTheme.navAnimationDuration,
-                                curve: AppTheme.navAnimationCurve,
-                                left: currentIndex * slotWidth + 4.0,
-                                top: 4.0,
-                                bottom: 4.0,
-                                width: (slotWidth - 8.0).clamp(0.0, double.infinity),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.navActivePillBackground,
-                                    borderRadius: BorderRadius.circular(
-                                      AppTheme.navItemBorderRadius,
+                    // Layer 2: Subtle border stroke, gliding active pill, and destination items row
+                    Positioned.fill(
+                      child: Container(
+                        padding: AppTheme.navBarPadding,
+                        decoration: BoxDecoration(
+                          borderRadius: radius,
+                          border: Border.all(
+                            color: AppTheme.glassBorderColor.withAlpha(120),
+                            width: AppTheme.glassBorderWidth,
+                          ),
+                        ),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final itemCount = navItems.length;
+                            final totalWidth = constraints.hasBoundedWidth
+                                ? constraints.maxWidth
+                                : (itemCount * 80.0);
+                            final slotWidth =
+                                itemCount > 0 ? totalWidth / itemCount : 0.0;
+                            final hasValidSelection =
+                                currentIndex >= 0 && currentIndex < itemCount;
+
+                            return Stack(
+                              children: [
+                                // Gliding liquid glass indicator pill
+                                if (hasValidSelection && slotWidth > 0)
+                                  AnimatedPositioned(
+                                    duration: AppTheme.navAnimationDuration,
+                                    curve: AppTheme.navAnimationCurve,
+                                    left: currentIndex * slotWidth + 4.0,
+                                    top: 4.0,
+                                    bottom: 4.0,
+                                    width: (slotWidth - 8.0).clamp(0.0, double.infinity),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.navActivePillBackground,
+                                        borderRadius: BorderRadius.circular(
+                                          AppTheme.navItemBorderRadius,
+                                        ),
+                                      ),
                                     ),
                                   ),
+
+                                // Destination items row
+                                Positioned.fill(
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: List.generate(navItems.length, (index) {
+                                      final item = navItems[index];
+                                      final isSelected = currentIndex == index;
+
+                                      return Expanded(
+                                        child: _FlashNavDestinationButton(
+                                          key: item.key ?? Key('nav_item_$index'),
+                                          item: item,
+                                          isSelected: isSelected,
+                                          onTap: () {
+                                            if (enableHaptics) {
+                                              HapticFeedback.selectionClick();
+                                            }
+                                            onTap(index);
+                                          },
+                                        ),
+                                      );
+                                    }),
+                                  ),
                                 ),
-                              ),
-
-                            // Destination items row
-                            Positioned.fill(
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: List.generate(navItems.length, (index) {
-                                  final item = navItems[index];
-                                  final isSelected = currentIndex == index;
-
-                                  return Expanded(
-                                    child: _FlashNavDestinationButton(
-                                      key: item.key ?? Key('nav_item_$index'),
-                                      item: item,
-                                      isSelected: isSelected,
-                                      onTap: () {
-                                        if (enableHaptics) {
-                                          HapticFeedback.selectionClick();
-                                        }
-                                        onTap(index);
-                                      },
-                                    ),
-                                  );
-                                }),
-                              ),
-                            ),
-                          ],
-                        );
-                      },
+                              ],
+                            );
+                          },
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -229,6 +235,21 @@ class _FlashNavDestinationButton extends StatelessWidget {
     final inactiveColor = AppTheme.navInactive;
     final foregroundColor = isSelected ? activeColor : inactiveColor;
     final iconData = isSelected ? item.effectiveActiveIcon : item.icon;
+
+    final isMessages = item.route == '/client/messages' ||
+        item.route == '/artist/messages' ||
+        item.label.toLowerCase() == 'messages' ||
+        item.icon == Icons.chat_bubble_outline_rounded ||
+        item.icon == Icons.chat_bubble_outline;
+
+    final hasUnreadMessages =
+        MessageThread.activeThreads.isNotEmpty && MessageThread.totalUnreadCount() > 0;
+
+    // When there are no messages, there should not be a notification dot on the messages icon
+    final showBadge = item.badgeCount != null && item.badgeCount! > 0;
+    final showDot = item.hasNotificationBadge &&
+        item.badgeCount == null &&
+        (!isMessages || hasUnreadMessages);
 
     return Semantics(
       selected: isSelected,
@@ -257,11 +278,11 @@ class _FlashNavDestinationButton extends StatelessWidget {
                         size: AppTheme.navIconSize,
                         color: foregroundColor,
                       ),
-                      if (item.hasNotificationBadge || (item.badgeCount != null && item.badgeCount! > 0))
+                      if (showBadge || showDot)
                         Positioned(
                           top: -2,
                           right: -3,
-                          child: item.badgeCount != null && item.badgeCount! > 0
+                          child: showBadge
                               ? Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                                   decoration: BoxDecoration(
@@ -297,14 +318,17 @@ class _FlashNavDestinationButton extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: AppTheme.navIconLabelSpacing),
-                  // Standardized label token
-                  Text(
-                    item.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: isSelected
-                        ? AppTheme.navLabelActive
-                        : AppTheme.navLabelInactive,
+                  // Standardized label token with defensive downscaling
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: isSelected
+                          ? AppTheme.navLabelActive
+                          : AppTheme.navLabelInactive,
+                    ),
                   ),
                 ],
               ),

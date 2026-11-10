@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import '../core/utils/distance_calculator.dart';
@@ -30,9 +30,28 @@ class UserLocationResult {
   }
 }
 
+/// Abstract delegate allowing platform geolocation calls to be mocked or overridden.
+abstract class LocationPlatformDelegate {
+  Future<bool> isLocationServiceEnabled();
+  Future<LocationPermission> checkPermission();
+  Future<LocationPermission> requestPermission();
+  Future<bool> openAppSettings();
+  Future<bool> openLocationSettings();
+  Future<UserLocationResult?> getCurrentLocation();
+  Future<GeoPointCoords?> tryGetPermittedCoordinates();
+}
+
 class LocationService {
+  /// Optional mock/test delegate. When provided, platform calls route through this delegate.
+  static LocationPlatformDelegate? delegate;
+
+  static bool get _isWidgetTest =>
+      WidgetsBinding.instance.runtimeType.toString().contains('Test');
+
   /// Checks if location services are enabled on the device.
   static Future<bool> isLocationServiceEnabled() async {
+    if (delegate != null) return delegate!.isLocationServiceEnabled();
+    if (_isWidgetTest) return true;
     try {
       return await Geolocator.isLocationServiceEnabled();
     } catch (e) {
@@ -41,17 +60,65 @@ class LocationService {
     }
   }
 
+  /// Checks the current location permission status without prompting.
+  static Future<LocationPermission> checkPermission() async {
+    if (delegate != null) return delegate!.checkPermission();
+    if (_isWidgetTest) return LocationPermission.whileInUse;
+    try {
+      return await Geolocator.checkPermission();
+    } catch (e) {
+      debugPrint('LocationService.checkPermission error: $e');
+      return LocationPermission.denied;
+    }
+  }
+
+  /// Prompts the user to grant location permissions.
+  static Future<LocationPermission> requestPermission() async {
+    if (delegate != null) return delegate!.requestPermission();
+    if (_isWidgetTest) return LocationPermission.whileInUse;
+    try {
+      return await Geolocator.requestPermission();
+    } catch (e) {
+      debugPrint('LocationService.requestPermission error: $e');
+      return LocationPermission.denied;
+    }
+  }
+
+  /// Opens the device app settings screen so the user can grant or revoke location permissions.
+  static Future<bool> openAppSettings() async {
+    if (delegate != null) return delegate!.openAppSettings();
+    if (_isWidgetTest) return true;
+    try {
+      return await Geolocator.openAppSettings();
+    } catch (e) {
+      debugPrint('LocationService.openAppSettings error: $e');
+      return false;
+    }
+  }
+
+  /// Opens the device location settings screen (system GPS toggle).
+  static Future<bool> openLocationSettings() async {
+    if (delegate != null) return delegate!.openLocationSettings();
+    if (_isWidgetTest) return true;
+    try {
+      return await Geolocator.openLocationSettings();
+    } catch (e) {
+      debugPrint('LocationService.openLocationSettings error: $e');
+      return false;
+    }
+  }
+
   /// Checks and requests location permission.
   static Future<bool> checkAndRequestPermission() async {
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      bool serviceEnabled = await isLocationServiceEnabled();
       if (!serviceEnabled) {
         return false;
       }
 
-      LocationPermission permission = await Geolocator.checkPermission();
+      LocationPermission permission = await checkPermission();
       if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
+        permission = await requestPermission();
         if (permission == LocationPermission.denied) {
           return false;
         }
@@ -71,6 +138,8 @@ class LocationService {
 
   /// Fetches the user's current GPS position and reverse-geocodes it into a ZIP code & city.
   static Future<UserLocationResult?> getCurrentLocation() async {
+    if (delegate != null) return delegate!.getCurrentLocation();
+    if (_isWidgetTest) return null;
     try {
       final hasPermission = await checkAndRequestPermission();
       if (!hasPermission) return null;
@@ -117,6 +186,8 @@ class LocationService {
   /// Quietly fetches live GPS coordinates if location services and permission
   /// are already granted, returning `null` without prompting if not permitted.
   static Future<GeoPointCoords?> tryGetPermittedCoordinates() async {
+    if (delegate != null) return delegate!.tryGetPermittedCoordinates();
+    if (_isWidgetTest) return null;
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) return null;

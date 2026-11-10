@@ -17,7 +17,7 @@ class AppSpacing {
   static const double headerTop = 24.0; // Vertical distance below app bar / stepper to header title
   static const double headerTitleSubtitleGap = 8.0; // Gap between title and subtitle
   static const double headerContentGap = 24.0; // Gap between header subtitle and content card
-  static const double ctaHeight = 52.0; // Primary Call-To-Action button height
+  static const double ctaHeight = 44.0; // Primary Call-To-Action button height
   static const double ctaBottomPadding = 16.0; // Padding between bottom safe area and CTA
 }
 

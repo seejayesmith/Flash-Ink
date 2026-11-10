@@ -133,5 +133,23 @@ void main() {
       final skipSize = tester.getSize(find.byKey(const Key('onboarding_skip_button')));
       expect(skipSize.width, greaterThan(50.0));
     });
+
+    testWidgets('showCta: false hides bottom CTA button', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OnboardingStepScaffold(
+            currentStep: 1,
+            totalSteps: 4,
+            title: 'No CTA Step',
+            subtitle: 'Testing showCta: false',
+            showCta: false,
+            child: const Text('Content without bottom CTA'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('onboarding_cta_button')), findsNothing);
+    });
   });
 }

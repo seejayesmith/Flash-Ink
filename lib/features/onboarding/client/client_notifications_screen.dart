@@ -12,11 +12,10 @@ import '../../../widgets/adaptive_glass_container.dart';
 import '../../../screens/main_feed_screen.dart';
 import '../shared/onboarding_step_scaffold.dart';
 
-/// Client Onboarding Step 4: Notification Permissions
+/// Client Onboarding Step 3: Notification Permissions
 class ClientNotificationsScreen extends StatefulWidget {
   final AuthService? authService;
   final List<String>? selectedStyles;
-  final List<String>? selectedPlacements;
   final String? zipCode;
   final String? cityState;
   final double? latitude;
@@ -27,7 +26,6 @@ class ClientNotificationsScreen extends StatefulWidget {
     super.key,
     this.authService,
     this.selectedStyles,
-    this.selectedPlacements,
     this.zipCode,
     this.cityState,
     this.latitude,
@@ -82,7 +80,6 @@ class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
               email: userEmail,
               displayName: userDisplayName,
               aesthetics: widget.selectedStyles,
-              placements: widget.selectedPlacements,
               zipCode: widget.zipCode,
               cityState: widget.cityState,
               travelRadiusMiles: widget.travelRadiusMiles,
@@ -161,8 +158,8 @@ class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     return OnboardingStepScaffold(
-      currentStep: 4,
-      totalSteps: 4,
+      currentStep: 3,
+      totalSteps: 3,
       title: 'Never miss a drop',
       subtitle: 'Be the first to claim 1-of-1 flash designs and snag slots when artists open their books.',
       ctaText: 'DONE',

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../models/booking.dart';
+import '../../theme/app_buttons.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/pinned_bottom_action_scaffold.dart';
@@ -183,43 +184,28 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
                     }).toList(),
                   ),
                   const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      key: const Key('confirm_reschedule_button'),
-                      onPressed: () {
-                        final updated = ArtistDashboardRepository.rescheduleAppointment(
-                          _appointment.id,
-                          newDate: selectedDate,
-                          newTimeSlot: selectedSlot,
-                        );
-                        if (updated != null) {
-                          setState(() {
-                            _appointment = updated;
-                          });
-                        }
-                        Navigator.pop(sheetContext);
-                        FlashSnackBar.showSuccess(
-                          this.context,
-                          'Rescheduled ${_appointment.clientName} to ${_appointment.date} at ${_appointment.time}.',
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFEEC200),
-                        foregroundColor: const Color(0xFF121414),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                      ),
-                      child: Text(
-                        'Confirm Reschedule',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
+                  AppButtons.primaryCTA(
+                    key: const Key('confirm_reschedule_button'),
+                    onPressed: () {
+                      final updated = ArtistDashboardRepository.rescheduleAppointment(
+                        _appointment.id,
+                        newDate: selectedDate,
+                        newTimeSlot: selectedSlot,
+                      );
+                      if (updated != null) {
+                        setState(() {
+                          _appointment = updated;
+                        });
+                      }
+                      Navigator.pop(sheetContext);
+                      FlashSnackBar.showSuccess(
+                        this.context,
+                        'Rescheduled ${_appointment.clientName} to ${_appointment.date} at ${_appointment.time}.',
+                      );
+                    },
+                    text: 'Confirm Reschedule',
+                    backgroundColor: const Color(0xFFEEC200),
+                    foregroundColor: const Color(0xFF121414),
                   ),
                 ],
               ),
@@ -286,40 +272,23 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  key: const Key('confirm_cancel_appointment_button'),
-                  onPressed: () {
-                    ArtistDashboardRepository.cancelAppointment(
-                      _appointment.id,
-                      reason: 'Artist schedule adjustment',
-                    );
-                    Navigator.pop(sheetContext);
-                    FlashSnackBar.showError(
-                      context,
-                      'Appointment with ${_appointment.clientName} cancelled.',
-                    );
-                    if (Navigator.canPop(context)) {
-                      Navigator.pop(context, true);
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEF4444),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                  ),
-                  child: Text(
-                    'Confirm Cancellation',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
+              AppButtons.destructiveCTA(
+                key: const Key('confirm_cancel_appointment_button'),
+                onPressed: () {
+                  ArtistDashboardRepository.cancelAppointment(
+                    _appointment.id,
+                    reason: 'Artist schedule adjustment',
+                  );
+                  Navigator.pop(sheetContext);
+                  FlashSnackBar.showError(
+                    context,
+                    'Appointment with ${_appointment.clientName} cancelled.',
+                  );
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context, true);
+                  }
+                },
+                text: 'Confirm Cancellation',
               ),
             ],
           ),

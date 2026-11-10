@@ -121,20 +121,29 @@ class ArtistCard extends StatelessWidget {
                       ],
                     ),
                     child: ClipOval(
-                      child: Image.network(
-                        artist.avatarUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: const Color(0xFF262929),
-                            child: const Icon(
-                              Icons.person,
-                              color: Color(0xFFEEC200),
-                              size: 38,
+                      child: artist.avatarUrl.trim().isNotEmpty
+                          ? Image.network(
+                              artist.avatarUrl.trim(),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  color: const Color(0xFF262929),
+                                  child: const Icon(
+                                    Icons.person,
+                                    color: Color(0xFFEEC200),
+                                    size: 38,
+                                  ),
+                                );
+                              },
+                            )
+                          : Container(
+                              color: const Color(0xFF262929),
+                              child: const Icon(
+                                Icons.person,
+                                color: Color(0xFFEEC200),
+                                size: 38,
+                              ),
                             ),
-                          );
-                        },
-                      ),
                     ),
                   ),
                 ),
@@ -404,11 +413,7 @@ class ArtistCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 3),
                       Text(
-                        artist.distance.isNotEmpty
-                            ? artist.distance
-                            : (artist.location.isNotEmpty
-                                ? artist.location
-                                : 'Location set'),
+                        artist.statsDistanceLabel,
                         style: GoogleFonts.plusJakartaSans(
                           color: const Color(0xFFF9FAFA),
                           fontSize: 15,
@@ -508,7 +513,7 @@ class ArtistCard extends StatelessWidget {
   Widget _buildActionRow() {
     return Row(
       children: [
-        // "VIEW PROFILE" full-width CTA adhering to 42.0px height
+        // "VIEW PROFILE" full-width CTA adhering to 44.0px height
         Expanded(
           child: AppButtons.primaryCTA(
             onPressed: onViewProfile,

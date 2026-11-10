@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:add_2_calendar/add_2_calendar.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../theme/app_buttons.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/flash_image.dart';
@@ -139,25 +140,12 @@ class BookingReceiptMessageTile extends StatelessWidget {
             if (message.appointmentDate != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: OutlinedButton.icon(
+                child: AppButtons.secondaryCTA(
                   onPressed: _addToCalendar,
-                  icon: const Icon(Icons.calendar_month, color: AppTheme.gold, size: 18),
-                  label: Text(
-                    'ADD TO CALENDAR',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: AppTheme.gold,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppTheme.goldBorder),
-                    minimumSize: const Size.fromHeight(44),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-                    ),
-                  ),
+                  icon: Icons.calendar_month,
+                  text: 'ADD TO CALENDAR',
+                  borderColor: AppTheme.goldBorder,
+                  foregroundColor: AppTheme.gold,
                 ),
               ),
           ],

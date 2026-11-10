@@ -24,27 +24,14 @@ class DiscoverTrendingArtists extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'TRENDING IN YOUR AREA',
-                style: GoogleFonts.plusJakartaSans(
-                  color: AppTheme.navInactive,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.9,
-                ),
-              ),
-              Text(
-                'View All',
-                style: GoogleFonts.plusJakartaSans(
-                  color: AppTheme.gold,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+          child: Text(
+            'TRENDING IN YOUR AREA',
+            style: GoogleFonts.plusJakartaSans(
+              color: AppTheme.navInactive,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.9,
+            ),
           ),
         ),
         const SizedBox(height: 12),

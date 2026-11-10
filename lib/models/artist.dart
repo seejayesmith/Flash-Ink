@@ -1,3 +1,4 @@
+import '../core/mock/mock_data_config.dart';
 import '../core/mock/mock_fixtures.dart';
 import '../core/utils/distance_calculator.dart';
 import 'studio_information.dart';
@@ -195,6 +196,7 @@ class Artist {
   final String instagramHandle;
   final String studioName;
   final String avatarUrl;
+  final String bannerUrl;
   final bool isBooksOpen;
   final String location;
   final String studioType;
@@ -228,6 +230,7 @@ class Artist {
     this.instagramHandle = '',
     this.studioName = '',
     required this.avatarUrl,
+    this.bannerUrl = '',
     this.isBooksOpen = true,
     required this.location,
     required this.studioType,
@@ -306,6 +309,40 @@ class Artist {
               status: FlashStatus.available,
             );
 
+  /// Distance or location label formatted for compact metric stats pills
+  /// (e.g., `'1.4 mi'` instead of `'1.4 mi away'`).
+  String get statsDistanceLabel {
+    final raw = distance.isNotEmpty
+        ? distance
+        : (location.isNotEmpty ? location : 'Location set');
+    return DistanceCalculator.stripAwaySuffix(raw);
+  }
+
+  /// Resolved header banner image URL:
+  /// 1. Explicit custom [bannerUrl] if set by the artist.
+  /// 2. Most recently uploaded flash artwork image (`flashArtworks.last.imageUrl`).
+  /// 3. Most recent portfolio preview image (`images.last`).
+  /// 4. Empty string `''` when the artist has 0 flash photos and no custom banner.
+  String get effectiveBannerUrl {
+    final customBanner = bannerUrl.trim();
+    if (customBanner.isNotEmpty && !customBanner.startsWith('local://')) {
+      return customBanner;
+    }
+    for (int i = flashArtworks.length - 1; i >= 0; i--) {
+      final candidate = flashArtworks[i].imageUrl.trim();
+      if (candidate.isNotEmpty && !candidate.startsWith('local://')) {
+        return candidate;
+      }
+    }
+    for (int i = images.length - 1; i >= 0; i--) {
+      final candidate = images[i].trim();
+      if (candidate.isNotEmpty && !candidate.startsWith('local://')) {
+        return candidate;
+      }
+    }
+    return '';
+  }
+
   Artist copyWith({
     String? id,
     String? name,
@@ -313,6 +350,7 @@ class Artist {
     String? instagramHandle,
     String? studioName,
     String? avatarUrl,
+    String? bannerUrl,
     bool? isBooksOpen,
     String? location,
     String? studioType,
@@ -344,6 +382,7 @@ class Artist {
       instagramHandle: instagramHandle ?? this.instagramHandle,
       studioName: studioName ?? this.studioName,
       avatarUrl: avatarUrl ?? this.avatarUrl,
+      bannerUrl: bannerUrl ?? this.bannerUrl,
       isBooksOpen: isBooksOpen ?? this.isBooksOpen,
       location: location ?? this.location,
       studioType: studioType ?? this.studioType,
@@ -386,6 +425,7 @@ class Artist {
       if (studioName.isNotEmpty) 'studioName': studioName,
       'avatarUrl': avatarUrl,
       'photoUrl': avatarUrl,
+      'bannerUrl': bannerUrl,
       'isBooksOpen': isBooksOpen,
       'location': location,
       'city': studioInformation?.city.isNotEmpty == true
@@ -487,6 +527,11 @@ class Artist {
         ? rawAvatar
         : '';
 
+    final rawBanner = map['bannerUrl'] ?? map['coverImageUrl'] ?? map['headerImageUrl'];
+    final bannerUrl = (rawBanner is String && !rawBanner.startsWith('local://'))
+        ? rawBanner.trim()
+        : '';
+
     final parsedLat = (map['latitude'] is num)
         ? (map['latitude'] as num).toDouble()
         : studioInfo?.latitude;
@@ -505,6 +550,7 @@ class Artist {
       instagramHandle: map['instagramHandle']?.toString() ?? '',
       studioName: map['studioName']?.toString() ?? studioInfo?.name ?? '',
       avatarUrl: avatarUrl,
+      bannerUrl: bannerUrl,
       isBooksOpen: map['isBooksOpen'] == true || map['isBooksOpen'] == null,
       location: map['location']?.toString() ??
           studioInfo?.displayLocation ??
@@ -529,7 +575,7 @@ class Artist {
       tags: tags,
       flashArtworks: flashArtworks,
       bio: map['bio']?.toString() ?? '',
-      funFacts: funFacts ?? MockFixtures.defaultFunFacts,
+      funFacts: funFacts ?? (MockDataConfig.isEnabled ? MockFixtures.defaultFunFacts : const []),
       policies: policies ?? MockFixtures.defaultStudioPolicies,
       isVerifiedStudio: map['isVerifiedStudio'] != false,
       customRequestAvailable: map['customRequestAvailable'] != false,

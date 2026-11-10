@@ -6,6 +6,7 @@ import 'package:flash_ink/features/appointments/presentation/screens/appointment
 import 'package:flash_ink/features/appointments/presentation/widgets/appointment_card.dart';
 import 'package:flash_ink/features/appointments/presentation/widgets/appointment_detail_modal.dart';
 import 'package:flash_ink/features/explore/presentation/screens/explore_screen.dart';
+import 'package:flash_ink/features/messages/domain/models/message_thread.dart';
 import 'package:flash_ink/features/messages/presentation/screens/chat_conversation_screen.dart';
 import 'package:flash_ink/features/messages/presentation/screens/messages_screen.dart';
 import 'package:flash_ink/features/messages/presentation/widgets/message_thread_tile.dart';
@@ -18,10 +19,12 @@ void main() {
   group('Navigation Shell & 4 Primary Root Screens Tests', () {
     setUp(() {
       MockDataConfig.debugOverride = true;
+      MessageThread.resetMockThreads();
     });
 
     tearDown(() {
       MockDataConfig.resetDebugOverride();
+      MessageThread.resetMockThreads();
     });
     testWidgets('FlashBottomNavBar renders the 4 updated client destinations',
         (tester) async {
@@ -46,11 +49,11 @@ void main() {
 
       expect(find.text('Feed'), findsOneWidget);
       expect(find.text('Explore'), findsOneWidget);
-      expect(find.text('Appointments'), findsOneWidget);
+      expect(find.text('Bookings'), findsOneWidget);
       expect(find.text('Messages'), findsOneWidget);
 
-      // Verify unread notification badge on Messages
-      expect(find.text('2'), findsOneWidget);
+      // Verify clean default destinations have no notification badge
+      expect(find.text('2'), findsNothing);
     });
 
     testWidgets('MainFeedScreen navigates smoothly between all 4 tabs preserving state',
@@ -72,8 +75,8 @@ void main() {
       expect(find.text('FEATURED ARTIST SPOTLIGHT'), findsOneWidget);
       expect(find.text('TRENDING SHOPS & STUDIOS'), findsOneWidget);
 
-      // Switch to Tab 2: Appointments
-      await tester.tap(find.text('Appointments'));
+      // Switch to Tab 2: Bookings (AppointmentsScreen)
+      await tester.tap(find.text('Bookings'));
       await tester.pumpAndSettle();
 
       expect(find.byType(AppointmentsScreen), findsOneWidget);
@@ -148,11 +151,11 @@ void main() {
       expect(find.text('TRENDING SHOPS & STUDIOS'), findsOneWidget);
 
       // Enter search query
-      await tester.enterText(find.byType(TextField), 'Obsidian');
+      await tester.enterText(find.byType(TextField), 'Oddmaree');
       await tester.pumpAndSettle();
 
       // Check for results
-      expect(find.text('Obsidian Atelier'), findsOneWidget);
+      expect(find.text('Oddmaree Studio'), findsOneWidget);
     });
 
     testWidgets('MessagesScreen displays threads and navigates to ChatConversationScreen',

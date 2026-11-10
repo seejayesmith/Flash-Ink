@@ -5,6 +5,7 @@ import '../../../../models/artist_dashboard_data.dart';
 import '../../../../models/waitlist_entry.dart';
 import '../../../../screens/artist_profile_screen.dart';
 import '../../../../screens/custom_request_screen.dart';
+import '../../../../theme/app_buttons.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../widgets/flash_image.dart';
@@ -218,7 +219,7 @@ class VipWaitlistInvitationCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: ElevatedButton(
+                child: AppButtons.primaryCTA(
                   onPressed: () async {
                     final authenticated = await GuestAuthPromptBottomSheet.ensureAuthenticated(
                       context,
@@ -239,27 +240,14 @@ class VipWaitlistInvitationCard extends StatelessWidget {
                       ),
                     );
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEEC200),
-                    foregroundColor: const Color(0xFF121414),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-                    ),
-                  ),
-                  child: Text(
-                    'Book My Request',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+                  text: 'Book My Request',
+                  backgroundColor: const Color(0xFFEEC200),
+                  foregroundColor: const Color(0xFF121414),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: OutlinedButton(
+                child: AppButtons.secondaryCTA(
                   onPressed: () {
                     final artist = Artist.mockArtists.first;
                     Navigator.push(
@@ -272,21 +260,9 @@ class VipWaitlistInvitationCard extends StatelessWidget {
                       ),
                     );
                   },
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFFEEC200)),
-                    foregroundColor: const Color(0xFFEEC200),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-                    ),
-                  ),
-                  child: Text(
-                    'Browse Flash Pieces',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                  text: 'Browse Flash Pieces',
+                  borderColor: const Color(0xFFEEC200),
+                  foregroundColor: const Color(0xFFEEC200),
                 ),
               ),
             ],

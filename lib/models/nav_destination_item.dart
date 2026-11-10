@@ -57,7 +57,7 @@ class NavDestinationItem {
     NavDestinationItem(
       icon: Icons.calendar_today_outlined,
       activeIcon: Icons.calendar_today,
-      label: 'Appointments',
+      label: 'Bookings',
       route: '/client/appointments',
       key: Key('nav_item_2'),
     ),
@@ -67,8 +67,7 @@ class NavDestinationItem {
       label: 'Messages',
       route: '/client/messages',
       key: Key('nav_item_3'),
-      hasNotificationBadge: true,
-      badgeCount: 2,
+      hasNotificationBadge: false,
     ),
   ];
 
@@ -89,12 +88,11 @@ class NavDestinationItem {
       key: Key('nav_item_1'),
     ),
     NavDestinationItem(
-      icon: Icons.chat_bubble_outline_rounded,
-      activeIcon: Icons.chat_bubble_rounded,
-      label: 'Messages',
-      route: '/artist/messages',
+      icon: Icons.collections_outlined,
+      activeIcon: Icons.collections_rounded,
+      label: 'Collections',
+      route: '/artist/collections',
       key: Key('nav_item_2'),
-      hasNotificationBadge: true,
     ),
     NavDestinationItem(
       icon: Icons.auto_stories_outlined,
@@ -166,7 +164,7 @@ class NavDestinationItem {
       label: 'MESSAGES',
       route: '/artist/messages',
       key: Key('nav_item_2'),
-      hasNotificationBadge: true,
+      hasNotificationBadge: false,
     ),
     NavDestinationItem(
       icon: Icons.auto_stories_outlined,

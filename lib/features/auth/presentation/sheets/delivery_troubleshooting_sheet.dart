@@ -44,18 +44,13 @@ class DeliveryTroubleshootingSheet extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: DeliveryTroubleshootingSheet(
-          destination: destination,
-          isPhone: isPhone,
-          onEditDestination: onEditDestination,
-          onResendSms: onResendSms,
-          onWhatsAppVoice: onWhatsAppVoice,
-          onSwitchToEmail: onSwitchToEmail,
-        ),
+      builder: (context) => DeliveryTroubleshootingSheet(
+        destination: destination,
+        isPhone: isPhone,
+        onEditDestination: onEditDestination,
+        onResendSms: onResendSms,
+        onWhatsAppVoice: onWhatsAppVoice,
+        onSwitchToEmail: onSwitchToEmail,
       ),
     );
   }
@@ -106,6 +101,7 @@ class DeliveryTroubleshootingSheet extends ConsumerWidget {
           ),
           child: SingleChildScrollView(
             physics: const ClampingScrollPhysics(),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,

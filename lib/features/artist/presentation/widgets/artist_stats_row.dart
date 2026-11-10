@@ -40,11 +40,7 @@ class ArtistStatsRow extends StatelessWidget {
                 context,
                 icon: Icons.location_on_outlined,
                 iconColor: AppTheme.navInactive,
-                value: artist.distance.isNotEmpty
-                    ? artist.distance
-                    : (artist.location.isNotEmpty
-                        ? artist.location
-                        : 'Location set'),
+                value: artist.statsDistanceLabel,
                 label: 'DISTANCE',
                 valueColor: AppTheme.textPrimary,
               ),

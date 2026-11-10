@@ -11,6 +11,7 @@ import 'main_feed_screen.dart';
 import 'profile_setup_screen.dart';
 import 'aesthetics_selection_screen.dart';
 import 'artist_dashboard/artist_dashboard_screen.dart';
+import 'artist_onboarding/artist_info_screen.dart';
 import 'email_verification_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -114,23 +115,30 @@ class _SplashScreenState extends State<SplashScreen> {
 
           final profileCompleted = data?['profileCompleted'] == true;
 
-          // Check if artist document exists
-          bool isArtist = verifiedRole == 'artist';
-          if (!isArtist) {
-            try {
-              final artistDoc = await firestore
-                  .collection('artists')
-                  .doc(user.uid)
-                  .get()
-                  .timeout(const Duration(seconds: 3));
-              if (artistDoc.exists) {
-                isArtist = true;
-              }
-            } catch (_) {}
-          }
+          // Check if artist document exists and whether artist onboarding is completed
+          bool isArtistDoc = false;
+          bool artistDocCompleted = false;
+          try {
+            final artistDoc = await firestore
+                .collection('artists')
+                .doc(user.uid)
+                .get()
+                .timeout(const Duration(seconds: 3));
+            isArtistDoc = artistDoc.exists;
+            if (isArtistDoc && artistDoc.data()?['profileCompleted'] != false) {
+              artistDocCompleted = true;
+            }
+          } catch (_) {}
+
+          final bool hasLegacyOrClaimArtist = verifiedRole == 'artist' ||
+              (data != null &&
+                  (data['isArtist'] == true || data['role'] == 'artist') &&
+                  profileCompleted);
+          final bool isArtistOnboarded =
+              artistDocCompleted || (!isArtistDoc && hasLegacyOrClaimArtist);
 
           // If role was missing in Firestore and not an artist, backfill default 'client' role
-          if (!isArtist && (data == null || data['role'] == null)) {
+          if (!isArtistOnboarded && (data == null || data['role'] == null)) {
             try {
               await firestore
                   .collection('users')
@@ -142,16 +150,46 @@ class _SplashScreenState extends State<SplashScreen> {
             } catch (_) {}
           }
 
-          // Route to ArtistDashboardScreen if verified custom claims or artist document exists
-          if (isArtist) {
+          final String? persistedMode = AuthService.activeAppMode ??
+              (data?['activeMode'] as String?) ??
+              (data?['onboardingRole'] as String?);
+          final String effectiveMode =
+              persistedMode ?? (isArtistOnboarded ? 'artist' : 'client');
+          AuthService.activeAppMode = effectiveMode;
+
+          if (effectiveMode == 'artist' && isArtistOnboarded) {
             nextScreen = const ArtistDashboardScreen();
+          } else if (effectiveMode == 'artist') {
+            String? displayName;
+            try {
+              displayName = user.displayName;
+            } catch (_) {}
+            displayName ??= (data?['username'] as String?) ??
+                (data?['displayName'] as String?);
+            String? phoneNumber;
+            try {
+              phoneNumber = user.phoneNumber;
+            } catch (_) {}
+            phoneNumber ??= data?['phoneNumber'] as String?;
+            String? userEmail;
+            try {
+              userEmail = user.email;
+            } catch (_) {}
+            userEmail ??= data?['email'] as String?;
+            nextScreen = ArtistInfoScreen(
+              authService: widget.authService,
+              initialName: displayName,
+              initialEmail: userEmail,
+              initialPhone: phoneNumber,
+            );
           } else {
             final aesthetics = data?['aesthetics'];
             final hasAesthetics = aesthetics is List && aesthetics.isNotEmpty;
+            final hasBasicProfile = profileCompleted || isArtistOnboarded;
 
-            if (!profileCompleted) {
+            if (!hasBasicProfile) {
               nextScreen = const ProfileSetupScreen();
-            } else if (!hasAesthetics) {
+            } else if (!hasAesthetics && !isArtistOnboarded) {
               nextScreen = const AestheticsSelectionScreen();
             } else {
               nextScreen = const MainFeedScreen();
@@ -242,7 +280,7 @@ class _SplashScreenState extends State<SplashScreen> {
                       ),
                     ],
                   ),
-                  AppGaps.gapXs,
+                  AppGaps.gapLg,
                   Text(
                     'TATTOO DISCOVERY & BOOKING',
                     style: GoogleFonts.plusJakartaSans(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist_dashboard_data.dart';
+import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_switch.dart';
@@ -329,27 +330,11 @@ class _BooksOpenOptionsModalState extends State<BooksOpenOptionsModal> {
           ),
           extraContent,
           const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            height: 44,
-            child: ElevatedButton(
-              onPressed: onTap,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: buttonColor,
-                foregroundColor: buttonTextColor,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-                ),
-              ),
-              child: Text(
-                buttonLabel,
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-              ),
-            ),
+          AppButtons.primaryCTA(
+            onPressed: onTap,
+            text: buttonLabel,
+            backgroundColor: buttonColor,
+            foregroundColor: buttonTextColor,
           ),
         ],
       ),

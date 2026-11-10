@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import '../features/auth/presentation/screens/account_recovery_hub_screen.dart';
 import '../features/auth/presentation/screens/auth_lockout_screen.dart';
 import '../features/auth/presentation/sheets/account_collision_sheet.dart';
@@ -75,6 +76,20 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
     try {
       final credential = await signInMethod();
       if (credential != null && credential.user != null) {
+        try {
+          if (Firebase.apps.isNotEmpty) {
+            final uid = credential.user!.uid;
+            final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+            final existing = await userRef.get();
+            await userRef.set({
+              'uid': uid,
+              if (!existing.exists) 'role': 'client',
+              'onboardingRole': widget.role,
+              'activeMode': widget.role,
+            }, SetOptions(merge: true));
+          }
+        } catch (_) {}
+
         if (mounted) {
           await AuthRouting.routeUserAfterAuth(
             context, 

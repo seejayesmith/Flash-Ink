@@ -109,29 +109,40 @@ class AuthRouting {
         data = null;
       }
 
-      if (data == null && defaultRole != 'artist') {
-        // New user document initialization (never self-assigns 'artist' role on client)
+      final Map<String, dynamic> initialUpdates = {
+        'uid': user.uid,
+        if (data == null || data['role'] == null) 'role': 'client',
+        'onboardingRole': ?defaultRole,
+        'activeMode': ?defaultRole,
+      };
+      if (data == null ||
+          data['role'] == null ||
+          (defaultRole != null &&
+              (data['onboardingRole'] == null || data['activeMode'] == null))) {
+        // Initialize or backfill document with role: 'client' (never self-assigns 'artist' role on client)
+        // and persist chosen onboarding persona
         try {
           await userDocRef
-              .set({
-                'uid': user.uid,
-                'role': 'client',
-              }, SetOptions(merge: true))
+              .set(initialUpdates, SetOptions(merge: true))
               .timeout(timeoutDuration);
+          data = (data != null)
+              ? {...data, ...initialUpdates}
+              : initialUpdates;
         } catch (_) {}
       }
     }
 
-    bool profileCompleted = false;
+    bool clientProfileCompleted = false;
     bool hasAesthetics = false;
 
     if (data != null) {
-      profileCompleted = data['profileCompleted'] == true;
+      clientProfileCompleted = data['profileCompleted'] == true;
       final aesthetics = data['aesthetics'];
       hasAesthetics = aesthetics is List && aesthetics.isNotEmpty;
     }
 
     bool isArtistDoc = false;
+    bool artistDocCompleted = false;
     if (resolvedFirestore != null) {
       try {
         final artistDoc = await resolvedFirestore
@@ -140,46 +151,88 @@ class AuthRouting {
             .get()
             .timeout(timeoutDuration);
         isArtistDoc = artistDoc.exists;
-        if (artistDoc.data()?['profileCompleted'] == true) {
-          profileCompleted = true;
+        if (isArtistDoc && artistDoc.data()?['profileCompleted'] != false) {
+          artistDocCompleted = true;
         }
       } catch (_) {}
     }
 
     if (!context.mounted) return;
 
-    // Zero-Trust Routing Guard:
-    // 1. Entering the privileged ArtistDashboardScreen requires either server-signed
-    //    Firebase Auth Custom Claims or an existing verified artist document in Firestore.
-    // 2. Brand-new users who selected 'artist' during sign-up (`!profileCompleted && defaultRole == 'artist'`)
-    //    are routed to the ArtistInfoScreen onboarding funnel so they can complete verification.
-    final bool isVerifiedArtist = verifiedRole == 'artist' || isArtistDoc || (data != null && data['role'] == 'artist');
-    final bool isEnteringArtistOnboarding =
-        !profileCompleted && (defaultRole == 'artist' || isVerifiedArtist);
+    // Zero-Trust & Dual-Persona Routing Guard:
+    // 1. An account is considered a completed artist if `artists/{uid}` exists and is not an incomplete draft
+    //    (`profileCompleted != false`), or if server-minted claims / user doc specify artist status without an incomplete draft.
+    final bool hasLegacyOrClaimArtist = verifiedRole == 'artist' ||
+        (data != null &&
+            (data['isArtist'] == true || data['role'] == 'artist') &&
+            data['profileCompleted'] == true);
+    final bool isArtistOnboarded =
+        artistDocCompleted || (!isArtistDoc && hasLegacyOrClaimArtist);
 
-    Widget nextScreen;
-    if (isVerifiedArtist && profileCompleted) {
-      nextScreen = ArtistDashboardScreen(authService: authService);
-    } else if (isEnteringArtistOnboarding) {
+    // Resolve the user's intended persona mode:
+    // - Explicit `defaultRole` from RoleSelectionScreen takes precedence (allowing an existing
+    //   Client to onboard/sign-in as an Artist, or an existing Artist to sign-in as a Client).
+    // - Otherwise falls back to persisted `activeMode`.
+    final String? persistedMode = AuthService.activeAppMode ??
+        (data?['activeMode'] as String?) ??
+        (data?['onboardingRole'] as String?);
+    final String effectiveMode = defaultRole ??
+        persistedMode ??
+        (isArtistOnboarded ? 'artist' : 'client');
+
+    await AuthService.setActiveAppMode(
+      effectiveMode,
+      uid: user.uid,
+      firestore: (!isWidgetTest || hasInjectedFirestore)
+          ? resolvedFirestore
+          : null,
+    );
+
+    if (!context.mounted) return;
+
+    Widget buildArtistOnboardingScreen() {
       String? displayName;
       try {
         displayName = user.displayName;
       } catch (_) {}
+      if (displayName == null || displayName.trim().isEmpty) {
+        displayName = (data?['username'] as String?) ??
+            (data?['displayName'] as String?);
+      }
+      String? resolvedEmail = email;
+      if ((resolvedEmail == null || resolvedEmail.isEmpty) &&
+          data != null &&
+          data['email'] is String) {
+        resolvedEmail = data['email'] as String?;
+      }
       String? phoneNumber;
       try {
         phoneNumber = user.phoneNumber;
       } catch (_) {}
-      if ((phoneNumber == null || phoneNumber.isEmpty) && data != null && data['phoneNumber'] != null) {
+      if ((phoneNumber == null || phoneNumber.isEmpty) &&
+          data != null &&
+          data['phoneNumber'] != null) {
         phoneNumber = data['phoneNumber'] as String?;
       }
-      nextScreen = ArtistInfoScreen(
+      return ArtistInfoScreen(
         authService: authService,
         initialName: displayName,
-        initialEmail: email,
+        initialEmail: resolvedEmail,
         initialPhone: phoneNumber,
       );
+    }
+
+    Widget nextScreen;
+    if (effectiveMode == 'artist') {
+      if (isArtistOnboarded) {
+        nextScreen = ArtistDashboardScreen(authService: authService);
+      } else {
+        nextScreen = buildArtistOnboardingScreen();
+      }
     } else {
-      if (!profileCompleted) {
+      // Client persona mode ('client')
+      final bool hasBasicProfile = clientProfileCompleted || isArtistOnboarded;
+      if (!hasBasicProfile) {
         nextScreen = ProfileSetupScreen(authService: authService);
       } else if (!hasAesthetics) {
         nextScreen = const AestheticsSelectionScreen();

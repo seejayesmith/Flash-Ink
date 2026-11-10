@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/widgets.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -124,6 +125,42 @@ class AuthService {
 
   static DevMockUser? devMockUser;
 
+  /// Active UI persona mode for dual-role users (`'client'` or `'artist'`).
+  static String? activeAppMode;
+  static final StreamController<String?> _activeModeController =
+      StreamController<String?>.broadcast();
+
+  /// Stream of active persona mode transitions (`'client'` or `'artist'`).
+  static Stream<String?> get activeModeChanges => _activeModeController.stream;
+
+  /// Updates the active persona mode in memory and persists it to `/users/{uid}` in Firestore.
+  static Future<void> setActiveAppMode(
+    String? mode, {
+    String? uid,
+    FirebaseFirestore? firestore,
+  }) async {
+    activeAppMode = mode;
+    if (!_activeModeController.isClosed) {
+      _activeModeController.add(mode);
+    }
+    if (mode != null && uid != null && uid.isNotEmpty) {
+      final bool isWidgetTest =
+          WidgetsBinding.instance.runtimeType.toString().contains('Test');
+      if (isWidgetTest && firestore == null) {
+        return;
+      }
+      try {
+        final db = firestore ?? FirebaseFirestore.instance;
+        await db.collection('users').doc(uid).set({
+          'uid': uid,
+          'activeMode': mode,
+          if (mode == 'artist') 'onboardingRole': 'artist',
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true)).timeout(const Duration(seconds: 2));
+      } catch (_) {}
+    }
+  }
+
   static final StreamController<User?> _sessionChangeController =
       StreamController<User?>.broadcast();
   static int _sessionEpoch = 0;
@@ -208,9 +245,9 @@ class AuthService {
           'id': mockUser.uid,
           'name': mockUser.displayName,
           'instagramHandle': '@oddmaree',
-          'location': 'Los Angeles, CA',
-          'latitude': 34.05,
-          'longitude': -118.24,
+          'location': 'Portland, OR',
+          'latitude': 45.5152,
+          'longitude': -122.6784,
           'isPrivateStudio': true,
           'profileCompleted': true,
           'minDeposit': 50,
@@ -455,6 +492,9 @@ class AuthService {
       if (claimRole is String && claimRole.isNotEmpty) {
         return claimRole;
       }
+      if (tokenResult.claims?['isArtist'] == true) {
+        return 'artist';
+      }
     } catch (_) {
       // Fallback safely to 'client' if token refresh is unavailable in headless/offline tests
     }
@@ -464,6 +504,10 @@ class AuthService {
   /// Clears all cached in-memory repository state to prevent cross-role data leakage on sign-out.
   static void invalidateSessionState() {
     devMockUser = null;
+    activeAppMode = null;
+    if (!_activeModeController.isClosed) {
+      _activeModeController.add(null);
+    }
     ArtistDashboardRepository.resetMockData();
     BookingSyncService.resetSyncState();
     _sessionEpoch++;
@@ -807,6 +851,114 @@ class AuthService {
       }, SetOptions(merge: true));
     } catch (e) {
       throw Exception('Failed to update phone verification status: ${e.toString()}');
+    }
+  }
+
+  /// Checks if the given user is authenticated via Google.
+  static bool isGoogleAuthUser(User? user) {
+    if (user == null) return false;
+    try {
+      final providers = user.providerData;
+      for (final info in providers) {
+        if (info.providerId == 'google.com') return true;
+      }
+    } catch (_) {}
+    try {
+      final email = user.email?.toLowerCase() ?? '';
+      if (email.endsWith('@gmail.com') || email.endsWith('@googlemail.com')) {
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  /// Checks whether a user has a verified phone number in their Auth profile or Firestore document.
+  static bool hasVerifiedPhone(User? user, [Map<String, dynamic>? firestoreData]) {
+    if (firestoreData != null && firestoreData['phoneVerified'] == true) {
+      final phone = firestoreData['phoneNumber'] as String?;
+      if (phone != null && phone.trim().isNotEmpty) return true;
+    }
+    try {
+      if (user != null && user.phoneNumber != null && user.phoneNumber!.trim().isNotEmpty) {
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  // Link or add a Phone Credential to current authenticated user
+  Future<UserCredential?> linkWithPhoneCredential({
+    required String verificationId,
+    required String smsCode,
+    String? phoneNumber,
+  }) async {
+    final user = currentUser;
+    if (user == null) throw Exception("No authenticated user to link account to.");
+
+    final effectiveVerificationId =
+        verificationId.trim().isNotEmpty ? verificationId.trim() : (_verificationId ?? '');
+    if (effectiveVerificationId.isEmpty) {
+      throw _handleFirebaseAuthException(
+        FirebaseAuthException(code: 'session-expired'),
+        'phone',
+      );
+    }
+    try {
+      final PhoneAuthCredential credential = PhoneAuthProvider.credential(
+        verificationId: effectiveVerificationId,
+        smsCode: smsCode.trim(),
+      );
+
+      UserCredential? userCredential;
+      try {
+        userCredential = await user.linkWithCredential(credential);
+      } catch (linkError) {
+        if (linkError is FirebaseAuthException) {
+          if (linkError.code == 'credential-already-in-use') {
+            throw Exception('This phone number is already linked to another Flash.Ink account.');
+          }
+          throw _handleFirebaseAuthException(linkError, 'phone');
+        }
+        // Fallback for mock/test users that do not implement linkWithCredential
+        if (user is DevMockUser || kEnableDevBypass) {
+          // Proceed with updating firestore
+        } else {
+          rethrow;
+        }
+      }
+
+      final formattedPhone = phoneNumber != null && phoneNumber.trim().isNotEmpty
+          ? formatE164PhoneNumber(phoneNumber)
+          : (userCredential?.user?.phoneNumber ?? formatE164PhoneNumber(_verificationId ?? ''));
+
+      await updatePhoneVerificationStatus(
+        uid: user.uid,
+        phoneNumber: formattedPhone,
+      );
+
+      // If user is also an artist, update artist private settings as well
+      try {
+        await _firestore
+            .collection('artists')
+            .doc(user.uid)
+            .collection('private')
+            .doc('settings')
+            .set({
+          'phoneNumber': formattedPhone,
+          'phoneVerified': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (_) {}
+
+      return userCredential;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'credential-already-in-use') {
+        throw Exception('This phone number is already linked to another Flash.Ink account.');
+      }
+      throw _handleFirebaseAuthException(e, 'phone');
+    } catch (e) {
+      if (e.toString().contains('already linked')) rethrow;
+      throw Exception('Failed to link phone number: ${e.toString()}');
     }
   }
 

@@ -3,18 +3,23 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/mock/mock_data_config.dart';
 import '../../core/widgets/flash_bottom_nav_bar.dart';
+import '../../features/messages/domain/models/message_thread.dart';
+import '../../features/messages/presentation/screens/chat_conversation_screen.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../models/artist.dart';
 import '../../models/artist_dashboard_data.dart';
+import '../../repositories/artist_repository.dart';
 import '../../services/auth_service.dart';
-import '../../widgets/tattoo_machine_icon.dart';
+import '../../services/booking_sync_service.dart';
+import '../../widgets/artist_top_bar.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
 import 'appointment_detail_screen.dart';
 import 'artist_account_screen.dart';
 import 'artist_books_screen.dart';
 import 'artist_calendar_screen.dart';
+import 'artist_collections_screen.dart';
 import 'artist_earnings_screen.dart';
 import 'booking_request_detail_screen.dart';
 
@@ -39,7 +44,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   int _selectedTabIndex = 0;
   Artist? _liveArtist;
 
-  DashboardAppointment get _nextAppointment => ArtistDashboardRepository.nextAppointment;
+  DashboardAppointment? get _activeNextAppointment => ArtistDashboardRepository.activeNextAppointment;
   List<DashboardAppointment> get _todaySchedule => ArtistDashboardRepository.todaySchedule;
   List<BookingRequest> get _pendingRequests => ArtistDashboardRepository.pendingRequests;
   ArtistDashboardStats get _stats => ArtistDashboardRepository.stats;
@@ -49,23 +54,77 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   void initState() {
     super.initState();
     ArtistDashboardRepository.pendingRequestsNotifier.addListener(_onRepositoryUpdated);
-    if (widget.artist == null) {
-      _loadLiveArtistProfile();
-    }
+    _loadLiveArtistProfile();
   }
 
   Future<void> _loadLiveArtistProfile() async {
     try {
-      final uid = _authService.currentUser?.uid;
-      if (uid == null || uid.isEmpty) return;
-      final doc = await FirebaseFirestore.instance
+      String? authUid;
+      String? authPhotoUrl;
+      try {
+        final user = _authService.currentUser;
+        authUid = user?.uid;
+        authPhotoUrl = user?.photoURL;
+      } catch (_) {}
+
+      final uid = widget.artist?.id ?? authUid;
+      if (uid != null && uid.isNotEmpty) {
+        BookingSyncService.hydrateArtistDataFromCloud(uid);
+      }
+
+      if (authUid == null || authUid.isEmpty) return;
+      final db = FirebaseFirestore.instance;
+      final doc = await db
           .collection('artists')
-          .doc(uid)
+          .doc(authUid)
           .get();
       if (doc.exists && doc.data() != null && mounted) {
-        setState(() {
-          _liveArtist = Artist.fromMap(doc.data()!, doc.id);
-        });
+        var loaded = Artist.fromMap(doc.data()!, doc.id);
+        if (loaded.avatarUrl.trim().isEmpty) {
+          String? fallbackPhoto = authPhotoUrl?.trim();
+          if (fallbackPhoto == null || fallbackPhoto.isEmpty) {
+            final userDoc = await db.collection('users').doc(authUid).get();
+            final uData = userDoc.data();
+            final rawUserPhoto = uData?['photoUrl'] ??
+                uData?['photoURL'] ??
+                uData?['avatarUrl'];
+            if (rawUserPhoto is String && rawUserPhoto.trim().isNotEmpty) {
+              fallbackPhoto = rawUserPhoto.trim();
+            }
+          }
+          if (fallbackPhoto != null &&
+              fallbackPhoto.isNotEmpty &&
+              !fallbackPhoto.startsWith('local://')) {
+            loaded = loaded.copyWith(avatarUrl: fallbackPhoto);
+            await ArtistRepository.syncUnifiedProfilePhoto(
+              uid: authUid,
+              photoUrl: fallbackPhoto,
+              firestore: db,
+              createArtistIfMissing: true,
+            );
+          }
+        }
+        if (mounted) {
+          setState(() {
+            _liveArtist = loaded;
+          });
+        }
+        if (!MockDataConfig.isEnabled &&
+            ArtistDashboardRepository.booksSchedule.locationNote.isEmpty) {
+          final studioPart = loaded.studioName.isNotEmpty
+              ? loaded.studioName
+              : loaded.studioType;
+          final locNote = [
+            if (studioPart.isNotEmpty) studioPart,
+            if (loaded.location.isNotEmpty) loaded.location,
+          ].join(' • ');
+          if (locNote.isNotEmpty) {
+            ArtistDashboardRepository.booksSchedule =
+                ArtistDashboardRepository.booksSchedule.copyWith(
+              locationNote: locNote,
+            );
+          }
+        }
       }
     } catch (_) {
       // Safe fallback in offline or widget test environments
@@ -179,8 +238,8 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
     );
   }
 
-  void _navigateToAccountScreen() {
-    Navigator.push(
+  Future<void> _navigateToAccountScreen() async {
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ArtistAccountScreen(
@@ -188,6 +247,32 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
           authService: _authService,
         ),
       ),
+    );
+    if (mounted) {
+      await _loadLiveArtistProfile();
+      if (mounted) {
+        setState(() {});
+      }
+    }
+  }
+
+  Future<void> _navigateToMessagesScreen() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: const Color(0xFF121414),
+          body: _buildMessagesPlaceholder(showTopBar: true),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCollectionsTab() {
+    return ArtistCollectionsScreen(
+      artist: _resolvedArtist,
+      authService: _authService,
+      onNavigateToAccount: _navigateToAccountScreen,
     );
   }
 
@@ -202,7 +287,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
             children: [
               _buildDashboardContent(),
               _buildCalendarTab(),
-              _buildMessagesPlaceholder(),
+              _buildCollectionsTab(),
               _buildBooksTab(),
               _buildEarningsTab(),
             ],
@@ -254,35 +339,21 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
     );
   }
 
-  /// Top action bar with tattoo machine icon on the left and artist avatar on the right
+  /// Top action bar with tattoo machine icon on the left, Messages icon button,
+  /// and artist avatar on the right.
   Widget _buildTopActionBar({
     Key logoKey = const Key('tattoo_machine_logo'),
     Key avatarKey = const Key('artist_avatar_button'),
+    Key messagesKey = const Key('top_action_messages_button'),
   }) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        TattooMachineIcon(
-          key: logoKey,
-          size: 43,
-          color: const Color(0xFFEEC200),
-        ),
-        GestureDetector(
-          key: avatarKey,
-          onTap: _navigateToAccountScreen,
-          child: Container(
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: const Color(0xFFEEC200).withAlpha(120),
-                width: 1.5,
-              ),
-            ),
-            child: _buildAvatarWidget(radius: 18),
-          ),
-        ),
-      ],
+    return ArtistTopBar(
+      logoKey: logoKey,
+      avatarKey: avatarKey,
+      messagesKey: messagesKey,
+      onMessagesTap: _navigateToMessagesScreen,
+      onAvatarTap: _navigateToAccountScreen,
+      avatarChild: _buildAvatarWidget(radius: 18),
+      artistId: _resolvedArtist?.id ?? _authService.currentUser?.uid,
     );
   }
 
@@ -385,8 +456,127 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   }
 
 
-  /// Large hero Next Appointment card with tattoo artwork background
+  /// Large hero Next Appointment card with tattoo artwork background (or styled empty state in live mode)
   Widget _buildHeroNextAppointmentCard() {
+    final nextApt = _activeNextAppointment;
+    if (nextApt == null) {
+      return Container(
+        key: const Key('hero_next_appointment_card'),
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF191C1C),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: const Color(0xFF282C2C),
+            width: 1.0,
+          ),
+        ),
+        child: Column(
+          key: const Key('hero_next_appointment_empty_state'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEC200).withAlpha(25),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.event_available_rounded,
+                    color: Color(0xFFEEC200),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Next Appointment',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFFEEC200),
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'No Upcoming Appointments',
+              style: GoogleFonts.plusJakartaSans(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.3,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Open your books or share your profile link with clients to start scheduling tattoo sessions.',
+              style: GoogleFonts.plusJakartaSans(
+                color: const Color(0xFF8C9191),
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  key: const Key('hero_empty_manage_books_button'),
+                  onPressed: () {
+                    setState(() => _selectedTabIndex = 3);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEEC200),
+                    foregroundColor: const Color(0xFF121414),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  icon: const Icon(Icons.menu_book_rounded, size: 15),
+                  label: Text(
+                    'Manage Books',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton(
+                  key: const Key('hero_empty_view_calendar_button'),
+                  onPressed: () {
+                    setState(() => _selectedTabIndex = 1);
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Color(0xFF333737)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: Text(
+                    'View Calendar',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
     return GestureDetector(
       key: const Key('hero_next_appointment_card'),
       onTap: () {
@@ -394,7 +584,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
           context,
           MaterialPageRoute(
             builder: (_) => AppointmentDetailScreen(
-              appointment: _nextAppointment,
+              appointment: nextApt,
             ),
           ),
         );
@@ -405,9 +595,9 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           image: DecorationImage(
-            image: _nextAppointment.artworkImageUrl.isNotEmpty &&
-                    _nextAppointment.artworkImageUrl.startsWith('assets/')
-                ? AssetImage(_nextAppointment.artworkImageUrl) as ImageProvider
+            image: nextApt.artworkImageUrl.isNotEmpty &&
+                    nextApt.artworkImageUrl.startsWith('assets/')
+                ? AssetImage(nextApt.artworkImageUrl) as ImageProvider
                 : const AssetImage('assets/images/flash_tiger_tattoo.jpg'),
             fit: BoxFit.cover,
             alignment: Alignment.center,
@@ -456,7 +646,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
                       ),
                       const SizedBox(width: 5),
                       Text(
-                        _nextAppointment.time,
+                        nextApt.time,
                         style: GoogleFonts.plusJakartaSans(
                           color: Colors.white,
                           fontSize: 13,
@@ -467,7 +657,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    _nextAppointment.clientName,
+                    nextApt.clientName,
                     style: GoogleFonts.plusJakartaSans(
                       color: Colors.white,
                       fontSize: 22,
@@ -477,7 +667,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${_nextAppointment.serviceType} • ${_nextAppointment.duration}',
+                    '${nextApt.serviceType} • ${nextApt.duration}',
                     style: GoogleFonts.plusJakartaSans(
                       color: const Color(0xFFD4D8D8),
                       fontSize: 12,
@@ -536,33 +726,48 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
               width: 1.0,
             ),
           ),
-          child: Column(
-            children: List.generate(_todaySchedule.length, (index) {
-              final item = _todaySchedule[index];
-              final isLast = index == _todaySchedule.length - 1;
-              final isExpanded = _expandedAppointmentIds.contains(item.id);
-              return Column(
-                children: [
-                  _buildScheduleRow(item, isExpanded),
-                  AnimatedSize(
-                    duration: const Duration(milliseconds: 250),
-                    curve: Curves.easeInOut,
-                    alignment: Alignment.topCenter,
-                    child: isExpanded
-                        ? _buildExpandedAppointmentDetails(item)
-                        : const SizedBox.shrink(),
-                  ),
-                  if (!isLast)
-                    const Divider(
-                      color: Color(0xFF242727),
-                      height: 1,
-                      indent: 16,
-                      endIndent: 16,
+          child: _todaySchedule.isEmpty
+              ? Padding(
+                  key: const Key('no_today_schedule_empty_state'),
+                  padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                  child: Center(
+                    child: Text(
+                      'No sessions scheduled for today.',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF8C9191),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                ],
-              );
-            }),
-          ),
+                  ),
+                )
+              : Column(
+                  children: List.generate(_todaySchedule.length, (index) {
+                    final item = _todaySchedule[index];
+                    final isLast = index == _todaySchedule.length - 1;
+                    final isExpanded = _expandedAppointmentIds.contains(item.id);
+                    return Column(
+                      children: [
+                        _buildScheduleRow(item, isExpanded),
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeInOut,
+                          alignment: Alignment.topCenter,
+                          child: isExpanded
+                              ? _buildExpandedAppointmentDetails(item)
+                              : const SizedBox.shrink(),
+                        ),
+                        if (!isLast)
+                          const Divider(
+                            color: Color(0xFF242727),
+                            height: 1,
+                            indent: 16,
+                            endIndent: 16,
+                          ),
+                      ],
+                    );
+                  }),
+                ),
         ),
       ],
     );
@@ -1126,13 +1331,25 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   /// Companion Calendar Tab (Tab 1)
   Widget _buildCalendarTab() {
     return ArtistCalendarScreen(
-      artist: widget.artist,
+      artist: _resolvedArtist,
       authService: _authService,
       isEmbeddedInTab: true,
     );
   }
 
-  Widget _buildMessagesPlaceholder() {
+  String _formatRelativeThreadTime(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays == 1) return 'Yesterday';
+    return '${diff.inDays}d ago';
+  }
+
+  Widget _buildMessagesPlaceholder({bool showTopBar = true}) {
+    final liveThreads = MessageThread.liveThreads;
+    final useMock = MockDataConfig.isEnabled;
+
     return SafeArea(
       bottom: false,
       child: SingleChildScrollView(
@@ -1146,11 +1363,13 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildTopActionBar(
-              logoKey: const Key('messages_tattoo_machine_logo'),
-              avatarKey: const Key('messages_artist_avatar_button'),
-            ),
-            const SizedBox(height: 20),
+            if (showTopBar) ...[
+              _buildTopActionBar(
+                logoKey: const Key('messages_tattoo_machine_logo'),
+                avatarKey: const Key('messages_artist_avatar_button'),
+              ),
+              const SizedBox(height: 20),
+            ],
             Text(
               'Client Messages',
               style: GoogleFonts.plusJakartaSans(
@@ -1168,24 +1387,95 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            _buildMessageItem(
-              name: 'Sarah Jenkins',
-              preview: 'Super excited for the tiger session today!',
-              time: '9:15 AM',
-              unread: true,
-            ),
-            _buildMessageItem(
-              name: 'Sally McField',
-              preview: 'Will bring the reference sketches at 12:30.',
-              time: 'Yesterday',
-              unread: false,
-            ),
-            _buildMessageItem(
-              name: 'Jennie Banks',
-              preview: 'Sent the deposit confirmation, see you at 6:30!',
-              time: '2d ago',
-              unread: false,
-            ),
+            if (useMock) ...[
+              _buildMessageItem(
+                name: 'Sarah Jenkins',
+                preview: 'Super excited for the tiger session today!',
+                time: '9:15 AM',
+                unread: true,
+              ),
+              _buildMessageItem(
+                name: 'Sally McField',
+                preview: 'Will bring the reference sketches at 12:30.',
+                time: 'Yesterday',
+                unread: false,
+              ),
+              _buildMessageItem(
+                name: 'Jennie Banks',
+                preview: 'Sent the deposit confirmation, see you at 6:30!',
+                time: '2d ago',
+                unread: false,
+              ),
+            ] else if (liveThreads.isEmpty) ...[
+              Container(
+                key: const Key('no_client_messages_empty_state'),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF191C1C),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFF282C2C),
+                    width: 1.0,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      color: Color(0xFF8C9191),
+                      size: 32,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No client conversations yet',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Confirmed bookings and approved custom requests will open direct message threads here.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF8C9191),
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              for (final thread in liveThreads)
+                GestureDetector(
+                  key: Key('artist_message_thread_${thread.id}'),
+                  onTap: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChatConversationScreen(
+                          thread: thread,
+                          isArtistView: true,
+                        ),
+                      ),
+                    );
+                    if (mounted) {
+                      setState(() {});
+                    }
+                  },
+                  child: _buildMessageItem(
+                    name: (thread.clientName != null && thread.clientName!.isNotEmpty)
+                        ? thread.clientName!
+                        : (thread.flashTitleContext ?? 'Client Inquiry'),
+                    preview: thread.lastMessage,
+                    time: _formatRelativeThreadTime(thread.lastMessageTime),
+                    unread: thread.unreadCount > 0,
+                  ),
+                ),
+            ],
           ],
         ),
       ),
@@ -1270,7 +1560,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   /// Companion Books Tab (Tab 3)
   Widget _buildBooksTab() {
     return ArtistBooksScreen(
-      artist: widget.artist,
+      artist: _resolvedArtist,
       authService: _authService,
       isEmbeddedInTab: true,
     );
@@ -1279,7 +1569,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   /// Companion Earnings Tab (Tab 4)
   Widget _buildEarningsTab() {
     return ArtistEarningsScreen(
-      artist: widget.artist,
+      artist: _resolvedArtist,
       authService: _authService,
       isEmbeddedInTab: true,
     );

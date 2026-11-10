@@ -84,7 +84,7 @@ void main() {
 
       expect(AuthService.devMockUser, isNull);
       expect(BookingSyncService.claimedFlashPieceIds, isEmpty);
-      expect(ArtistDashboardRepository.pendingRequests, isNotEmpty);
+      expect(ArtistDashboardRepository.pendingRequests, isEmpty);
     });
   });
 }

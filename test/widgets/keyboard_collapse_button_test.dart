@@ -184,7 +184,7 @@ void main() {
       expect(primaryFocus?.context?.widget is! EditableText, isTrue);
     });
 
-    testWidgets('ArtistPoliciesScreen Edit Policy modal includes collapse keyboard button', (tester) async {
+    testWidgets('ArtistPoliciesScreen Edit Policy modal removes collapse button while retaining tap-out dismiss', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: ArtistPoliciesScreen(
@@ -206,22 +206,39 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Edit Policy'), findsOneWidget);
-      final collapseButton = find.byKey(const Key('collapse_keyboard_button'));
-      expect(collapseButton, findsOneWidget);
+      // Verify collapse button is removed
+      expect(find.byKey(const Key('collapse_keyboard_button')), findsNothing);
 
       // Focus the title field
       await tester.tap(find.byKey(const Key('edit_policy_title_field')));
       await tester.pump();
 
-      // Tap collapse button
-      await tester.tap(collapseButton);
+      // Tap out on modal header / background to drop down keyboard
+      await tester.tap(find.text('Edit Policy'));
       await tester.pump();
 
-      final primaryFocus = FocusManager.instance.primaryFocus;
-      expect(primaryFocus?.context?.widget is! EditableText, isTrue);
+      // Verify focus is dismissed (keyboard drops down) while modal remains open
+      expect(FocusManager.instance.primaryFocus?.context?.widget is! EditableText, isTrue);
+      expect(find.text('Edit Policy'), findsOneWidget);
+
+      // Focus field again and tap modal barrier outside the sheet
+      await tester.tap(find.byKey(const Key('edit_policy_title_field')));
+      await tester.pump();
+
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pump();
+
+      // Verify barrier tap dropped down keyboard while leaving modal sheet open
+      expect(FocusManager.instance.primaryFocus?.context?.widget is! EditableText, isTrue);
+      expect(find.text('Edit Policy'), findsOneWidget);
+
+      // Tapping barrier again with keyboard dismissed pops the sheet
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit Policy'), findsNothing);
     });
 
-    testWidgets('ArtistPoliciesScreen Add Custom Policy modal includes collapse keyboard button', (tester) async {
+    testWidgets('ArtistPoliciesScreen Add Custom Policy modal removes collapse button while retaining tap-out dismiss', (tester) async {
       tester.view.physicalSize = const Size(1080, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -253,19 +270,36 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Add Custom Policy'), findsOneWidget);
-      final collapseButton = find.byKey(const Key('collapse_keyboard_button'));
-      expect(collapseButton, findsOneWidget);
+      // Verify collapse button is removed
+      expect(find.byKey(const Key('collapse_keyboard_button')), findsNothing);
 
       // Focus the description field
       await tester.tap(find.byKey(const Key('custom_policy_desc_field')));
       await tester.pump();
 
-      // Tap collapse button
-      await tester.tap(collapseButton);
+      // Tap out on modal header / background to drop down keyboard
+      await tester.tap(find.text('Add Custom Policy'));
       await tester.pump();
 
-      final primaryFocus = FocusManager.instance.primaryFocus;
-      expect(primaryFocus?.context?.widget is! EditableText, isTrue);
+      // Verify focus is dismissed (keyboard drops down) while modal remains open
+      expect(FocusManager.instance.primaryFocus?.context?.widget is! EditableText, isTrue);
+      expect(find.text('Add Custom Policy'), findsOneWidget);
+
+      // Focus field again and tap modal barrier outside the sheet
+      await tester.tap(find.byKey(const Key('custom_policy_desc_field')));
+      await tester.pump();
+
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pump();
+
+      // Verify barrier tap dropped down keyboard while leaving modal sheet open
+      expect(FocusManager.instance.primaryFocus?.context?.widget is! EditableText, isTrue);
+      expect(find.text('Add Custom Policy'), findsOneWidget);
+
+      // Tapping barrier again with keyboard dismissed pops the sheet
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+      expect(find.text('Add Custom Policy'), findsNothing);
     });
 
     testWidgets('ArtistChooseStyleScreen Add Style dialog includes collapse keyboard button', (tester) async {

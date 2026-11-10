@@ -1,5 +1,6 @@
-import '../../../../core/mock/mock_fixtures.dart';
 import '../../../../models/artist.dart';
+import '../../../../services/google_places_service.dart';
+import '../../../../services/studio_map_service.dart';
 
 /// Strongly typed tattoo studio model for the Explore directory.
 class ExploreStudio {
@@ -13,6 +14,11 @@ class ExploreStudio {
   final int residentArtistsCount;
   final List<String> styles;
   final bool isVerified;
+  final String? distance;
+  final double? distanceMiles;
+  final String? placeId;
+  final double? latitude;
+  final double? longitude;
 
   const ExploreStudio({
     required this.id,
@@ -25,6 +31,11 @@ class ExploreStudio {
     required this.residentArtistsCount,
     required this.styles,
     this.isVerified = true,
+    this.distance,
+    this.distanceMiles,
+    this.placeId,
+    this.latitude,
+    this.longitude,
   });
 
   /// Builds a privacy-safe live studio card from an onboarded [Artist].
@@ -52,6 +63,13 @@ class ExploreStudio {
         ? artist.flashArtworks.first.imageUrl
         : (artist.images.isNotEmpty ? artist.images.first : artist.avatarUrl);
 
+    final rawCoords =
+        studioInfo?.discoveryCoordinates ?? artist.discoveryCoordinates;
+    final safeCoords =
+        rawCoords != null && rawCoords.isValid ? (isPrivate ? rawCoords.coarsened(decimals: 2) : rawCoords) : null;
+
+    final placeId = isPrivate ? null : studioInfo?.placeId;
+
     return ExploreStudio(
       id: 'studio_${artist.id}',
       name: studioTitle,
@@ -63,9 +81,45 @@ class ExploreStudio {
       residentArtistsCount: residentArtistsCount,
       styles: artist.tags,
       isVerified: artist.isVerifiedStudio,
+      distance: artist.distance.isNotEmpty ? artist.distance : null,
+      distanceMiles: artist.distanceMiles,
+      placeId: placeId,
+      latitude: safeCoords?.latitude,
+      longitude: safeCoords?.longitude,
     );
   }
 
-  /// Quarantined mock studio fixtures preserved in [MockFixtures.studios].
-  static const List<ExploreStudio> mockStudios = MockFixtures.studios;
+  /// Builds an [ExploreStudio] card directly from a [StudioMapMarkerData].
+  factory ExploreStudio.fromMarker(
+    StudioMapMarkerData marker, {
+    GooglePlacesService? placesService,
+  }) {
+    final photoUrl = marker.imageUrl ??
+        (marker.photoReference != null && placesService != null
+            ? placesService.buildPhotoUrl(marker.photoReference, maxWidth: 800)
+            : null);
+
+    return ExploreStudio(
+      id: marker.id,
+      name: marker.name,
+      address: marker.address,
+      city: marker.cityState,
+      imageUrl: (photoUrl != null && photoUrl.trim().isNotEmpty)
+          ? photoUrl
+          : 'assets/images/tattoo_setup.png',
+      rating: marker.rating ?? 4.8,
+      reviewCount: marker.reviewCount ?? 0,
+      residentArtistsCount: marker.residentArtistsCount,
+      styles: marker.styles.isNotEmpty
+          ? marker.styles
+          : const ['Tattoo Studio', 'Custom Ink'],
+      isVerified: marker.isVerifiedFlashInkStudio,
+      distance: marker.formattedDistance,
+      distanceMiles: marker.distanceMiles,
+      placeId: marker.placeId,
+      latitude: marker.position.latitude,
+      longitude: marker.position.longitude,
+    );
+  }
 }
+

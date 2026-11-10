@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/mock/mock_data_config.dart';
 import 'booking.dart';
 import 'waitlist_entry.dart';
 import '../features/appointments/domain/models/appointment_item.dart';
@@ -118,6 +119,55 @@ class DashboardAppointment {
     }
     return 'Tattoo Session';
   }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'clientId': clientId,
+      'artistId': artistId,
+      'clientName': clientName,
+      'serviceType': serviceType,
+      'duration': duration,
+      'time': time,
+      'date': date,
+      'scheduledDate': scheduledDate?.toIso8601String(),
+      'placement': placement,
+      'notes': notes,
+      'depositPaid': depositPaid,
+      'fullPrice': fullPrice,
+      'artworkImageUrl': artworkImageUrl,
+      'isConsultation': isConsultation,
+      'visitType': effectiveVisitType,
+    };
+  }
+
+  factory DashboardAppointment.fromMap(Map<String, dynamic> map, [String? docId]) {
+    final isConsult = map['isConsultation'] == true;
+    final parsedDate = map['scheduledDate'] is String
+        ? DateTime.tryParse(map['scheduledDate'] as String)
+        : null;
+    return DashboardAppointment(
+      id: (docId != null && docId.isNotEmpty)
+          ? docId
+          : (map['id']?.toString() ?? 'apt_${DateTime.now().millisecondsSinceEpoch}'),
+      clientId: map['clientId']?.toString(),
+      artistId: map['artistId']?.toString(),
+      clientName: map['clientName']?.toString() ?? 'Client',
+      serviceType: map['serviceType']?.toString() ?? 'Tattoo Session',
+      duration: map['duration']?.toString() ?? '2 hrs',
+      time: map['time']?.toString() ?? '1:00 PM',
+      date: map['date']?.toString() ?? 'Today',
+      scheduledDate: parsedDate,
+      placement: map['placement']?.toString() ?? 'Forearm',
+      notes: map['notes']?.toString() ?? '',
+      depositPaid: (map['depositPaid'] as num?)?.toInt() ?? 50,
+      fullPrice: (map['fullPrice'] as num?)?.toInt() ?? 250,
+      artworkImageUrl: map['artworkImageUrl']?.toString() ?? '',
+      isConsultation: isConsult,
+      visitType: map['visitType']?.toString(),
+      dotColor: isConsult ? const Color(0xFF919696) : const Color(0xFF22C55E),
+    );
+  }
 }
 
 /// Represents an incoming booking / custom request waiting for artist review.
@@ -193,6 +243,53 @@ class BookingRequest {
       artistName: artistName ?? this.artistName,
       preferredDate: preferredDate ?? this.preferredDate,
       preferredTimeSlot: preferredTimeSlot ?? this.preferredTimeSlot,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'clientId': clientId,
+      'artistId': artistId,
+      'clientName': clientName,
+      'timeAgo': timeAgo,
+      'conceptDescription': conceptDescription,
+      'placement': placement,
+      'category': category,
+      'sketchImageUrl': sketchImageUrl,
+      'estimatedPrice': estimatedPrice,
+      'deposit': deposit,
+      'size': size,
+      'isSilentAppointment': isSilentAppointment,
+      'artistName': artistName,
+      'preferredDate': preferredDate?.toIso8601String(),
+      'preferredTimeSlot': preferredTimeSlot,
+    };
+  }
+
+  factory BookingRequest.fromMap(Map<String, dynamic> map, [String? docId]) {
+    final parsedDate = map['preferredDate'] is String
+        ? DateTime.tryParse(map['preferredDate'] as String)
+        : null;
+    return BookingRequest(
+      id: (docId != null && docId.isNotEmpty)
+          ? docId
+          : (map['id']?.toString() ?? 'req_${DateTime.now().millisecondsSinceEpoch}'),
+      clientId: map['clientId']?.toString(),
+      artistId: map['artistId']?.toString(),
+      clientName: map['clientName']?.toString() ?? 'Client',
+      timeAgo: map['timeAgo']?.toString() ?? 'Recently',
+      conceptDescription: map['conceptDescription']?.toString() ?? '',
+      placement: map['placement']?.toString() ?? 'Forearm',
+      category: map['category']?.toString() ?? 'Custom Design',
+      sketchImageUrl: map['sketchImageUrl']?.toString() ?? '',
+      estimatedPrice: (map['estimatedPrice'] as num?)?.toInt() ?? 300,
+      deposit: (map['deposit'] as num?)?.toInt() ?? 80,
+      size: map['size']?.toString() ?? 'Medium (4"-7")',
+      isSilentAppointment: map['isSilentAppointment'] == true,
+      artistName: map['artistName']?.toString() ?? 'Artist',
+      preferredDate: parsedDate,
+      preferredTimeSlot: map['preferredTimeSlot']?.toString(),
     );
   }
 }
@@ -429,14 +526,19 @@ class ArtistBooksSchedule {
       acceptFlash: map['acceptFlash'] as bool? ?? true,
       acceptCustom: map['acceptCustom'] as bool? ?? true,
       acceptTouchUps: map['acceptTouchUps'] as bool? ?? true,
-      locationNote: map['locationNote'] as String? ?? 'OddMaree Studio • Portland, OR',
+      locationNote: map['locationNote'] as String? ??
+          (MockDataConfig.isEnabled ? 'OddMaree Studio • Portland, OR' : ''),
     );
   }
 }
 
-/// Mock data repository for the artist dashboard matching the visual design.
+/// Repository for the artist dashboard, calendar, books, waitlist, and earnings.
+///
+/// Quarantines all Figma/demo mock datasets strictly behind [MockDataConfig.isEnabled].
+/// In live runtime mode (`MockDataConfig.isEnabled == false`), exposes live Firestore-synced
+/// and session-scoped collections (defaulting to empty lists and zeroed metrics).
 class ArtistDashboardRepository {
-  static ArtistBooksSchedule booksSchedule = ArtistBooksSchedule(
+  static ArtistBooksSchedule _mockBooksSchedule = ArtistBooksSchedule(
     isBooksOpen: true,
     isEarlyAccessOnly: false,
     bookingWindowStart: DateTime(2026, 10, 1),
@@ -453,6 +555,35 @@ class ArtistDashboardRepository {
     locationNote: 'OddMaree Studio • Portland, OR',
   );
 
+  static ArtistBooksSchedule _liveBooksSchedule = ArtistBooksSchedule(
+    isBooksOpen: true,
+    isEarlyAccessOnly: false,
+    bookingWindowStart: DateTime(DateTime.now().year, DateTime.now().month, 1),
+    bookingWindowEnd: DateTime(DateTime.now().year, DateTime.now().month + 3, 0),
+    workingDays: const {2, 3, 4, 5, 6},
+    startTime: const TimeOfDay(hour: 11, minute: 0),
+    endTime: const TimeOfDay(hour: 19, minute: 0),
+    slotDurationMinutes: 120,
+    bufferDurationMinutes: 30,
+    defaultDepositAmount: 80,
+    acceptFlash: true,
+    acceptCustom: true,
+    acceptTouchUps: true,
+    locationNote: '',
+  );
+
+  static ArtistBooksSchedule get booksSchedule =>
+      MockDataConfig.isEnabled ? _mockBooksSchedule : _liveBooksSchedule;
+
+  static set booksSchedule(ArtistBooksSchedule value) {
+    if (MockDataConfig.isEnabled) {
+      _mockBooksSchedule = value;
+    } else {
+      _liveBooksSchedule = value;
+    }
+    notifyPendingRequestsChanged();
+  }
+
   static void updateBooksSchedule(
     ArtistBooksSchedule updated, {
     required String artistId,
@@ -464,11 +595,33 @@ class ArtistDashboardRepository {
     );
   }
 
-  /// In-memory VIP waitlist entries
-  static List<WaitlistEntry> waitlistEntries = List.from(WaitlistEntry.mockWaitlistEntries);
+  /// Quarantined mock VIP waitlist entries vs live waitlist entries.
+  static List<WaitlistEntry> _mockWaitlistEntries =
+      List.from(WaitlistEntry.mockWaitlistEntries);
+  static List<WaitlistEntry> liveWaitlistEntries = [];
+
+  static List<WaitlistEntry> get waitlistEntries =>
+      MockDataConfig.isEnabled ? _mockWaitlistEntries : liveWaitlistEntries;
+
+  static set waitlistEntries(List<WaitlistEntry> value) {
+    if (MockDataConfig.isEnabled) {
+      _mockWaitlistEntries = value;
+    } else {
+      liveWaitlistEntries = value;
+    }
+    notifyPendingRequestsChanged();
+  }
 
   static void addWaitlistEntry(WaitlistEntry entry) {
-    waitlistEntries = [entry, ...waitlistEntries];
+    final resolvedArtistId = entry.artistId.isNotEmpty && entry.artistId != 'artist_odd_maree'
+        ? entry.artistId
+        : BookingSyncService.resolveCurrentUid(entry.artistId);
+    final enriched = entry.copyWith(artistId: resolvedArtistId);
+    waitlistEntries = [enriched, ...waitlistEntries];
+    BookingSyncService.syncWaitlistToCloud(
+      waitlistEntries,
+      artistId: resolvedArtistId,
+    );
   }
 
   static void updateWaitlistEntry(WaitlistEntry entry) {
@@ -477,11 +630,23 @@ class ArtistDashboardRepository {
       final updated = List<WaitlistEntry>.from(waitlistEntries);
       updated[idx] = entry;
       waitlistEntries = updated;
+      final resolvedArtistId = entry.artistId.isNotEmpty && entry.artistId != 'artist_odd_maree'
+          ? entry.artistId
+          : BookingSyncService.resolveCurrentUid(entry.artistId);
+      BookingSyncService.syncWaitlistToCloud(
+        waitlistEntries,
+        artistId: resolvedArtistId,
+      );
     }
   }
 
   static void removeWaitlistEntry(String id) {
     waitlistEntries = waitlistEntries.where((e) => e.id != id).toList();
+    final resolvedArtistId = BookingSyncService.resolveCurrentUid('artist_unknown');
+    BookingSyncService.syncWaitlistToCloud(
+      waitlistEntries,
+      artistId: resolvedArtistId,
+    );
   }
 
   /// Triggers exclusive early access to all waiting contacts on the waitlist
@@ -504,6 +669,16 @@ class ArtistDashboardRepository {
       }
       return e;
     }).toList();
+
+    final resolvedArtistId = BookingSyncService.resolveCurrentUid('artist_unknown');
+    BookingSyncService.syncBooksScheduleToCloud(
+      booksSchedule,
+      artistId: resolvedArtistId,
+    );
+    BookingSyncService.syncWaitlistToCloud(
+      waitlistEntries,
+      artistId: resolvedArtistId,
+    );
   }
 
   /// Transitions books to completely open to the general public
@@ -513,6 +688,13 @@ class ArtistDashboardRepository {
       isEarlyAccessOnly: false,
       earlyAccessEndsAt: null,
     );
+    final resolvedArtistId = BookingSyncService.resolveCurrentUid('');
+    if (resolvedArtistId.isNotEmpty) {
+      BookingSyncService.syncBooksScheduleToCloud(
+        booksSchedule,
+        artistId: resolvedArtistId,
+      );
+    }
   }
 
   /// Closes books
@@ -522,11 +704,57 @@ class ArtistDashboardRepository {
       isEarlyAccessOnly: false,
       earlyAccessEndsAt: null,
     );
+    final resolvedArtistId = BookingSyncService.resolveCurrentUid('');
+    if (resolvedArtistId.isNotEmpty) {
+      BookingSyncService.syncBooksScheduleToCloud(
+        booksSchedule,
+        artistId: resolvedArtistId,
+      );
+    }
   }
 
+  static const ArtistEarningsData _mockEarningsData = ArtistEarningsData();
 
-  static const ArtistEarningsData earningsData = ArtistEarningsData();
-  static const DashboardAppointment nextAppointment = DashboardAppointment(
+  /// Computes live earnings from confirmed/completed appointments when running in live mode,
+  /// or returns the quarantined [_mockEarningsData] when [MockDataConfig.isEnabled] is true.
+  static ArtistEarningsData get earningsData {
+    if (MockDataConfig.isEnabled) {
+      return _mockEarningsData;
+    }
+    final now = DateTime.now();
+    final uniqueById = <String, DashboardAppointment>{};
+    for (final apt in liveTodaySchedule) {
+      uniqueById[apt.id] = apt;
+    }
+    for (final apt in liveCalendarAppointments) {
+      uniqueById[apt.id] = apt;
+    }
+
+    double available = 0.0;
+    int mtd = 0;
+    int ytd = 0;
+
+    for (final apt in uniqueById.values) {
+      final earned = apt.depositPaid > 0 ? apt.depositPaid : apt.fullPrice;
+      available += earned.toDouble();
+      final dt = apt.scheduledDate ?? now;
+      if (dt.year == now.year) {
+        ytd += apt.fullPrice;
+        if (dt.month == now.month) {
+          mtd += apt.fullPrice;
+        }
+      }
+    }
+
+    return ArtistEarningsData(
+      nextPayoutAmount: available,
+      mtdAmount: mtd,
+      ytdAmount: ytd,
+      ytdYear: '${now.year}',
+    );
+  }
+
+  static const DashboardAppointment _mockNextAppointment = DashboardAppointment(
     id: 'apt_hero_tiger',
     clientName: 'Sarah Jenkins',
     serviceType: 'Neo-traditional TIGER',
@@ -540,6 +768,39 @@ class ArtistDashboardRepository {
     artworkImageUrl: 'assets/images/flash_tiger_tattoo.jpg',
     dotColor: Color(0xFF22C55E),
   );
+
+  /// Active next appointment for the current runtime mode (`null` when live and no appointments exist).
+  static DashboardAppointment? get activeNextAppointment {
+    if (MockDataConfig.isEnabled) {
+      return _mockNextAppointment;
+    }
+    final todayList = todaySchedule;
+    if (todayList.isNotEmpty) {
+      return todayList.first;
+    }
+    if (liveCalendarAppointments.isEmpty) {
+      return null;
+    }
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final upcoming = liveCalendarAppointments.where((apt) {
+      if (apt.scheduledDate == null) return true;
+      return !apt.scheduledDate!.isBefore(todayStart);
+    }).toList();
+    if (upcoming.isEmpty) {
+      return liveCalendarAppointments.first;
+    }
+    upcoming.sort((a, b) {
+      final da = a.scheduledDate ?? todayStart;
+      final db = b.scheduledDate ?? todayStart;
+      return da.compareTo(db);
+    });
+    return upcoming.first;
+  }
+
+  /// Legacy non-nullable getter preserved for compatibility; prefer [activeNextAppointment] in UI.
+  static DashboardAppointment get nextAppointment =>
+      activeNextAppointment ?? _mockNextAppointment;
 
   static const List<DashboardAppointment> _defaultTodaySchedule = [
     DashboardAppointment(
@@ -586,7 +847,40 @@ class ArtistDashboardRepository {
     ),
   ];
 
-  static List<DashboardAppointment> todaySchedule = List.from(_defaultTodaySchedule);
+  static List<DashboardAppointment> _mockTodaySchedule =
+      List.from(_defaultTodaySchedule);
+  static List<DashboardAppointment> liveTodaySchedule = [];
+
+  static List<DashboardAppointment> get todaySchedule {
+    if (MockDataConfig.isEnabled) {
+      return _mockTodaySchedule;
+    }
+    final now = DateTime.now();
+    final merged = <String, DashboardAppointment>{};
+    for (final apt in liveTodaySchedule) {
+      merged[apt.id] = apt;
+    }
+    for (final apt in liveCalendarAppointments) {
+      if (apt.scheduledDate != null &&
+          apt.scheduledDate!.year == now.year &&
+          apt.scheduledDate!.month == now.month &&
+          apt.scheduledDate!.day == now.day) {
+        merged[apt.id] = apt;
+      } else if (apt.date.toLowerCase() == 'today') {
+        merged[apt.id] = apt;
+      }
+    }
+    return merged.values.toList();
+  }
+
+  static set todaySchedule(List<DashboardAppointment> value) {
+    if (MockDataConfig.isEnabled) {
+      _mockTodaySchedule = value;
+    } else {
+      liveTodaySchedule = value;
+    }
+    notifyPendingRequestsChanged();
+  }
 
   static const List<BookingRequest> _defaultPendingRequests = [
     BookingRequest(
@@ -635,7 +929,21 @@ class ArtistDashboardRepository {
     ),
   ];
 
-  static List<BookingRequest> pendingRequests = List.from(_defaultPendingRequests);
+  static List<BookingRequest> _mockPendingRequests =
+      List.from(_defaultPendingRequests);
+  static List<BookingRequest> livePendingRequests = [];
+
+  static List<BookingRequest> get pendingRequests =>
+      MockDataConfig.isEnabled ? _mockPendingRequests : livePendingRequests;
+
+  static set pendingRequests(List<BookingRequest> value) {
+    if (MockDataConfig.isEnabled) {
+      _mockPendingRequests = value;
+    } else {
+      livePendingRequests = value;
+    }
+    notifyPendingRequestsChanged();
+  }
 
   /// Notifier triggered whenever pending requests or dashboard stats change in real time.
   static final ValueNotifier<int> pendingRequestsNotifier = ValueNotifier<int>(0);
@@ -644,33 +952,56 @@ class ArtistDashboardRepository {
     pendingRequestsNotifier.value++;
   }
 
-  static ArtistDashboardStats _stats = ArtistDashboardStats(
+  static ArtistDashboardStats _mockStats = ArtistDashboardStats(
     bookingsThisWeek: 12,
     newRequests: 2,
     pendingCount: _defaultPendingRequests.length,
   );
+  static ArtistDashboardStats? _liveStatsOverride;
 
-  static ArtistDashboardStats get stats => ArtistDashboardStats(
-    bookingsThisWeek: _stats.bookingsThisWeek,
-    newRequests: _stats.newRequests,
-    pendingCount: pendingRequests.length,
-  );
+  static ArtistDashboardStats get stats {
+    if (MockDataConfig.isEnabled) {
+      return ArtistDashboardStats(
+        bookingsThisWeek: _mockStats.bookingsThisWeek,
+        newRequests: _mockStats.newRequests,
+        pendingCount: _mockPendingRequests.length,
+      );
+    }
+    if (_liveStatsOverride != null) {
+      return ArtistDashboardStats(
+        bookingsThisWeek: _liveStatsOverride!.bookingsThisWeek,
+        newRequests: _liveStatsOverride!.newRequests,
+        pendingCount: livePendingRequests.length,
+      );
+    }
+    return ArtistDashboardStats(
+      bookingsThisWeek: liveCalendarAppointments.length,
+      newRequests: livePendingRequests.length,
+      pendingCount: livePendingRequests.length,
+    );
+  }
 
   static set stats(ArtistDashboardStats value) {
-    _stats = value;
+    if (MockDataConfig.isEnabled) {
+      _mockStats = value;
+    } else {
+      _liveStatsOverride = value;
+    }
     notifyPendingRequestsChanged();
   }
 
   /// Resets pending requests and dashboard stats back to defaults (useful for test isolation).
   static void resetMockData() {
-    pendingRequests = List.from(_defaultPendingRequests);
-    todaySchedule = List.from(_defaultTodaySchedule);
-    _stats = ArtistDashboardStats(
+    _mockPendingRequests = List.from(_defaultPendingRequests);
+    _mockTodaySchedule = List.from(_defaultTodaySchedule);
+    _mockWaitlistEntries = List.from(WaitlistEntry.mockWaitlistEntries);
+    _mockCalendarAppointments = List.from(_defaultCalendarAppointments);
+    _mockStats = ArtistDashboardStats(
       bookingsThisWeek: 12,
       newRequests: 2,
-      pendingCount: pendingRequests.length,
+      pendingCount: _mockPendingRequests.length,
     );
-    booksSchedule = ArtistBooksSchedule(
+    _mockBooksSchedule = ArtistBooksSchedule(
       isBooksOpen: true,
       isEarlyAccessOnly: false,
       bookingWindowStart: DateTime(2026, 10, 1),
@@ -686,6 +1017,27 @@ class ArtistDashboardRepository {
       acceptTouchUps: true,
       locationNote: 'OddMaree Studio • Portland, OR',
     );
+    livePendingRequests = [];
+    liveTodaySchedule = [];
+    liveWaitlistEntries = [];
+    liveCalendarAppointments = [];
+    _liveStatsOverride = null;
+    _liveBooksSchedule = ArtistBooksSchedule(
+      isBooksOpen: true,
+      isEarlyAccessOnly: false,
+      bookingWindowStart: DateTime(DateTime.now().year, DateTime.now().month, 1),
+      bookingWindowEnd: DateTime(DateTime.now().year, DateTime.now().month + 3, 0),
+      workingDays: const {2, 3, 4, 5, 6},
+      startTime: const TimeOfDay(hour: 11, minute: 0),
+      endTime: const TimeOfDay(hour: 19, minute: 0),
+      slotDurationMinutes: 120,
+      bufferDurationMinutes: 30,
+      defaultDepositAmount: 80,
+      acceptFlash: true,
+      acceptCustom: true,
+      acceptTouchUps: true,
+      locationNote: '',
+    );
     BookingSyncService.resetSyncState();
     notifyPendingRequestsChanged();
   }
@@ -698,10 +1050,11 @@ class ArtistDashboardRepository {
       clientId: resolvedClientId,
       artistId: resolvedArtistId,
     );
+    final currentStats = stats;
     pendingRequests = [enrichedRequest, ...pendingRequests];
-    _stats = ArtistDashboardStats(
-      bookingsThisWeek: _stats.bookingsThisWeek,
-      newRequests: _stats.newRequests + 1,
+    stats = ArtistDashboardStats(
+      bookingsThisWeek: currentStats.bookingsThisWeek,
+      newRequests: currentStats.newRequests + 1,
       pendingCount: pendingRequests.length,
     );
     notifyPendingRequestsChanged();
@@ -769,10 +1122,11 @@ class ArtistDashboardRepository {
     final formattedDate = '${months[effectiveDate.month - 1]} ${effectiveDate.day}, ${effectiveDate.year}';
 
     // 3. Remove from pending requests and update stats
+    final currentStats = stats;
     pendingRequests = pendingRequests.where((r) => r.id != request.id).toList();
-    _stats = ArtistDashboardStats(
-      bookingsThisWeek: _stats.bookingsThisWeek + 1,
-      newRequests: _stats.newRequests > 0 ? _stats.newRequests - 1 : 0,
+    stats = ArtistDashboardStats(
+      bookingsThisWeek: currentStats.bookingsThisWeek + 1,
+      newRequests: currentStats.newRequests > 0 ? currentStats.newRequests - 1 : 0,
       pendingCount: pendingRequests.length,
     );
     notifyPendingRequestsChanged();
@@ -816,11 +1170,17 @@ class ArtistDashboardRepository {
     );
 
     // 5. Create & register Client Upcoming appointment
+    final effectiveAvatar = MockDataConfig.isEnabled
+        ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'
+        : '';
+    final effectiveStudio = booksSchedule.locationNote.isNotEmpty
+        ? booksSchedule.locationNote
+        : (MockDataConfig.isEnabled ? 'Obsidian Atelier' : request.artistName);
     final clientApt = ClientAppointment(
       id: 'CUST-${request.id.hashCode.abs() % 90000 + 10000}',
       artistName: request.artistName,
-      artistAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-      studioName: 'Obsidian Atelier',
+      artistAvatar: effectiveAvatar,
+      studioName: effectiveStudio,
       studioAddress: booksSchedule.locationNote,
       flashTitle: 'Custom ${request.category} (${request.placement})',
       flashImageUrl: request.sketchImageUrl.isNotEmpty
@@ -854,27 +1214,32 @@ class ArtistDashboardRepository {
     );
     final followUpMessage = ChatMessage(
       id: 'msg_accept_${request.id}',
-      senderId: 'artist_1',
+      senderId: resolvedArtistId,
       senderName: request.artistName,
       text: 'I accepted your custom tattoo brief for $formattedDate at $effectiveTimeSlot! Estimated total: \$$effectivePrice (\$$effectiveDeposit deposit).',
       timestamp: DateTime.now(),
       isFromArtist: true,
     );
 
-    MessageThread.addThread(
-      MessageThread(
-        id: 'thread_custom_${request.id}',
-        artistId: 'artist_1',
-        artistName: request.artistName,
-        artistAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-        studioName: 'Obsidian Atelier',
-        lastMessage: followUpMessage.text,
-        lastMessageTime: DateTime.now(),
-        unreadCount: 1,
-        isOnline: true,
-        flashTitleContext: 'Custom: ${request.category}',
-        messages: [receiptMessage, followUpMessage],
-      ),
+    final thread = MessageThread(
+      id: 'thread_custom_${request.id}',
+      artistId: resolvedArtistId,
+      artistName: request.artistName,
+      artistAvatar: effectiveAvatar,
+      studioName: effectiveStudio,
+      lastMessage: followUpMessage.text,
+      lastMessageTime: DateTime.now(),
+      unreadCount: 1,
+      isOnline: true,
+      flashTitleContext: 'Custom: ${request.category}',
+      messages: [receiptMessage, followUpMessage],
+    );
+    MessageThread.addThread(thread);
+    BookingSyncService.syncChatThreadToCloud(
+      thread,
+      clientId: resolvedClientId,
+      artistId: resolvedArtistId,
+      clientName: request.clientName,
     );
 
     return calendarApt;
@@ -884,11 +1249,12 @@ class ArtistDashboardRepository {
   static void declineBookingRequest(String requestId) {
     final matching = pendingRequests.where((r) => r.id == requestId).toList();
     final beforeLen = pendingRequests.length;
+    final currentStats = stats;
     pendingRequests = pendingRequests.where((r) => r.id != requestId).toList();
     if (pendingRequests.length < beforeLen) {
-      _stats = ArtistDashboardStats(
-        bookingsThisWeek: _stats.bookingsThisWeek,
-        newRequests: _stats.newRequests > 0 ? _stats.newRequests - 1 : 0,
+      stats = ArtistDashboardStats(
+        bookingsThisWeek: currentStats.bookingsThisWeek,
+        newRequests: currentStats.newRequests > 0 ? currentStats.newRequests - 1 : 0,
         pendingCount: pendingRequests.length,
       );
       notifyPendingRequestsChanged();
@@ -903,8 +1269,8 @@ class ArtistDashboardRepository {
     }
   }
 
-  /// Mock appointments for the interactive artist calendar, matching the visual mockup.
-  static final List<DashboardAppointment> calendarAppointments = [
+  /// Quarantined mock appointments for the interactive artist calendar.
+  static final List<DashboardAppointment> _defaultCalendarAppointments = [
     // --- September 9, 2026 (Selected Day in Figma / Mockup) ---
     const DashboardAppointment(
       id: 'cal_apt_marcus_1',
@@ -1140,6 +1506,180 @@ class ArtistDashboardRepository {
     ),
   ];
 
+  static List<DashboardAppointment> _mockCalendarAppointments =
+      List.from(_defaultCalendarAppointments);
+  static List<DashboardAppointment> liveCalendarAppointments = [];
+
+  static List<DashboardAppointment> get calendarAppointments =>
+      MockDataConfig.isEnabled ? _mockCalendarAppointments : liveCalendarAppointments;
+
+  static const List<DashboardAppointment> _mockHistoryAppointments = [
+    DashboardAppointment(
+      id: 'hist_alex_m',
+      clientName: 'Alex M.',
+      serviceType: 'Full Sleeve Session',
+      duration: '4 hrs',
+      time: '1:00 PM',
+      date: 'Oct 24, 2023',
+      placement: 'Full Right Arm',
+      notes: 'Japanese dragon sleeve completion session. Shading and background waves finalized.',
+      depositPaid: 150,
+      fullPrice: 800,
+      artworkImageUrl: 'https://images.unsplash.com/photo-1598371839696-5c5bb00bdc28?auto=format&fit=crop&w=400&q=80',
+      visitType: 'Session Inking',
+    ),
+    DashboardAppointment(
+      id: 'hist_sarah_t',
+      clientName: 'Sarah T.',
+      serviceType: 'Custom Flash',
+      duration: '1.5 hrs',
+      time: '3:30 PM',
+      date: 'Oct 22, 2023',
+      placement: 'Forearm',
+      notes: 'Floral flash with fine line botanicals.',
+      depositPaid: 50,
+      fullPrice: 250,
+      artworkImageUrl: 'https://images.unsplash.com/photo-1562962230-16e4623d36e6?auto=format&fit=crop&w=400&q=80',
+      visitType: 'Flash Tattoo',
+    ),
+    DashboardAppointment(
+      id: 'hist_marcus_k',
+      clientName: 'Marcus K.',
+      serviceType: 'Fine Line Floral',
+      duration: '2 hrs',
+      time: '11:00 AM',
+      date: 'Oct 15, 2023',
+      placement: 'Ribs',
+      notes: 'Delicate fine line peony.',
+      depositPaid: 60,
+      fullPrice: 320,
+      artworkImageUrl: 'https://images.unsplash.com/photo-1543852786-1cf6624b9987?auto=format&fit=crop&w=400&q=80',
+      visitType: 'Fine Line',
+    ),
+    DashboardAppointment(
+      id: 'hist_elena_r',
+      clientName: 'Elena R.',
+      serviceType: 'Micro Realism Eye',
+      duration: '2.5 hrs',
+      time: '4:00 PM',
+      date: 'Oct 10, 2023',
+      placement: 'Bicep',
+      notes: 'Realistic eye portrait with geometric framing.',
+      depositPaid: 90,
+      fullPrice: 450,
+      artworkImageUrl: 'https://images.unsplash.com/photo-1568515045052-f9a854d70bfd?auto=format&fit=crop&w=400&q=80',
+      visitType: 'Custom Tattoo',
+    ),
+    DashboardAppointment(
+      id: 'hist_dave_l',
+      clientName: 'Dave L.',
+      serviceType: 'Traditional Dagger',
+      duration: '2 hrs',
+      time: '2:30 PM',
+      date: 'Sep 29, 2023',
+      placement: 'Calf',
+      notes: 'Classic bold line dagger piercing a black rose.',
+      depositPaid: 60,
+      fullPrice: 300,
+      artworkImageUrl: 'https://images.unsplash.com/photo-1611501275019-9b5cda994e8d?auto=format&fit=crop&w=400&q=80',
+      visitType: 'Traditional',
+    ),
+  ];
+
+  /// Active transaction history appointments for the Earnings screen.
+  static List<DashboardAppointment> get historyAppointments {
+    if (MockDataConfig.isEnabled) {
+      return [
+        ..._mockCalendarAppointments,
+        ..._mockHistoryAppointments,
+      ];
+    }
+    final uniqueById = <String, DashboardAppointment>{};
+    for (final apt in liveTodaySchedule) {
+      uniqueById[apt.id] = apt;
+    }
+    for (final apt in liveCalendarAppointments) {
+      uniqueById[apt.id] = apt;
+    }
+    return uniqueById.values.toList();
+  }
+
+  /// Quarantined mock Flash users for the waitlist quick-search sheet.
+  static const List<Map<String, String>> _mockFlashUsers = [
+    {
+      'id': 'user_chloe_b',
+      'name': 'Chloe Bennett',
+      'handle': '@chloeb_ink',
+      'avatar': 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80',
+      'email': 'chloe.bennett@example.com',
+      'phone': '(503) 555-0192',
+    },
+    {
+      'id': 'user_julian_a',
+      'name': 'Julian Alvarez',
+      'handle': '@julian_arts',
+      'avatar': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
+      'email': 'julian.ink@example.com',
+      'phone': '(503) 555-0841',
+    },
+    {
+      'id': 'user_marcus_c',
+      'name': 'Marcus Cole',
+      'handle': '@marcus_tats',
+      'avatar': 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80',
+      'email': 'marcus.cole@example.com',
+      'phone': '(503) 555-9923',
+    },
+    {
+      'id': 'user_elena_r',
+      'name': 'Elena Rostova',
+      'handle': '@elena_pnw',
+      'avatar': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
+      'email': 'elena.rostova@example.com',
+      'phone': '(503) 555-4412',
+    },
+  ];
+
+  /// Returns searchable Flash clients for the waitlist sheet.
+  /// In live mode, derives known clients from the artist's real appointments, custom requests, and chat threads.
+  static List<Map<String, String>> get searchableFlashClients {
+    if (MockDataConfig.isEnabled) {
+      return _mockFlashUsers;
+    }
+    final byKey = <String, Map<String, String>>{};
+    for (final apt in [...liveTodaySchedule, ...liveCalendarAppointments]) {
+      final name = apt.clientName.trim();
+      if (name.isEmpty) continue;
+      final id = (apt.clientId != null && apt.clientId!.trim().isNotEmpty)
+          ? apt.clientId!.trim()
+          : 'client_${name.toLowerCase().replaceAll(' ', '_')}';
+      byKey[id] = {
+        'id': id,
+        'name': name,
+        'handle': '@${name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}',
+        'avatar': '',
+        'email': '',
+        'phone': '',
+      };
+    }
+    for (final req in livePendingRequests) {
+      final name = req.clientName.trim();
+      if (name.isEmpty) continue;
+      final id = (req.clientId != null && req.clientId!.trim().isNotEmpty)
+          ? req.clientId!.trim()
+          : 'client_${name.toLowerCase().replaceAll(' ', '_')}';
+      byKey.putIfAbsent(id, () => {
+        'id': id,
+        'name': name,
+        'handle': '@${name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}',
+        'avatar': '',
+        'email': '',
+        'phone': '',
+      });
+    }
+    return byKey.values.toList();
+  }
+
   /// Returns appointments scheduled for a given date.
   static List<DashboardAppointment> getAppointmentsForDate(DateTime date) {
     return calendarAppointments.where((apt) {
@@ -1193,6 +1733,7 @@ class ArtistDashboardRepository {
       artistId: resolvedArtistId,
     );
     calendarAppointments.add(enrichedApt);
+    notifyPendingRequestsChanged();
     BookingSyncService.syncAppointmentToCloud(
       enrichedApt,
       clientId: resolvedClientId,
@@ -1272,6 +1813,7 @@ class ArtistDashboardRepository {
     }
 
     if (updatedApt == null) return null;
+    notifyPendingRequestsChanged();
 
     // 4. Sync with ClientAppointment.activeUpcoming if matching service/placement/date
     final activeClientApts = ClientAppointment.activeUpcoming;
@@ -1301,28 +1843,41 @@ class ArtistDashboardRepository {
     }
 
     // 5. Post reschedule notice to active message threads
+    final resolvedArtistId = updatedApt.artistId ?? BookingSyncService.resolveCurrentUid('artist_1');
+    final resolvedArtistName = MockDataConfig.isEnabled ? 'OddMaree' : 'Artist';
+    final effectiveAvatar = MockDataConfig.isEnabled
+        ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'
+        : '';
+    final effectiveStudio = booksSchedule.locationNote.isNotEmpty
+        ? booksSchedule.locationNote
+        : (MockDataConfig.isEnabled ? 'Obsidian Atelier' : 'Studio');
     final msg = ChatMessage(
       id: 'msg_resched_${DateTime.now().millisecondsSinceEpoch}',
-      senderId: 'artist_1',
-      senderName: 'OddMaree',
+      senderId: resolvedArtistId,
+      senderName: resolvedArtistName,
       text: 'Your appointment for ${updatedApt.serviceType} has been rescheduled to $formattedDate at $newTimeSlot. Your \$${updatedApt.depositPaid} deposit automatically transfers to the new slot.',
       timestamp: DateTime.now(),
       isFromArtist: true,
     );
-    MessageThread.addThread(
-      MessageThread(
-        id: 'thread_resched_$appointmentId',
-        artistId: 'artist_1',
-        artistName: 'OddMaree',
-        artistAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-        studioName: 'Obsidian Atelier',
-        lastMessage: msg.text,
-        lastMessageTime: DateTime.now(),
-        unreadCount: 1,
-        isOnline: true,
-        flashTitleContext: updatedApt.serviceType,
-        messages: [msg],
-      ),
+    final thread = MessageThread(
+      id: 'thread_resched_$appointmentId',
+      artistId: resolvedArtistId,
+      artistName: resolvedArtistName,
+      artistAvatar: effectiveAvatar,
+      studioName: effectiveStudio,
+      lastMessage: msg.text,
+      lastMessageTime: DateTime.now(),
+      unreadCount: 1,
+      isOnline: true,
+      flashTitleContext: updatedApt.serviceType,
+      messages: [msg],
+    );
+    MessageThread.addThread(thread);
+    BookingSyncService.syncChatThreadToCloud(
+      thread,
+      clientId: updatedApt.clientId,
+      artistId: resolvedArtistId,
+      clientName: updatedApt.clientName,
     );
 
     // 6. Sync to Cloud Firestore & send notification
@@ -1371,6 +1926,7 @@ class ArtistDashboardRepository {
     }
 
     if (removedApt == null) return false;
+    notifyPendingRequestsChanged();
 
     // Update matching ClientAppointment status to cancelled
     final activeClientApts = ClientAppointment.activeUpcoming;
@@ -1399,31 +1955,44 @@ class ArtistDashboardRepository {
       }
     }
 
+    final resolvedArtistId = removedApt.artistId ?? BookingSyncService.resolveCurrentUid('artist_1');
+    final resolvedArtistName = MockDataConfig.isEnabled ? 'OddMaree' : 'Artist';
+    final effectiveAvatar = MockDataConfig.isEnabled
+        ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'
+        : '';
+    final effectiveStudio = booksSchedule.locationNote.isNotEmpty
+        ? booksSchedule.locationNote
+        : (MockDataConfig.isEnabled ? 'Obsidian Atelier' : 'Studio');
     final reasonNote = (reason != null && reason.trim().isNotEmpty)
         ? ' Reason: ${reason.trim()}.'
         : '';
     final msg = ChatMessage(
       id: 'msg_cancel_${DateTime.now().millisecondsSinceEpoch}',
-      senderId: 'artist_1',
-      senderName: 'OddMaree',
+      senderId: resolvedArtistId,
+      senderName: resolvedArtistName,
       text: 'Appointment for ${removedApt.serviceType} (${removedApt.date} at ${removedApt.time}) has been cancelled.$reasonNote',
       timestamp: DateTime.now(),
       isFromArtist: true,
     );
-    MessageThread.addThread(
-      MessageThread(
-        id: 'thread_cancel_$appointmentId',
-        artistId: 'artist_1',
-        artistName: 'OddMaree',
-        artistAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-        studioName: 'Obsidian Atelier',
-        lastMessage: msg.text,
-        lastMessageTime: DateTime.now(),
-        unreadCount: 1,
-        isOnline: true,
-        flashTitleContext: removedApt.serviceType,
-        messages: [msg],
-      ),
+    final thread = MessageThread(
+      id: 'thread_cancel_$appointmentId',
+      artistId: resolvedArtistId,
+      artistName: resolvedArtistName,
+      artistAvatar: effectiveAvatar,
+      studioName: effectiveStudio,
+      lastMessage: msg.text,
+      lastMessageTime: DateTime.now(),
+      unreadCount: 1,
+      isOnline: true,
+      flashTitleContext: removedApt.serviceType,
+      messages: [msg],
+    );
+    MessageThread.addThread(thread);
+    BookingSyncService.syncChatThreadToCloud(
+      thread,
+      clientId: removedApt.clientId,
+      artistId: resolvedArtistId,
+      clientName: removedApt.clientName,
     );
 
     BookingSyncService.syncAppointmentToCloud(

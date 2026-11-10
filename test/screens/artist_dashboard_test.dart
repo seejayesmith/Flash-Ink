@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 // ignore: depend_on_referenced_packages
 import 'package:firebase_core_platform_interface/test.dart';
 
+import 'package:flash_ink/core/mock/mock_data_config.dart';
 import 'package:flash_ink/models/artist.dart';
 import 'package:flash_ink/models/artist_dashboard_data.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_dashboard_screen.dart';
@@ -12,6 +13,7 @@ import 'package:flash_ink/screens/artist_dashboard/artist_account_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/appointment_detail_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_books_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_calendar_screen.dart';
+import 'package:flash_ink/screens/artist_dashboard/artist_collections_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_earnings_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/booking_request_detail_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_share_link_screen.dart';
@@ -55,6 +57,7 @@ void main() {
     late FakeDashboardAuthService fakeAuth;
 
     setUp(() {
+      MockDataConfig.debugOverride = true;
       ArtistDashboardRepository.resetMockData();
       fakeAuth = FakeDashboardAuthService();
       final binding = TestWidgetsFlutterBinding.ensureInitialized();
@@ -63,6 +66,7 @@ void main() {
     });
 
     tearDown(() {
+      MockDataConfig.resetDebugOverride();
       final binding = TestWidgetsFlutterBinding.ensureInitialized();
       binding.platformDispatcher.views.first.resetPhysicalSize();
       binding.platformDispatcher.views.first.resetDevicePixelRatio();
@@ -119,7 +123,7 @@ void main() {
       // 7. Bottom Navigation bar
       expect(find.text('Home'), findsOneWidget);
       expect(find.text('Calendar'), findsOneWidget);
-      expect(find.text('Messages'), findsOneWidget);
+      expect(find.text('Collections'), findsOneWidget);
       expect(find.text('Books'), findsOneWidget);
       expect(find.text('Earnings'), findsOneWidget);
     });
@@ -260,10 +264,12 @@ void main() {
       expect(find.byType(ArtistCalendarScreen), findsOneWidget);
       expect(find.byKey(const Key('calendar_day_9')), findsOneWidget);
 
-      // Tap Messages (Tab 2)
+      // Tap Collections (Tab 2)
       await tester.tap(find.byKey(const Key('nav_item_2')));
       await tester.pumpAndSettle();
-      expect(find.text('Client Messages'), findsOneWidget);
+      expect(find.byType(ArtistCollectionsScreen), findsOneWidget);
+      expect(find.text('Flash Collections'), findsOneWidget);
+      expect(find.byKey(const Key('add_new_flash_button')), findsOneWidget);
 
       // Tap Books (Tab 3)
       await tester.tap(find.byKey(const Key('nav_item_3')));
@@ -282,6 +288,19 @@ void main() {
       await tester.tap(find.byKey(const Key('nav_item_0')));
       await tester.pumpAndSettle();
       expect(find.text("Today's Schedule"), findsOneWidget);
+    });
+
+    testWidgets('Tapping Messages button in top action bar opens Messages view', (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      final messagesButton = find.byKey(const Key('top_action_messages_button'));
+      expect(messagesButton, findsOneWidget);
+
+      await tester.tap(messagesButton);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Client Messages'), findsWidgets);
     });
 
     testWidgets('ArtistShareLinkScreen completes onboarding and navigates to ArtistDashboardScreen', (tester) async {

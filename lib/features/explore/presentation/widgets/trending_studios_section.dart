@@ -5,13 +5,15 @@ import '../../../../theme/app_theme.dart';
 import '../../domain/models/explore_studio.dart';
 import 'studio_card.dart';
 
-/// Row 3+: Trending shops or studios section displaying top tattoo studios and collectives.
+/// Row 3+: Studios section displaying nearest tattoo shops or trending collectives.
 class TrendingStudiosSection extends StatelessWidget {
+  final String title;
   final List<ExploreStudio> studios;
   final ValueChanged<ExploreStudio>? onStudioTap;
 
   const TrendingStudiosSection({
     super.key,
+    this.title = 'TRENDING SHOPS & STUDIOS',
     required this.studios,
     this.onStudioTap,
   });
@@ -29,7 +31,7 @@ class TrendingStudiosSection extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'TRENDING SHOPS & STUDIOS',
+                title,
                 style: GoogleFonts.plusJakartaSans(
                   color: AppTheme.navInactive,
                   fontSize: 11,

@@ -1,11 +1,16 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/mock/mock_data_config.dart';
+import '../client_account_screen.dart';
+import '../../features/messages/domain/models/message_thread.dart';
 import '../../models/artist.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../models/booking.dart';
 import '../../features/appointments/domain/models/appointment_item.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';
 import '../../theme/app_spacing.dart';
@@ -50,9 +55,9 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
   bool _isSilentSession = false;
 
   // Step 2 State: Details & Policies
-  final _nameController = TextEditingController(text: 'Alex Rivers');
-  final _phoneController = TextEditingController(text: '(555) 234-5678');
-  final _emailController = TextEditingController(text: 'alex.rivers@example.com');
+  late final TextEditingController _nameController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _emailController;
   final _notesController = TextEditingController();
   bool _agreedToPolicies = true;
 
@@ -84,9 +89,43 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
 
   static const List<String> _weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
+  bool _isUserPhoneVerified = false;
+
   @override
   void initState() {
     super.initState();
+    String defaultName = MockDataConfig.isEnabled ? 'Alex Rivers' : '';
+    String defaultPhone = MockDataConfig.isEnabled ? '(555) 234-5678' : '';
+    String defaultEmail = MockDataConfig.isEnabled ? 'alex.rivers@example.com' : '';
+    bool userPhoneVerified = MockDataConfig.isEnabled;
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        if (user.displayName != null && user.displayName!.trim().isNotEmpty) {
+          defaultName = user.displayName!.trim();
+        }
+        String? uPhone;
+        try {
+          uPhone = user.phoneNumber;
+        } catch (_) {}
+        if (uPhone != null && uPhone.trim().isNotEmpty) {
+          defaultPhone = uPhone.trim();
+          userPhoneVerified = true;
+        } else if (!MockDataConfig.isEnabled) {
+          defaultPhone = '';
+          userPhoneVerified = false;
+        }
+        if (user.email != null && user.email!.trim().isNotEmpty) {
+          defaultEmail = user.email!.trim();
+        }
+      }
+    } catch (_) {}
+    _isUserPhoneVerified = userPhoneVerified;
+    _nameController = TextEditingController(text: defaultName);
+    _phoneController = TextEditingController(text: defaultPhone);
+    _emailController = TextEditingController(text: defaultEmail);
+    _checkPhoneVerificationStatus();
+
     // Default to next valid upcoming working date in current/next month
     final now = DateTime.now();
     _currentMonth = DateTime(now.year, now.month, 1);
@@ -158,6 +197,123 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     _cardCvcController.dispose();
     _cardZipController.dispose();
     super.dispose();
+  }
+
+  Future<void> _checkPhoneVerificationStatus() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        String? uPhone;
+        try {
+          uPhone = user.phoneNumber;
+        } catch (_) {}
+        if (uPhone != null && uPhone.trim().isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              _isUserPhoneVerified = true;
+              _phoneController.text = uPhone!.trim();
+            });
+          }
+          return;
+        }
+        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        if (doc.exists && doc.data() != null && mounted) {
+          final data = doc.data()!;
+          final isVerified = data['phoneVerified'] == true &&
+              data['phoneNumber'] != null &&
+              (data['phoneNumber'] as String).trim().isNotEmpty;
+          if (isVerified) {
+            setState(() {
+              _isUserPhoneVerified = true;
+              _phoneController.text = data['phoneNumber'] as String;
+            });
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  void _showVerifiedPhoneRequiredSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return AdaptiveGlassContainer(
+          borderRadius: 24,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0x1AEEC200),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppTheme.gold, width: 1.5),
+                ),
+                child: const Icon(
+                  Icons.phone_iphone_outlined,
+                  color: AppTheme.gold,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Verified Phone Required',
+                key: const Key('phone_required_sheet_title'),
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'To protect artists and receive SMS appointment reminders, Flash.Ink requires a verified phone number on your account.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFF919696),
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+              AppButtons.primaryCTA(
+                key: const Key('go_to_account_settings_button'),
+                text: 'ADD PHONE IN SETTINGS',
+                onPressed: () {
+                  Navigator.pop(sheetContext);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ClientAccountScreen(),
+                    ),
+                  ).then((_) {
+                    _checkPhoneVerificationStatus();
+                  });
+                },
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                key: const Key('dismiss_phone_required_sheet_button'),
+                onPressed: () => Navigator.pop(sheetContext),
+                child: Text(
+                  'Cancel',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFF919696),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   String get _artistName =>
@@ -315,6 +471,46 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         notes: booking.clientNotes,
       );
       ClientAppointment.addUpcomingAppointment(clientApt);
+
+      // 4. Synchronize confirmed flash booking receipt thread to Messages inbox
+      final receiptText =
+          'Flash piece "${widget.flash.title}" claimed for ${_formatDate(booking.selectedDate)} at ${booking.selectedTimeSlot}. Deposit of \$${booking.depositAmount} received.';
+      final receiptThread = MessageThread(
+        id: 'thread_booking_${booking.id}',
+        artistId: artistId,
+        clientId: clientId,
+        clientName: booking.clientName,
+        artistName: _artistName,
+        artistAvatar: widget.artist?.avatarUrl ?? '',
+        studioName: widget.artist?.studioType ?? 'Studio',
+        lastMessage: receiptText,
+        lastMessageTime: DateTime.now(),
+        unreadCount: 1,
+        isOnline: true,
+        flashTitleContext: widget.flash.title,
+        messages: [
+          ChatMessage(
+            id: 'msg_${booking.id}_receipt',
+            senderId: clientId,
+            senderName: booking.clientName,
+            text: receiptText,
+            timestamp: DateTime.now(),
+            isFromArtist: false,
+            type: ChatMessageType.receipt,
+            receiptAmount: booking.depositAmount.toDouble(),
+            appointmentDate: booking.selectedDate,
+            flashImageUrl: widget.flash.imageUrl,
+          ),
+        ],
+      );
+      MessageThread.addThread(receiptThread);
+      BookingSyncService.syncChatThreadToCloud(
+        receiptThread,
+        clientId: clientId,
+        artistId: artistId,
+        clientName: booking.clientName,
+      );
+      ArtistDashboardRepository.notifyPendingRequestsChanged();
 
       setState(() {
         _currentStep = 3;
@@ -948,6 +1144,42 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           icon: Icons.phone_outlined,
           keyboardType: TextInputType.phone,
         ),
+        if (!_isUserPhoneVerified) ...[
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              const Icon(Icons.info_outline, size: 14, color: AppTheme.gold),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'A verified phone number is required to book.',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppTheme.gold,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              TextButton(
+                key: const Key('booking_verify_phone_link'),
+                onPressed: _showVerifiedPhoneRequiredSheet,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  '+ Verify',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppTheme.gold,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
         const SizedBox(height: 12),
 
         _buildInputField(
@@ -1032,6 +1264,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       controller: controller,
       keyboardType: keyboardType,
       maxLines: maxLines,
+      onChanged: (_) => setState(() {}),
       style: GoogleFonts.plusJakartaSans(
         color: const Color(0xFFF9FAFA),
         fontSize: 14,
@@ -1785,12 +2018,16 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     } else if (_currentStep == 1) {
       buttonText = 'CONTINUE TO PAYMENT';
       final isFormValid = _nameController.text.trim().isNotEmpty &&
-          _phoneController.text.trim().isNotEmpty &&
           _emailController.text.trim().isNotEmpty &&
           _agreedToPolicies;
 
       onPressed = isFormValid
           ? () {
+              FocusManager.instance.primaryFocus?.unfocus();
+              if (!_isUserPhoneVerified) {
+                _showVerifiedPhoneRequiredSheet();
+                return;
+              }
               setState(() {
                 _currentStep = 2;
               });
@@ -1893,17 +2130,14 @@ class _PlacementSelectionBottomSheetState
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-
-    return Padding(
-      padding: EdgeInsets.only(bottom: bottomInset),
-      child: AdaptiveGlassContainer.bottomSheet(
-        glassEnabled: true,
-        androidSurfaceColor: const Color(0xFF171A1A),
-        topRadius: AppRadius.radiusSheet,
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-        child: SingleChildScrollView(
-          child: Column(
+    return AdaptiveGlassContainer.bottomSheet(
+      glassEnabled: true,
+      androidSurfaceColor: const Color(0xFF171A1A),
+      topRadius: AppRadius.radiusSheet,
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      child: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2099,8 +2333,7 @@ class _PlacementSelectionBottomSheetState
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 }
 

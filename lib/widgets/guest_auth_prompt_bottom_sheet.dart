@@ -202,20 +202,17 @@ class _GuestAuthPromptBottomSheetState extends State<GuestAuthPromptBottomSheet>
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-
-    return Padding(
-      padding: EdgeInsets.only(bottom: bottomInset),
-      child: AdaptiveGlassContainer.bottomSheet(
-        topRadius: AppRadius.radiusSheet,
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.spaceLg,
-          14,
-          AppSpacing.spaceLg,
-          AppSpacing.spaceLg,
-        ),
-        child: SingleChildScrollView(
-            child: Column(
+    return AdaptiveGlassContainer.bottomSheet(
+      topRadius: AppRadius.radiusSheet,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.spaceLg,
+        14,
+        AppSpacing.spaceLg,
+        AppSpacing.spaceLg,
+      ),
+      child: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -494,7 +491,6 @@ class _GuestAuthPromptBottomSheetState extends State<GuestAuthPromptBottomSheet>
               ],
             ),
           ),
-        ),
-      );
+        );
   }
 }

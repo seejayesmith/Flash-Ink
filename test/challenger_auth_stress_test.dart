@@ -10,7 +10,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flash_ink/screens/profile_setup_screen.dart';
 import 'package:flash_ink/screens/aesthetics_selection_screen.dart';
 import 'package:flash_ink/screens/main_feed_screen.dart';
-import 'package:flash_ink/screens/splash_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
 
 /// Test mock for Firebase User
@@ -106,13 +105,6 @@ void main() {
     binding.platformDispatcher.views.first.resetDevicePixelRatio();
   });
 
-  Finder feedScrollable() {
-    return find.descendant(
-      of: find.byType(ListView),
-      matching: find.byType(Scrollable),
-    );
-  }
-
   group('Challenger Adversarial Stress Tests: Account Deletion & Concurrency', () {
     // =========================================================================
     // Scenario 1: Deletion when currentUser == null (Guest user / signed out)
@@ -124,7 +116,7 @@ void main() {
     });
 
     testWidgets(
-      'Scenario 1B: UI handles account deletion safely when currentUser == null (e.g. guest or already signed out)',
+      'Scenario 1B: Delete Account button is NOT present on the feed (deletion relocated to ClientAccountScreen)',
       (WidgetTester tester) async {
         final fakeAuth = ChallengerStressAuthService()..mockUser = null;
 
@@ -135,25 +127,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // 1. Scroll to and tap "Delete Account" button
-        final deleteButtonFinder = find.byKey(const Key('delete_account_button'));
-        await tester.scrollUntilVisible(deleteButtonFinder, 500.0, scrollable: feedScrollable());
-        await tester.tap(deleteButtonFinder);
-        await tester.pumpAndSettle();
-
-        // 2. Confirm in modal
-        final confirmButtonFinder = find.byKey(const Key('delete_account_confirm_button'));
-        expect(confirmButtonFinder, findsOneWidget);
-        await tester.tap(confirmButtonFinder);
-        await tester.pump();
-        await tester.pump();
-
-        // 3. Verify deleteAccount was invoked once without null dereference crash
-        expect(fakeAuth.deleteAccountCallCount, 1);
-
-        // 4. Verify confirmation SnackBar and navigation to SplashScreen
-        expect(find.text('Account deleted. A confirmation email has been sent.'), findsOneWidget);
-        expect(find.byType(SplashScreen), findsOneWidget);
+        expect(find.byKey(const Key('delete_account_button')), findsNothing);
       },
     );
 
@@ -172,157 +146,6 @@ void main() {
         contains('This action requires recent authentication. Please log in again before deleting your account.'),
       );
     });
-
-    testWidgets(
-      'Scenario 2B: UI displays translated error SnackBar and DOES NOT navigate on requires-recent-login',
-      (WidgetTester tester) async {
-        final fakeAuth = ChallengerStressAuthService()
-          ..throwOnDelete = true
-          ..exceptionToThrow = FirebaseAuthException(
-            code: 'requires-recent-login',
-            message: 'User must reauthenticate before deleting account.',
-          );
-
-        await tester.pumpWidget(
-          MaterialApp(
-            home: MainFeedScreen(authService: fakeAuth),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        final deleteButtonFinder = find.byKey(const Key('delete_account_button'));
-        await tester.scrollUntilVisible(deleteButtonFinder, 500.0, scrollable: feedScrollable());
-        await tester.tap(deleteButtonFinder);
-        await tester.pumpAndSettle();
-
-        await tester.tap(find.byKey(const Key('delete_account_confirm_button')));
-        await tester.pumpAndSettle();
-
-        // 1. Verify delete was attempted
-        expect(fakeAuth.deleteAccountCallCount, 1);
-
-        // 2. Verify translated SnackBar is visible with re-auth guidance
-        expect(find.byType(SnackBar), findsOneWidget);
-        expect(
-          find.text('This action requires recent authentication. Please log in again before deleting your account.'),
-          findsOneWidget,
-        );
-
-        // 3. CRITICAL: Verify screen DID NOT navigate to SplashScreen or pop
-        expect(find.byType(SplashScreen), findsNothing);
-        expect(find.byType(MainFeedScreen), findsOneWidget);
-      },
-    );
-
-    // =========================================================================
-    // Scenario 3: Deletion when general network exception is thrown
-    // =========================================================================
-    testWidgets(
-      'Scenario 3: UI surfaces network failure message and DOES NOT navigate away',
-      (WidgetTester tester) async {
-        final fakeAuth = ChallengerStressAuthService()
-          ..throwOnDelete = true
-          ..exceptionToThrow = Exception('Network error. Please check your internet connection.');
-
-        await tester.pumpWidget(
-          MaterialApp(
-            home: MainFeedScreen(authService: fakeAuth),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        final deleteButtonFinder = find.byKey(const Key('delete_account_button'));
-        await tester.scrollUntilVisible(deleteButtonFinder, 500.0, scrollable: feedScrollable());
-        await tester.tap(deleteButtonFinder);
-        await tester.pumpAndSettle();
-
-        await tester.tap(find.byKey(const Key('delete_account_confirm_button')));
-        await tester.pumpAndSettle();
-
-        // 1. Verify delete call count
-        expect(fakeAuth.deleteAccountCallCount, 1);
-
-        // 2. Verify error SnackBar contains network error message
-        expect(find.byType(SnackBar), findsOneWidget);
-        expect(find.text('Network error. Please check your internet connection.'), findsOneWidget);
-
-        // 3. Verify screen did not navigate
-        expect(find.byType(SplashScreen), findsNothing);
-        expect(find.byType(MainFeedScreen), findsOneWidget);
-      },
-    );
-
-    // =========================================================================
-    // Scenario 4: Double-tap on "Delete Account" confirm button (race condition)
-    // =========================================================================
-    testWidgets(
-      'Scenario 4A: Rapid double-tap on confirm button inside modal does not cause race condition or multiple deletions',
-      (WidgetTester tester) async {
-        final completer = Completer<void>();
-        final fakeAuth = ChallengerStressAuthService()
-          ..inFlightDeletion = completer;
-
-        await tester.pumpWidget(
-          MaterialApp(
-            home: MainFeedScreen(authService: fakeAuth),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        final deleteButtonFinder = find.byKey(const Key('delete_account_button'));
-        await tester.scrollUntilVisible(deleteButtonFinder, 500.0, scrollable: feedScrollable());
-        await tester.tap(deleteButtonFinder);
-        await tester.pumpAndSettle();
-
-        final confirmFinder = find.byKey(const Key('delete_account_confirm_button'));
-        expect(confirmFinder, findsOneWidget);
-
-        // Rapid double tap before frames settle
-        await tester.tap(confirmFinder);
-        await tester.tap(confirmFinder, warnIfMissed: false);
-        await tester.pump(); // Process dialog dismissal
-
-        // Release the in-flight deletion
-        completer.complete();
-        await tester.pump();
-        await tester.pump();
-
-        // Modal must dismiss and deleteAccount must only be called once
-        expect(fakeAuth.deleteAccountCallCount, 1);
-        expect(fakeAuth.mockUser?.deleteCallCount, 1);
-        expect(find.byType(SplashScreen), findsOneWidget);
-      },
-    );
-
-    testWidgets(
-      'Scenario 4B: Rapid double-tap on feed Delete Account button does not push duplicate modals or cause crash',
-      (WidgetTester tester) async {
-        final fakeAuth = ChallengerStressAuthService();
-
-        await tester.pumpWidget(
-          MaterialApp(
-            home: MainFeedScreen(authService: fakeAuth),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        final deleteButtonFinder = find.byKey(const Key('delete_account_button'));
-        await tester.scrollUntilVisible(deleteButtonFinder, 500.0, scrollable: feedScrollable());
-
-        // Tap twice quickly on the footer button
-        await tester.tap(deleteButtonFinder);
-        await tester.tap(deleteButtonFinder, warnIfMissed: false);
-        await tester.pumpAndSettle();
-
-        // Only one modal should be present or dismissable
-        expect(find.byType(AlertDialog), findsWidgets);
-        await tester.tap(find.byKey(const Key('delete_account_cancel_button')).first);
-        await tester.pumpAndSettle();
-
-        // No deletion occurred
-        expect(fakeAuth.deleteAccountCallCount, 0);
-      },
-    );
 
     // =========================================================================
     // Scenario 5: Offline resilience of _saveProfile() when Firestore write fails

@@ -49,6 +49,7 @@ class FlowPageLayout extends StatelessWidget {
     }
     final topInset = MediaQuery.paddingOf(context).top + kToolbarHeight;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
     final hasBottomAction = bottomBar != null || onCtaPressed != null;
 
     return Column(
@@ -62,7 +63,13 @@ class FlowPageLayout extends StatelessWidget {
             removeTop: true,
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenMargin),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.screenMargin,
+                0,
+                AppSpacing.screenMargin,
+                keyboardInset > 0 ? keyboardInset : 0,
+              ),
               child: Column(
                 crossAxisAlignment: crossAxisAlignment,
                 children: [

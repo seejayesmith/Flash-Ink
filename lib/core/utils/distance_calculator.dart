@@ -133,6 +133,13 @@ class DistanceCalculator {
     return '${kilometers.toStringAsFixed(1)} km away';
   }
 
+  /// Strips the trailing `'away'` suffix from a distance string (e.g., `'1.4 mi away'` -> `'1.4 mi'`),
+  /// while keeping non-distance fallback labels like `'Location set'` or city names intact.
+  static String stripAwaySuffix(String raw) {
+    if (raw.trim().isEmpty) return raw;
+    return raw.replaceFirst(RegExp(r'\s+away$', caseSensitive: false), '');
+  }
+
   /// Parses an existing distance string (e.g. `'4.2 mi away'` or `'1.2 mi'`) to numeric miles.
   static double? tryParseMiles(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
@@ -160,6 +167,15 @@ class DistanceCalculator {
     '97005': GeoPointCoords(latitude: 45.4871, longitude: -122.8037, resolvedLabel: 'Beaverton, OR'),
     'salem, or': GeoPointCoords(latitude: 44.9429, longitude: -123.0351, resolvedLabel: 'Salem, OR'),
     'eugene, or': GeoPointCoords(latitude: 44.0521, longitude: -123.0868, resolvedLabel: 'Eugene, OR'),
+    'tualatin, or': GeoPointCoords(latitude: 45.3840, longitude: -122.7662, resolvedLabel: 'Tualatin, OR'),
+    'tualatin': GeoPointCoords(latitude: 45.3840, longitude: -122.7662, resolvedLabel: 'Tualatin, OR'),
+    '97062': GeoPointCoords(latitude: 45.3840, longitude: -122.7662, resolvedLabel: 'Tualatin, OR'),
+    'tigard, or': GeoPointCoords(latitude: 45.4310, longitude: -122.7712, resolvedLabel: 'Tigard, OR'),
+    'tigard': GeoPointCoords(latitude: 45.4310, longitude: -122.7712, resolvedLabel: 'Tigard, OR'),
+    'lake oswego, or': GeoPointCoords(latitude: 45.4207, longitude: -122.6706, resolvedLabel: 'Lake Oswego, OR'),
+    'lake oswego': GeoPointCoords(latitude: 45.4207, longitude: -122.6706, resolvedLabel: 'Lake Oswego, OR'),
+    '97034': GeoPointCoords(latitude: 45.4207, longitude: -122.6706, resolvedLabel: 'Lake Oswego, OR'),
+    'oregon city, or': GeoPointCoords(latitude: 45.3573, longitude: -122.6068, resolvedLabel: 'Oregon City, OR'),
     // California
     'los angeles, ca': GeoPointCoords(latitude: 34.0522, longitude: -118.2437, resolvedLabel: 'Los Angeles, CA'),
     'los angeles': GeoPointCoords(latitude: 34.0522, longitude: -118.2437, resolvedLabel: 'Los Angeles, CA'),

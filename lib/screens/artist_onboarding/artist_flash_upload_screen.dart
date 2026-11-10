@@ -8,12 +8,14 @@ import 'package:firebase_storage/firebase_storage.dart';
 import '../../models/artist.dart';
 import '../../models/studio_information.dart';
 import '../../services/auth_service.dart';
+import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/fade_page_route.dart';
 import '../../widgets/flash_switch.dart';
 import '../../widgets/flow_page_layout.dart';
+import '../../widgets/photo_crop_screen.dart';
 import '../../widgets/tattoo_background_wrapper.dart';
 import '../../features/onboarding/shared/onboarding_step_scaffold.dart';
 import 'artist_identity_tags_screen.dart';
@@ -73,8 +75,10 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
 
   // Active item in detail editor
   Uint8List? _activeImageBytes;
+  Uint8List? _activeRawImageBytes;
   String? _activeAssetPath;
   bool _isEditingDetails = false;
+  int? _editingItemIndex;
 
   final TextEditingController _titleController = TextEditingController(text: 'Traditional Panther');
   final TextEditingController _priceController = TextEditingController(text: '150');
@@ -92,21 +96,60 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
     super.dispose();
   }
 
+  Future<Uint8List?> _openCropScreen(Uint8List bytes) async {
+    return Navigator.push<Uint8List?>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PhotoCropScreen(
+          imageBytes: bytes,
+          title: 'CROP & RESIZE FLASH',
+          cropShape: CropShape.rectangle,
+          subtitle: 'Pinch to zoom • Drag to frame your flash artwork',
+          ctaText: 'APPLY & USE FLASH',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _cropCurrentActivePhoto() async {
+    Uint8List? sourceBytes = _activeRawImageBytes ?? _activeImageBytes;
+    if (sourceBytes == null && _activeAssetPath != null) {
+      try {
+        final byteData = await rootBundle.load(_activeAssetPath!);
+        sourceBytes = byteData.buffer.asUint8List();
+        _activeRawImageBytes = sourceBytes;
+      } catch (_) {}
+    }
+    if (sourceBytes == null) return;
+
+    final cropped = await _openCropScreen(sourceBytes);
+    if (cropped != null && mounted) {
+      setState(() {
+        _activeImageBytes = cropped;
+      });
+    }
+  }
+
   Future<void> _pickImage(ImageSource source) async {
     try {
       final picked = await _picker.pickImage(
         source: source,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 85,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 90,
       );
       if (picked != null) {
         final bytes = await picked.readAsBytes();
-        setState(() {
-          _activeImageBytes = bytes;
-          _activeAssetPath = null;
-          _isEditingDetails = true;
-        });
+        _activeRawImageBytes = bytes;
+        if (!mounted) return;
+        final cropped = await _openCropScreen(bytes);
+        if (mounted) {
+          setState(() {
+            _activeImageBytes = cropped ?? bytes;
+            _activeAssetPath = null;
+            _isEditingDetails = true;
+          });
+        }
       }
     } catch (_) {
       _useSampleFlash('assets/images/flash_traditional_panther.jpg');
@@ -118,6 +161,7 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
       final byteData = await rootBundle.load(assetPath);
       final bytes = byteData.buffer.asUint8List();
       setState(() {
+        _activeRawImageBytes = bytes;
         _activeImageBytes = bytes;
         _activeAssetPath = assetPath;
         _isEditingDetails = true;
@@ -128,6 +172,106 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
         _isEditingDetails = true;
       });
     }
+  }
+
+  void _showEditPhotoOptions() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (bottomSheetContext) {
+        return AdaptiveGlassContainer.bottomSheet(
+          glassEnabled: false,
+          androidSurfaceColor: const Color(0xFF1E2121),
+          topRadius: AppRadius.radiusSheet,
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Edit Flash Photo',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Material(
+                    color: Colors.transparent,
+                    child: Column(
+                      children: [
+                        ListTile(
+                          key: const Key('photo_option_crop'),
+                          leading: const Icon(Icons.crop, color: Color(0xFFEEC200)),
+                          title: Text(
+                            'Resize & Crop Framing',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Zoom and pan to choose the displayed portion',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF919696),
+                              fontSize: 12,
+                            ),
+                          ),
+                          onTap: () {
+                            Navigator.pop(bottomSheetContext);
+                            _cropCurrentActivePhoto();
+                          },
+                        ),
+                        ListTile(
+                          key: const Key('photo_option_gallery'),
+                          leading: const Icon(Icons.photo_library, color: Color(0xFFEEC200)),
+                          title: Text(
+                            'Choose Different Photo from Gallery',
+                            style: GoogleFonts.plusJakartaSans(color: Colors.white),
+                          ),
+                          onTap: () {
+                            Navigator.pop(bottomSheetContext);
+                            _pickImage(ImageSource.gallery);
+                          },
+                        ),
+                        ListTile(
+                          key: const Key('photo_option_camera'),
+                          leading: const Icon(Icons.camera_alt, color: Color(0xFFEEC200)),
+                          title: Text(
+                            'Take a New Photo',
+                            style: GoogleFonts.plusJakartaSans(color: Colors.white),
+                          ),
+                          onTap: () {
+                            Navigator.pop(bottomSheetContext);
+                            _pickImage(ImageSource.camera);
+                          },
+                        ),
+                        ListTile(
+                          key: const Key('photo_option_sample'),
+                          leading: const Icon(Icons.auto_awesome, color: Color(0xFFEEC200)),
+                          title: Text(
+                            'Use Sample Flash: Traditional Panther',
+                            style: GoogleFonts.plusJakartaSans(color: Colors.white),
+                          ),
+                          onTap: () {
+                            Navigator.pop(bottomSheetContext);
+                            _useSampleFlash('assets/images/flash_traditional_panther.jpg');
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _showImageSourcePicker() {
@@ -157,6 +301,22 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
                   color: Colors.transparent,
                   child: Column(
                     children: [
+                      if (_activeImageBytes != null || _activeAssetPath != null)
+                        ListTile(
+                          key: const Key('photo_source_crop'),
+                          leading: const Icon(Icons.crop, color: Color(0xFFEEC200)),
+                          title: Text(
+                            'Resize & Crop Current Photo',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          onTap: () {
+                            Navigator.pop(bottomSheetContext);
+                            _cropCurrentActivePhoto();
+                          },
+                        ),
                       ListTile(
                         leading: const Icon(Icons.photo_library, color: Color(0xFFEEC200)),
                         title: Text(
@@ -209,7 +369,9 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
     final size = _sizeController.text.trim().isNotEmpty ? _sizeController.text.trim() : '4x4';
 
     final newItem = UploadedFlashItem(
-      id: 'flash_${DateTime.now().millisecondsSinceEpoch}_${_uploadedItems.length}',
+      id: (_editingItemIndex != null && _editingItemIndex! < _uploadedItems.length)
+          ? _uploadedItems[_editingItemIndex!].id
+          : 'flash_${DateTime.now().millisecondsSinceEpoch}_${_uploadedItems.length}',
       title: title,
       price: price,
       size: size,
@@ -220,8 +382,14 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
     );
 
     setState(() {
-      _uploadedItems.add(newItem);
+      if (_editingItemIndex != null && _editingItemIndex! < _uploadedItems.length) {
+        _uploadedItems[_editingItemIndex!] = newItem;
+        _editingItemIndex = null;
+      } else {
+        _uploadedItems.add(newItem);
+      }
       _activeImageBytes = null;
+      _activeRawImageBytes = null;
       _activeAssetPath = null;
       _isEditingDetails = false;
     });
@@ -304,12 +472,22 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
     return OnboardingStepScaffold(
       currentStep: 6,
       totalSteps: 9,
-      onBack: Navigator.canPop(context)
+      showCta: !_isEditingDetails,
+      onBack: _isEditingDetails
           ? () {
               FocusManager.instance.primaryFocus?.unfocus();
-              Navigator.pop(context);
+              setState(() {
+                _isEditingDetails = false;
+                _activeImageBytes = null;
+                _activeAssetPath = null;
+              });
             }
-          : null,
+          : (Navigator.canPop(context)
+              ? () {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  Navigator.pop(context);
+                }
+              : null),
       onSkip: _proceedToIdentityTags,
       skipKey: const Key('skip_flash_button'),
       skipText: 'Skip',
@@ -331,12 +509,13 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (_isEditingDetails)
+            if (_isEditingDetails) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
                 child: _buildItemDetailsCard(),
-              )
-            else ...[
+              ),
+              const SizedBox(height: AppSpacing.spaceLg),
+            ] else ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
                 child: _buildUploadBox(),
@@ -421,27 +600,64 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Flash Image Preview with Edit Icon
+          // Flash Image Preview with Edit & Crop Controls
           Stack(
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-                child: Container(
-                  width: double.infinity,
-                  height: 220,
-                  color: const Color(0xFF2E3232),
-                  child: _activeImageBytes != null
-                      ? Image.memory(_activeImageBytes!, fit: BoxFit.cover)
-                      : (_activeAssetPath != null
-                          ? Image.asset(_activeAssetPath!, fit: BoxFit.cover)
-                          : const Icon(Icons.image, size: 60, color: Color(0xFF6B7280))),
+                child: InkWell(
+                  key: const Key('flash_image_preview_tap'),
+                  onTap: _cropCurrentActivePhoto,
+                  child: Container(
+                    width: double.infinity,
+                    height: 220,
+                    color: const Color(0xFF2E3232),
+                    child: _activeImageBytes != null
+                        ? Image.memory(_activeImageBytes!, fit: BoxFit.cover)
+                        : (_activeAssetPath != null
+                            ? Image.asset(_activeAssetPath!, fit: BoxFit.cover)
+                            : const Icon(Icons.image, size: 60, color: Color(0xFF6B7280))),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 8,
+                left: 8,
+                child: InkWell(
+                  key: const Key('crop_flash_image_button'),
+                  onTap: _cropCurrentActivePhoto,
+                  borderRadius: BorderRadius.circular(AppRadius.radiusFull),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xCC121414),
+                      borderRadius: BorderRadius.circular(AppRadius.radiusFull),
+                      border: Border.all(color: const Color(0xFF333636)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.crop, size: 14, color: Color(0xFFEEC200)),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Resize & Crop',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
               Positioned(
                 bottom: 8,
                 right: 8,
                 child: InkWell(
-                  onTap: _showImageSourcePicker,
+                  key: const Key('edit_flash_image_button'),
+                  onTap: _showEditPhotoOptions,
                   child: Container(
                     padding: const EdgeInsets.all(6),
                     decoration: const BoxDecoration(
@@ -630,41 +846,13 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
           ),
           const SizedBox(height: 20),
 
-          // Action Buttons: + Add More Flash & DONE
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton(
-              key: const Key('add_more_flash_button'),
-              onPressed: () => _saveCurrentItem(addAnother: true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEEC200),
-                foregroundColor: const Color(0xFF121414),
-                shape: const StadiumBorder(),
-              ),
-              child: Text(
-                '+ Add More Flash',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Center(
-            child: TextButton(
-              key: const Key('done_details_button'),
-              onPressed: () => _saveCurrentItem(addAnother: false),
-              child: Text(
-                'DONE',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFEEC200),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
+          // Action Button: DONE (saves item and returns to flash upload screen)
+          AppButtons.primaryCTA(
+            key: const Key('done_details_button'),
+            onPressed: () => _saveCurrentItem(addAnother: false),
+            text: 'DONE',
+            backgroundColor: const Color(0xFFEEC200),
+            foregroundColor: const Color(0xFF121414),
           ),
         ],
       ),
@@ -697,55 +885,73 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
             separatorBuilder: (context, index) => const SizedBox(width: 12),
             itemBuilder: (context, index) {
               final item = _uploadedItems[index];
-              return SizedBox(
-                width: 110,
-                child: AdaptiveGlassContainer(
-                  useGradient: false,
-                  borderRadius: 12,
-                  padding: EdgeInsets.zero,
-                  child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.radiusMd - 1)),
-                        child: item.imageBytes != null
-                            ? Image.memory(item.imageBytes!, fit: BoxFit.cover, width: double.infinity)
-                            : (item.assetPath != null
-                                ? Image.asset(item.assetPath!, fit: BoxFit.cover, width: double.infinity)
-                                : Container(color: const Color(0xFF2E3232))),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
+              return InkWell(
+                key: Key('uploaded_flash_item_$index'),
+                onTap: () {
+                  setState(() {
+                    _editingItemIndex = index;
+                    _activeImageBytes = item.imageBytes;
+                    _activeRawImageBytes = item.imageBytes;
+                    _activeAssetPath = item.assetPath;
+                    _titleController.text = item.title;
+                    _priceController.text = item.price.toString();
+                    _sizeController.text = item.size;
+                    _selectedStyle = item.styleTag;
+                    _isRepeatable = item.isRepeatable;
+                    _isEditingDetails = true;
+                  });
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  width: 110,
+                  child: AdaptiveGlassContainer(
+                    useGradient: false,
+                    borderRadius: 12,
+                    padding: EdgeInsets.zero,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.radiusMd - 1)),
+                            child: item.imageBytes != null
+                                ? Image.memory(item.imageBytes!, fit: BoxFit.cover, width: double.infinity)
+                                : (item.assetPath != null
+                                    ? Image.asset(item.assetPath!, fit: BoxFit.cover, width: double.infinity)
+                                    : Container(color: const Color(0xFF2E3232))),
                           ),
-                          Text(
-                            '\$${item.price}',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFFEEC200),
-                            ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              Text(
+                                '\$${item.price}',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFFEEC200),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            );
+              );
             },
           ),
         ),

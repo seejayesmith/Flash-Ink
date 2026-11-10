@@ -11,7 +11,6 @@ import '../../theme/app_theme.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/fade_page_route.dart';
 import '../../widgets/flash_switch.dart';
-import '../../widgets/keyboard_collapse_button.dart';
 import '../../widgets/tattoo_background_wrapper.dart';
 import 'artist_set_price_screen.dart';
 
@@ -106,6 +105,84 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
     }
   }
 
+  Future<void> _confirmDeletePolicy(int index) async {
+    final policy = _policies[index];
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          key: const Key('delete_policy_dialog'),
+          backgroundColor: const Color(0xFF1E2020),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.radiusLg),
+            side: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
+          ),
+          title: Text(
+            'Delete Policy',
+            key: const Key('delete_policy_modal_title'),
+            textAlign: TextAlign.center,
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFFF9FAFA),
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
+          ),
+          content: Text(
+            'Are you sure you want to delete "${policy.title}"? This action cannot be undone.',
+            key: const Key('delete_policy_modal_message'),
+            textAlign: TextAlign.center,
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFF919696),
+              fontSize: 14,
+              height: 1.4,
+            ),
+          ),
+          actionsAlignment: MainAxisAlignment.spaceEvenly,
+          actions: [
+            TextButton(
+              key: const Key('delete_policy_cancel_button'),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFF919696),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            TextButton(
+              key: const Key('delete_policy_confirm_button'),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(
+                'Delete',
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFFEF4444),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true && mounted) {
+      setState(() {
+        _policies.removeAt(index);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '"${policy.title}" deleted.',
+            style: GoogleFonts.plusJakartaSans(color: Colors.white),
+          ),
+          backgroundColor: const Color(0xFF1E2020),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
   void _showEditPolicyModal(int index) {
     final policy = _policies[index];
     final titleController = TextEditingController(text: policy.title);
@@ -116,42 +193,64 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return AdaptiveGlassContainer.bottomSheet(
-          useGradient: false,
-          topRadius: AppRadius.radiusSheet,
-          padding: EdgeInsets.only(
-            left: AppSpacing.screenGutter,
-            right: AppSpacing.screenGutter,
-            top: 24,
-            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        return PopScope(
+          canPop: FocusManager.instance.primaryFocus?.context?.widget is! EditableText,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop) {
+              FocusManager.instance.primaryFocus?.unfocus();
+              FocusScope.of(sheetContext).unfocus();
+            }
+          },
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () {
+              FocusManager.instance.primaryFocus?.unfocus();
+              FocusScope.of(sheetContext).unfocus();
+            },
+            child: AdaptiveGlassContainer.bottomSheet(
+              useGradient: false,
+              topRadius: AppRadius.radiusSheet,
+              padding: EdgeInsets.only(
+                left: AppSpacing.screenGutter,
+                right: AppSpacing.screenGutter,
+                top: 24,
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'Edit Policy',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: AppTheme.textPrimary,
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
                   Row(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const KeyboardCollapseButton(),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Color(0xFF919696)),
-                        onPressed: () => Navigator.pop(sheetContext),
+                      Text(
+                        'Edit Policy',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: AppTheme.textPrimary,
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            key: const Key('modal_header_delete_policy_button'),
+                            icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444), size: 20),
+                            tooltip: 'Delete Policy',
+                            onPressed: () {
+                              Navigator.pop(sheetContext);
+                              _confirmDeletePolicy(index);
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Color(0xFF919696)),
+                            onPressed: () => Navigator.pop(sheetContext),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
-              ),
               const SizedBox(height: 16),
               Text(
                 'Policy Title',
@@ -255,11 +354,32 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 10),
+              Center(
+                child: TextButton.icon(
+                  key: const Key('modal_delete_policy_button'),
+                  onPressed: () {
+                    Navigator.pop(sheetContext);
+                    _confirmDeletePolicy(index);
+                  },
+                  icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFEF4444)),
+                  label: Text(
+                    'Delete Policy',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFEF4444),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
+  },
+);
   }
 
   void _showAddCustomPolicyModal() {
@@ -282,43 +402,51 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            return AdaptiveGlassContainer.bottomSheet(
-              useGradient: false,
-              topRadius: AppRadius.radiusSheet,
-              padding: EdgeInsets.only(
-                top: 24,
-                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Add Custom Policy',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: AppTheme.textPrimary,
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
+            return PopScope(
+              canPop: FocusManager.instance.primaryFocus?.context?.widget is! EditableText,
+              onPopInvokedWithResult: (didPop, result) {
+                if (!didPop) {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  FocusScope.of(sheetContext).unfocus();
+                }
+              },
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  FocusScope.of(sheetContext).unfocus();
+                },
+                child: AdaptiveGlassContainer.bottomSheet(
+                  useGradient: false,
+                  topRadius: AppRadius.radiusSheet,
+                  padding: EdgeInsets.only(
+                    top: 24,
+                    bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const KeyboardCollapseButton(),
+                            Text(
+                              'Add Custom Policy',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: AppTheme.textPrimary,
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             IconButton(
                               icon: const Icon(Icons.close, color: Color(0xFF919696)),
                               onPressed: () => Navigator.pop(sheetContext),
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
                   const SizedBox(height: 16),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
@@ -501,11 +629,13 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
                   ),
                 ],
               ),
-            );
-          },
+            ),
+          ),
         );
       },
     );
+  },
+);
   }
 
   void _handleContinue() {
@@ -576,6 +706,41 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
               ),
             ],
 
+            if (_policies.isEmpty) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF141616),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusMd),
+                  border: Border.all(color: AppTheme.darkBorder),
+                ),
+                alignment: Alignment.center,
+                child: Column(
+                  children: [
+                    const Icon(Icons.policy_outlined, size: 36, color: Color(0xFF6B7280)),
+                    const SizedBox(height: 10),
+                    Text(
+                      'No policies added yet',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF919696),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Add a custom policy below to protect your workflow.',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF6B7280),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             // Policy Cards List
             ListView.separated(
               shrinkWrap: true,
@@ -639,24 +804,29 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
                           height: 1.35,
                         ),
                       ),
-                      if (policy.isEnabled) ...[
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: InkWell(
-                            key: Key('edit_policy_btn_$index'),
-                            onTap: () => _showEditPolicyModal(index),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          InkWell(
+                            key: Key('delete_policy_btn_$index'),
+                            onTap: () => _confirmDeletePolicy(index),
+                            borderRadius: BorderRadius.circular(AppRadius.radiusSm),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.edit_outlined, size: 13, color: AppTheme.gold),
+                                  const Icon(
+                                    Icons.delete_outline,
+                                    size: 13,
+                                    color: Color(0xFFEF4444),
+                                  ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    'Edit text',
+                                    'Delete',
                                     style: GoogleFonts.plusJakartaSans(
-                                      color: AppTheme.gold,
+                                      color: const Color(0xFFEF4444),
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -665,8 +835,34 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                          if (policy.isEnabled)
+                            InkWell(
+                              key: Key('edit_policy_btn_$index'),
+                              onTap: () => _showEditPolicyModal(index),
+                              borderRadius: BorderRadius.circular(AppRadius.radiusSm),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.edit_outlined, size: 13, color: AppTheme.gold),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Edit text',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: AppTheme.gold,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          else
+                            const SizedBox.shrink(),
+                        ],
+                      ),
                     ],
                   ),
                 );

@@ -38,6 +38,8 @@ export const completeArtistOnboarding = onCall(async (request) => {
     minDeposit?: number;
     tags?: string[];
     phoneNumber?: string;
+    avatarUrl?: string;
+    photoUrl?: string;
   };
 
   const artistName = (data.name || request.auth.token.name || 'Artist').trim();
@@ -50,19 +52,43 @@ export const completeArtistOnboarding = onCall(async (request) => {
   // 1. Stamp the tamper-proof Custom Claim onto the user's Firebase Auth JWT
   await admin.auth().setCustomUserClaims(uid, {
     role: 'artist',
+    isArtist: true,
+    isClient: true,
     verifiedArtist: true,
   });
 
+  const userRef = db.collection('users').doc(uid);
+  const existingUserSnap = await userRef.get();
+  const existingUserData = existingUserSnap.data();
+  const hasExistingClientName =
+    existingUserData &&
+    typeof existingUserData.displayName === 'string' &&
+    existingUserData.displayName.trim().length > 0;
+
+  const resolvedPhotoUrl = (
+    data.avatarUrl ||
+    data.photoUrl ||
+    (typeof existingUserData?.photoUrl === 'string' ? existingUserData.photoUrl : '') ||
+    (typeof existingUserData?.photoURL === 'string' ? existingUserData.photoURL : '') ||
+    request.auth.token.picture ||
+    ''
+  ).trim();
+
   const batch = db.batch();
 
-  // 2. Update the user's own account record (server-authoritative role)
-  const userRef = db.collection('users').doc(uid);
+  // 2. Update the user's own account record (server-authoritative dual-role support)
   batch.set(
     userRef,
     {
       uid,
-      displayName: artistName,
-      role: 'artist',
+      ...(!hasExistingClientName ? { displayName: artistName } : {}),
+      ...(resolvedPhotoUrl.length > 0
+        ? { photoUrl: resolvedPhotoUrl, photoURL: resolvedPhotoUrl }
+        : {}),
+      role: existingUserData?.role || 'client',
+      isArtist: true,
+      activeMode: 'artist',
+      roles: admin.firestore.FieldValue.arrayUnion('client', 'artist'),
       profileCompleted: true,
       claimsUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -83,6 +109,9 @@ export const completeArtistOnboarding = onCall(async (request) => {
       studioType: data.studioType || 'Private Studio',
       minDeposit,
       tags: Array.isArray(data.tags) ? data.tags.slice(0, 20) : [],
+      ...(resolvedPhotoUrl.length > 0
+        ? { avatarUrl: resolvedPhotoUrl, photoUrl: resolvedPhotoUrl }
+        : {}),
       profileCompleted: true,
       isBooksOpen: true,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),

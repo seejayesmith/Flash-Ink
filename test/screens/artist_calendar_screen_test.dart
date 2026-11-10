@@ -5,7 +5,9 @@ import 'package:firebase_core/firebase_core.dart';
 // ignore: depend_on_referenced_packages
 import 'package:firebase_core_platform_interface/test.dart';
 
+import 'package:flash_ink/core/mock/mock_data_config.dart';
 import 'package:flash_ink/models/artist.dart';
+import 'package:flash_ink/models/artist_dashboard_data.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_calendar_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_account_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_dashboard_screen.dart';
@@ -55,6 +57,8 @@ void main() {
     late FakeDashboardAuthService fakeAuth;
 
     setUp(() {
+      MockDataConfig.debugOverride = true;
+      ArtistDashboardRepository.resetMockData();
       fakeAuth = FakeDashboardAuthService();
       final binding = TestWidgetsFlutterBinding.ensureInitialized();
       binding.platformDispatcher.views.first.physicalSize = const Size(1080, 2400);
@@ -62,6 +66,7 @@ void main() {
     });
 
     tearDown(() {
+      MockDataConfig.resetDebugOverride();
       final binding = TestWidgetsFlutterBinding.ensureInitialized();
       binding.platformDispatcher.views.first.resetPhysicalSize();
       binding.platformDispatcher.views.first.resetDevicePixelRatio();

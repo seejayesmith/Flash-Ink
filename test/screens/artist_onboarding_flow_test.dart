@@ -615,6 +615,11 @@ void main() {
       expect(find.text('Upload Flash: Item Details'), findsOneWidget);
       expect(find.byKey(const Key('four_pieces_notice')), findsNothing);
 
+      // While editing details: bottom CTA is removed, add more flash is removed, only done details button is present
+      expect(find.byKey(const Key('done_flash_button')), findsNothing);
+      expect(find.byKey(const Key('add_more_flash_button')), findsNothing);
+      expect(find.byKey(const Key('done_details_button')), findsOneWidget);
+
       // Save item
       await tester.tap(find.byKey(const Key('done_details_button')));
       await tester.pumpAndSettle();
@@ -632,6 +637,55 @@ void main() {
         find.text('Notice: You must include four pieces of flash artwork to complete your showcase (1 of 4 added).'),
         findsNothing,
       );
+    });
+
+    testWidgets('When uploading a piece of flashwork, bottom CTA button is removed and only DONE button exists in card to return to upload page', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ArtistFlashUploadScreen(
+            artistName: 'OddMaree',
+            instagramHandle: '@OddMaree',
+            minDeposit: 100,
+          ),
+        ),
+      );
+
+      // Open upload bottom sheet
+      await tester.tap(find.byKey(const Key('upload_flash_trigger')));
+      await tester.pumpAndSettle();
+
+      // Tap sample flash
+      await tester.tap(find.text('Use Sample Flash: Traditional Panther'));
+      await tester.pumpAndSettle();
+
+      // Details editor is now open
+      expect(find.text('Upload Flash: Item Details'), findsOneWidget);
+
+      // Verify bottom CTA button is NOT rendered while uploading/editing flashwork
+      expect(find.byKey(const Key('done_flash_button')), findsNothing);
+
+      // Verify '+ Add More Flash' is removed
+      expect(find.byKey(const Key('add_more_flash_button')), findsNothing);
+      expect(find.text('+ Add More Flash'), findsNothing);
+
+      // Only DONE button exists in the card to take user back to the upload page
+      expect(find.byKey(const Key('done_details_button')), findsOneWidget);
+
+      // Tap DONE to return to upload page
+      await tester.tap(find.byKey(const Key('done_details_button')));
+      await tester.pumpAndSettle();
+
+      // Now back on the upload page: gallery shows the piece, upload trigger is visible
+      expect(find.byKey(const Key('upload_flash_trigger')), findsOneWidget);
+      expect(find.text('UPLOADED FLASH (1)'), findsOneWidget);
+
+      // Bottom DONE CTA button is only on this page to proceed to the next documentation page
+      expect(find.byKey(const Key('done_flash_button')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('done_flash_button')));
+      await tester.pumpAndSettle();
+
+      // Successfully navigated to next documentation page
+      expect(find.text('Tell them who\nyou are'), findsOneWidget);
     });
   });
 

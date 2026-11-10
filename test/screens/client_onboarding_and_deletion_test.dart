@@ -9,7 +9,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flash_ink/screens/profile_setup_screen.dart';
 import 'package:flash_ink/screens/aesthetics_selection_screen.dart';
 import 'package:flash_ink/screens/main_feed_screen.dart';
-import 'package:flash_ink/screens/splash_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
 
 /// Test double for Firebase User to record deletion
@@ -83,13 +82,6 @@ void main() {
     binding.platformDispatcher.views.first.resetDevicePixelRatio();
   });
 
-  Finder feedScrollable() {
-    return find.descendant(
-      of: find.byType(ListView),
-      matching: find.byType(Scrollable),
-    );
-  }
-
   group('Client Onboarding & Account Deletion Test Suite', () {
     // =========================================================================
     // Tier 1: Skip Photo Routing
@@ -147,10 +139,10 @@ void main() {
     );
 
     // =========================================================================
-    // Tier 1: Delete Account Button & Modal Cancellation
+    // Feed Verification: Delete Account Button Removed from Feed
     // =========================================================================
     testWidgets(
-      'Tier 1: Delete Account button is visible at bottom of feed, tapping opens centered confirmation modal, Cancel dismisses without deletion',
+      'Delete Account button is not present on the feed (deletion resides in ClientAccountScreen)',
       (WidgetTester tester) async {
         final fakeAuth = FakeClientAuthService();
         await tester.pumpWidget(
@@ -160,149 +152,8 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // 1. Scroll until "Delete Account" button is visible
-        final deleteButtonFinder = find.byKey(const Key('delete_account_button'));
-        await tester.scrollUntilVisible(deleteButtonFinder, 500.0, scrollable: feedScrollable());
-        expect(deleteButtonFinder, findsOneWidget);
-
-        // 2. Tap "Delete Account" button
-        await tester.tap(deleteButtonFinder);
-        await tester.pumpAndSettle();
-
-        // 3. Verify centered confirmation modal appears
-        expect(find.byType(AlertDialog), findsOneWidget);
-        expect(find.byKey(const Key('delete_account_modal_title')), findsOneWidget);
-        expect(find.text('Delete Account'), findsWidgets);
-        expect(
-          find.text('Are you sure you want to delete your account? This action cannot be undone.'),
-          findsOneWidget,
-        );
-        expect(find.byKey(const Key('delete_account_cancel_button')), findsOneWidget);
-        expect(find.byKey(const Key('delete_account_confirm_button')), findsOneWidget);
-
-        // 4. Tap "Cancel" button
-        await tester.tap(find.byKey(const Key('delete_account_cancel_button')));
-        await tester.pumpAndSettle();
-
-        // 5. Verify modal dismissed and user remains on MainFeedScreen with no deletion
-        expect(find.byType(AlertDialog), findsNothing);
-        expect(find.byType(MainFeedScreen), findsOneWidget);
-        expect(fakeAuth.deleteCallCount, 0);
-        expect(fakeAuth.mockUser.wasDeleted, isFalse);
-      },
-    );
-
-    // =========================================================================
-    // Tier 1: Confirm Deletion & Root Navigation
-    // =========================================================================
-    testWidgets(
-      'Tier 1: Confirming account deletion executes deleteAccount, displays simulated email confirmation SnackBar, and routes to SplashScreen',
-      (WidgetTester tester) async {
-        final fakeAuth = FakeClientAuthService();
-        await tester.pumpWidget(
-          MaterialApp(
-            home: MainFeedScreen(authService: fakeAuth),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        // 1. Scroll to "Delete Account" button and tap it
-        final deleteButtonFinder = find.byKey(const Key('delete_account_button'));
-        await tester.scrollUntilVisible(deleteButtonFinder, 500.0, scrollable: feedScrollable());
-        await tester.tap(deleteButtonFinder);
-        await tester.pumpAndSettle();
-
-        // 2. Confirm deletion in modal
-        final confirmButtonFinder = find.byKey(const Key('delete_account_confirm_button'));
-        expect(confirmButtonFinder, findsOneWidget);
-        await tester.tap(confirmButtonFinder);
-        await tester.pump(); // Dismiss dialog
-        await tester.pump(); // Complete async deletion and push SplashScreen
-
-        // 3. Verify deletion invocation
-        expect(fakeAuth.deleteCallCount, 1);
-        expect(fakeAuth.mockUser.wasDeleted, isTrue);
-
-        // 4. Verify simulated email confirmation SnackBar
-        expect(
-          find.text('Account deleted. A confirmation email has been sent.'),
-          findsOneWidget,
-        );
-
-        // 5. Verify user is routed to SplashScreen and backstack is completely cleared
-        expect(find.byType(SplashScreen), findsOneWidget);
-        final navigator = tester.state<NavigatorState>(find.byType(Navigator));
-        expect(navigator.canPop(), isFalse);
-      },
-    );
-
-    // =========================================================================
-    // Tier 2: Error Handling on Deletion (requires-recent-login)
-    // =========================================================================
-    testWidgets(
-      'Tier 2: When deleteAccount fails with requires-recent-login, displays error SnackBar and stays on MainFeedScreen',
-      (WidgetTester tester) async {
-        final fakeAuth = FakeClientAuthService()..throwRequiresRecentLogin = true;
-        await tester.pumpWidget(
-          MaterialApp(
-            home: MainFeedScreen(authService: fakeAuth),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        // 1. Scroll to and tap "Delete Account"
-        final deleteButtonFinder = find.byKey(const Key('delete_account_button'));
-        await tester.scrollUntilVisible(deleteButtonFinder, 500.0, scrollable: feedScrollable());
-        await tester.tap(deleteButtonFinder);
-        await tester.pumpAndSettle();
-
-        // 2. Confirm deletion
-        await tester.tap(find.byKey(const Key('delete_account_confirm_button')));
-        await tester.pumpAndSettle();
-
-        // 3. Verify deletion attempt occurred but user was not deleted
-        expect(fakeAuth.deleteCallCount, 1);
-        expect(fakeAuth.mockUser.wasDeleted, isFalse);
-
-        // 4. Verify error SnackBar is displayed with user-friendly message
-        expect(find.byType(SnackBar), findsOneWidget);
-        expect(
-          find.text('This action requires recent authentication. Please log in again before deleting your account.'),
-          findsOneWidget,
-        );
-
-        // 5. Verify user remains safely on MainFeedScreen
-        expect(find.byType(MainFeedScreen), findsOneWidget);
-      },
-    );
-
-    // =========================================================================
-    // Tier 2: Generic Error Handling on Deletion
-    // =========================================================================
-    testWidgets(
-      'Tier 2: When deleteAccount throws a generic error, displays error SnackBar and stays on MainFeedScreen',
-      (WidgetTester tester) async {
-        final fakeAuth = FakeClientAuthService()..throwGenericError = true;
-        await tester.pumpWidget(
-          MaterialApp(
-            home: MainFeedScreen(authService: fakeAuth),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        final deleteButtonFinder = find.byKey(const Key('delete_account_button'));
-        await tester.scrollUntilVisible(deleteButtonFinder, 500.0, scrollable: feedScrollable());
-        await tester.tap(deleteButtonFinder);
-        await tester.pumpAndSettle();
-
-        await tester.tap(find.byKey(const Key('delete_account_confirm_button')));
-        await tester.pumpAndSettle();
-
-        expect(fakeAuth.deleteCallCount, 1);
-        expect(fakeAuth.mockUser.wasDeleted, isFalse);
-        expect(find.byType(SnackBar), findsOneWidget);
-        expect(find.text('Failed to delete account'), findsOneWidget);
-        expect(find.byType(MainFeedScreen), findsOneWidget);
+        // Verify Delete Account button is not on the feed
+        expect(find.byKey(const Key('delete_account_button')), findsNothing);
       },
     );
   });

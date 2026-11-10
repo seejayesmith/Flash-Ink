@@ -211,6 +211,9 @@ class AppTheme {
           fontSize: 14.0,
         ),
       ),
+      chipTheme: const ChipThemeData(
+        showCheckmark: false,
+      ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
           return Colors.white;

@@ -17,13 +17,13 @@ void main() {
       expect(AppSpacing.headerTop, equals(24.0));
       expect(AppSpacing.headerTitleSubtitleGap, equals(8.0));
       expect(AppSpacing.headerContentGap, equals(24.0));
-      expect(AppSpacing.ctaHeight, equals(52.0));
+      expect(AppSpacing.ctaHeight, equals(44.0));
       expect(AppSpacing.ctaBottomPadding, equals(16.0));
 
       expect(AppPadding.screenHorizontal.left, equals(12.0));
       expect(AppPadding.screenHorizontal.right, equals(12.0));
       expect(AppPadding.card.top, equals(16.0));
-      expect(AppButtons.ctaHeightPrimary, equals(52.0));
+      expect(AppButtons.ctaHeightPrimary, equals(44.0));
     });
 
     testWidgets('FlowPageLayout renders title, subtitle, content and anchored CTA with proper structure', (tester) async {

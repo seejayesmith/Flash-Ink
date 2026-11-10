@@ -186,5 +186,18 @@ void main() {
       await tester.pump();
       expect(favoriteTapped, isTrue);
     });
+
+    testWidgets('Distance stats pill: Omits "away" suffix from distance text', (tester) async {
+      final artist = createTestArtist(
+        availablePieces: 4,
+      ).copyWith(distance: '1.4 mi away');
+
+      await tester.pumpWidget(buildCard(artist));
+
+      // Verifies '1.4 mi' is displayed without 'away'
+      expect(find.text('1.4 mi'), findsOneWidget);
+      expect(find.text('1.4 mi away'), findsNothing);
+      expect(find.text('DISTANCE'), findsOneWidget);
+    });
   });
 }

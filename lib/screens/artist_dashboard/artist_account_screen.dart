@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,16 +8,20 @@ import '../../core/mock/mock_data_config.dart';
 import '../../models/artist.dart';
 import '../../config/dev_config.dart';
 import '../../providers/app_providers.dart';
+import '../../repositories/artist_repository.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/flash_switch.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
+import '../../widgets/inline_phone_verification_tile.dart';
 import '../../widgets/photo_source_bottom_sheet.dart';
 import 'artist_edit_profile_screen.dart';
 import 'artist_account_settings_screen.dart';
+import '../location_settings_screen.dart';
 import '../app_info_screen.dart';
+import '../main_feed_screen.dart';
 import '../splash_screen.dart';
 import '../artist_profile_screen.dart';
 
@@ -29,11 +34,13 @@ import '../artist_profile_screen.dart';
 class ArtistAccountScreen extends StatefulWidget {
   final Artist? artist;
   final AuthService? authService;
+  final FirebaseFirestore? firestore;
 
   const ArtistAccountScreen({
     super.key,
     this.artist,
     this.authService,
+    this.firestore,
   });
 
   @override
@@ -42,6 +49,37 @@ class ArtistAccountScreen extends StatefulWidget {
 
 class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
   late final AuthService _authService = widget.authService ?? AuthService();
+
+  FirebaseFirestore _resolveFirestore() {
+    if (widget.firestore != null) return widget.firestore!;
+    if (mounted) {
+      try {
+        final injected = ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(firebaseFirestoreProvider);
+        if (injected != null) return injected;
+      } catch (_) {}
+    }
+    return FirebaseFirestore.instance;
+  }
+
+  Future<void> _handleSwitchToClientMode() async {
+    final user = _authService.currentUser;
+    await AuthService.setActiveAppMode(
+      'client',
+      uid: user?.uid,
+      firestore: _resolveFirestore(),
+    );
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MainFeedScreen(authService: _authService),
+      ),
+      (route) => false,
+    );
+  }
 
   bool _isUploadingPhoto = false;
 
@@ -80,7 +118,15 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
           : _displayName.toLowerCase().replaceAll(' ', '_').replaceAll('@', '');
       _bio = effective.bio;
       _location = effective.location;
-      _photoUrl = effective.avatarUrl.isNotEmpty ? effective.avatarUrl : null;
+      String? fallbackPhoto;
+      try {
+        fallbackPhoto = _authService.currentUser?.photoURL;
+      } catch (_) {}
+      _photoUrl = effective.avatarUrl.isNotEmpty
+          ? effective.avatarUrl
+          : ((fallbackPhoto != null && fallbackPhoto.isNotEmpty)
+              ? fallbackPhoto
+              : null);
       return;
     }
 
@@ -123,8 +169,20 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
   }
 
   Artist _getEffectiveArtist() {
+    String? fallbackAuthPhoto;
+    try {
+      fallbackAuthPhoto = _authService.currentUser?.photoURL;
+    } catch (_) {}
+    final effectiveAvatar = _photoUrl ?? fallbackAuthPhoto ?? '';
+
     if (widget.artist != null) {
-      return widget.artist!;
+      return widget.artist!.copyWith(
+        name: _displayName,
+        username: _username,
+        bio: _bio,
+        location: _location,
+        avatarUrl: effectiveAvatar,
+      );
     }
     if (MockDataConfig.isEnabled) {
       return Artist.mockArtists.firstWhere(
@@ -137,7 +195,7 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
       id: user?.uid ?? 'live_artist',
       name: _displayName,
       username: _username,
-      avatarUrl: _photoUrl ?? user?.photoURL ?? '',
+      avatarUrl: effectiveAvatar,
       location: _location,
       studioType: 'Independent Artist',
       bio: _bio,
@@ -153,27 +211,51 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
     if (user != null) {
       if (mounted) {
         setState(() {
-          if (user.displayName != null && user.displayName!.isNotEmpty) {
-            _displayName = user.displayName!;
-          }
-          if (user.email != null && user.email!.isNotEmpty) {
-            _email = user.email!;
-          }
-          if (user.photoURL != null && user.photoURL!.isNotEmpty) {
-            _photoUrl = user.photoURL;
+          try {
+            if (user.displayName != null && user.displayName!.isNotEmpty) {
+              _displayName = user.displayName!;
+            }
+          } catch (_) {}
+          try {
+            if (user.email != null && user.email!.isNotEmpty) {
+              _email = user.email!;
+            }
+          } catch (_) {}
+          try {
+            if (user.photoURL != null && user.photoURL!.isNotEmpty) {
+              _photoUrl = user.photoURL;
+            }
+          } catch (_) {}
+          String? uPhone;
+          try {
+            uPhone = user.phoneNumber;
+          } catch (_) {}
+          final isGoogle = AuthService.isGoogleAuthUser(user);
+          if (isGoogle) {
+            _phoneNumber = '';
+            _phoneVerified = false;
+          } else if (uPhone != null && uPhone.isNotEmpty) {
+            _phoneNumber = uPhone;
+            _phoneVerified = true;
           }
         });
       }
 
       try {
+        final db = _resolveFirestore();
         // Attempt reading from artists collection first
-        final artistDoc = await FirebaseFirestore.instance
+        final artistDoc = await db
             .collection('artists')
             .doc(user.uid)
             .get();
 
+        String? artistStoredPhoto;
         if (artistDoc.exists && artistDoc.data() != null && mounted) {
           final data = artistDoc.data()!;
+          final photo = data['avatarUrl'] ?? data['photoUrl'] ?? data['photoURL'];
+          if (photo is String && photo.trim().isNotEmpty) {
+            artistStoredPhoto = photo.trim();
+          }
           setState(() {
             if (data['name'] != null && (data['name'] as String).isNotEmpty) {
               final rawName = data['name'] as String;
@@ -188,15 +270,14 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
             if (data['location'] != null && (data['location'] as String).isNotEmpty) {
               _location = data['location'] as String;
             }
-            final photo = data['avatarUrl'] ?? data['photoUrl'] ?? data['photoURL'];
-            if (photo != null && photo is String && photo.isNotEmpty) {
-              _photoUrl = photo;
+            if (artistStoredPhoto != null && artistStoredPhoto.isNotEmpty) {
+              _photoUrl = artistStoredPhoto;
             }
           });
         }
 
         // Read private artist contact details from isolated /artists/{uid}/private/settings subcollection
-        final privateSettingsDoc = await FirebaseFirestore.instance
+        final privateSettingsDoc = await db
             .collection('artists')
             .doc(user.uid)
             .collection('private')
@@ -216,23 +297,42 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
         }
 
         // Also check users collection for fallback / verified flags
-        final userDoc = await FirebaseFirestore.instance
+        final userDoc = await db
             .collection('users')
             .doc(user.uid)
             .get();
         if (userDoc.exists && userDoc.data() != null && mounted) {
           final uData = userDoc.data()!;
+          final uPhoto = uData['photoUrl'] ?? uData['photoURL'] ?? uData['avatarUrl'];
           setState(() {
+            if ((_photoUrl == null || _photoUrl!.isEmpty) &&
+                uPhoto is String &&
+                uPhoto.trim().isNotEmpty) {
+              _photoUrl = uPhoto.trim();
+            }
             if (uData['phoneVerified'] != null) {
               _phoneVerified = uData['phoneVerified'] as bool;
             }
-            if (uData['email'] != null && (uData['email'] as String).isNotEmpty && _email == 'artist@flash.ink') {
+            if (uData['email'] != null && (uData['email'] as String).isNotEmpty && (_email.isEmpty || _email == 'artist@flash.ink')) {
               _email = uData['email'] as String;
             }
-            if (uData['phoneNumber'] != null && (uData['phoneNumber'] as String).isNotEmpty && _phoneNumber == '+1 (555) 345-6789') {
+            if (uData['phoneNumber'] != null && (uData['phoneNumber'] as String).isNotEmpty && (_phoneNumber.isEmpty || _phoneNumber == '+1 (555) 345-6789')) {
               _phoneNumber = uData['phoneNumber'] as String;
             }
           });
+        }
+
+        // Backfill /artists/{uid} if artist document exists without avatarUrl while account has a unified photo
+        if (artistDoc.exists &&
+            (artistStoredPhoto == null || artistStoredPhoto.isEmpty) &&
+            _photoUrl != null &&
+            _photoUrl!.trim().isNotEmpty) {
+          await ArtistRepository.syncUnifiedProfilePhoto(
+            uid: user.uid,
+            photoUrl: _photoUrl!.trim(),
+            firestore: db,
+            createArtistIfMissing: true,
+          );
         }
       } catch (_) {
         // Fallback gracefully for offline or widget testing environments
@@ -249,18 +349,13 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
     final user = _authService.currentUser;
     if (user != null) {
       try {
-        await FirebaseFirestore.instance.collection('artists').doc(user.uid).set({
+        final db = _resolveFirestore();
+        await db.collection('artists').doc(user.uid).set({
           'id': user.uid,
           'name': name,
           'username': username,
           'bio': bio,
           'location': location,
-        }, SetOptions(merge: true)).timeout(const Duration(milliseconds: 600));
-
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-          'uid': user.uid,
-          'displayName': name,
-          'username': username,
         }, SetOptions(merge: true)).timeout(const Duration(milliseconds: 600));
       } catch (_) {
         // Keep offline resilience
@@ -288,6 +383,12 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
         try {
           await FirebaseStorage.instance.ref().child('artist_profiles/${user.uid}.jpg').delete();
         } catch (_) {}
+        try {
+          await FirebaseStorage.instance.ref().child('user_profiles/${user.uid}.png').delete();
+        } catch (_) {}
+        try {
+          await FirebaseStorage.instance.ref().child('user_profiles/${user.uid}.jpg').delete();
+        } catch (_) {}
 
         await user.updatePhotoURL(null);
         try {
@@ -295,18 +396,13 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
         } catch (_) {}
         final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
         final timeoutDuration = isTest ? const Duration(milliseconds: 500) : const Duration(seconds: 10);
-        try {
-          await FirebaseFirestore.instance.collection('artists').doc(user.uid).set({
-            'id': user.uid,
-            'avatarUrl': null,
-            'photoUrl': null,
-          }, SetOptions(merge: true)).timeout(timeoutDuration);
-          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-            'uid': user.uid,
-            'photoURL': null,
-            'photoUrl': null,
-          }, SetOptions(merge: true)).timeout(timeoutDuration);
-        } catch (_) {}
+        await ArtistRepository.syncUnifiedProfilePhoto(
+          uid: user.uid,
+          photoUrl: null,
+          firestore: _resolveFirestore(),
+          createArtistIfMissing: true,
+          timeout: timeoutDuration,
+        );
 
         if (mounted) {
           setState(() {
@@ -353,18 +449,13 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
         } catch (_) {}
         final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
         final timeoutDuration = isTest ? const Duration(milliseconds: 500) : const Duration(seconds: 10);
-        try {
-          await FirebaseFirestore.instance.collection('artists').doc(user.uid).set({
-            'id': user.uid,
-            'avatarUrl': downloadUrl,
-            'photoUrl': downloadUrl,
-          }, SetOptions(merge: true)).timeout(timeoutDuration);
-          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-            'uid': user.uid,
-            'photoURL': downloadUrl,
-            'photoUrl': downloadUrl,
-          }, SetOptions(merge: true)).timeout(timeoutDuration);
-        } catch (_) {}
+        await ArtistRepository.syncUnifiedProfilePhoto(
+          uid: user.uid,
+          photoUrl: downloadUrl,
+          firestore: _resolveFirestore(),
+          createArtistIfMissing: true,
+          timeout: timeoutDuration,
+        );
 
         if (mounted) {
           setState(() {
@@ -432,7 +523,12 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ArtistProfileScreen(artist: effectiveArtist),
+        builder: (_) => ArtistProfileScreen(
+          artist: effectiveArtist,
+          isOwner: true,
+          authService: _authService,
+          firestore: _resolveFirestore(),
+        ),
       ),
     );
   }
@@ -578,6 +674,26 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
 
             const SizedBox(height: 24),
 
+            // Client Persona Switcher
+            _buildSectionHeader('CLIENT MODE'),
+            const SizedBox(height: 10),
+            _buildSettingsContainer([
+              _buildSettingsTile(
+                key: const Key('switch_to_client_mode_button'),
+                icon: Icons.swap_horiz_rounded,
+                title: 'Switch to Client Mode',
+                subtitle: 'Browse artists, explore flash drops & book tattoos',
+                trailing: const Icon(
+                  Icons.chevron_right,
+                  color: AppTheme.gold,
+                  size: 18,
+                ),
+                onTap: _handleSwitchToClientMode,
+              ),
+            ]),
+
+            const SizedBox(height: 24),
+
             // About & Studio Section
             _buildSectionHeader('ABOUT & STUDIO'),
             const SizedBox(height: 10),
@@ -620,28 +736,18 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
                 trailing: const Icon(Icons.lock_outline, color: Color(0xFF6B7280), size: 16),
               ),
               const Divider(color: AppTheme.darkBorder, height: 1),
-              _buildSettingsTile(
-                icon: Icons.phone_outlined,
-                title: 'Phone Number',
-                subtitle: _phoneNumber,
-                trailing: _phoneVerified
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0x2222C55E),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFF22C55E), width: 0.8),
-                        ),
-                        child: Text(
-                          'VERIFIED',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: const Color(0xFF22C55E),
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      )
-                    : null,
+              InlinePhoneVerificationTile(
+                phoneNumber: _phoneNumber,
+                phoneVerified: _phoneVerified,
+                authService: _authService,
+                firestore: _resolveFirestore(),
+                isArtist: true,
+                onPhoneVerified: (newPhone) {
+                  setState(() {
+                    _phoneNumber = newPhone;
+                    _phoneVerified = true;
+                  });
+                },
               ),
             ]),
 
@@ -762,6 +868,22 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
             _buildSectionHeader('ACCOUNT SECURITY & SETTINGS'),
             const SizedBox(height: 10),
             _buildSettingsContainer([
+              _buildSettingsTile(
+                key: const Key('artist_location_permissions_tile'),
+                icon: Icons.location_on_outlined,
+                title: 'Location Permissions',
+                subtitle: 'Manage app location access & device permissions',
+                trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const LocationSettingsScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(color: AppTheme.darkBorder, height: 1),
               _buildSettingsTile(
                 key: const Key('artist_account_settings_tile'),
                 icon: Icons.shield_outlined,

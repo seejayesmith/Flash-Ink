@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:http/http.dart' as http;
 import '../core/utils/distance_calculator.dart';
 import '../models/artist.dart';
@@ -149,6 +151,7 @@ class ArtistRepository {
     String email = '',
     String phoneNumber = '',
     String avatarUrl = '',
+    String bannerUrl = '',
     String bio = '',
     List<String> styles = const [],
     List<String> identityTags = const [],
@@ -170,6 +173,8 @@ class ArtistRepository {
 
     final safeAvatarUrl =
         avatarUrl.startsWith('local://') ? '' : avatarUrl.trim();
+    final safeBannerUrl =
+        bannerUrl.startsWith('local://') ? '' : bannerUrl.trim();
     final mergedTags = <String>{
       ...styles.where((s) => s.trim().isNotEmpty),
       ...identityTags.where((t) => t.trim().isNotEmpty),
@@ -213,6 +218,7 @@ class ArtistRepository {
       instagramHandle: normalizedHandle,
       studioName: hydratedStudio.name,
       avatarUrl: safeAvatarUrl,
+      bannerUrl: safeBannerUrl,
       isBooksOpen: isBooksOpen,
       location: locationDisplay,
       studioType: hydratedStudio.studioType,
@@ -246,19 +252,81 @@ class ArtistRepository {
         artistRef.collection('private').doc('settings');
 
     final existingUser = await userRef.get();
+    final existingData = existingUser.data();
+    final existingArtist = await artistRef.get();
+    final existingArtistData = existingArtist.data();
+
+    String effectiveAvatarUrl = safeAvatarUrl;
+    if (effectiveAvatarUrl.isEmpty) {
+      final candidates = <Object?>[
+        existingArtistData?['avatarUrl'],
+        existingArtistData?['photoUrl'],
+        existingArtistData?['photoURL'],
+        existingData?['photoUrl'],
+        existingData?['photoURL'],
+        existingData?['avatarUrl'],
+      ];
+      try {
+        final currentUser = FirebaseAuth.instance.currentUser;
+        if (currentUser != null && currentUser.uid == uid) {
+          candidates.add(currentUser.photoURL);
+        }
+      } catch (_) {}
+
+      for (final candidate in candidates) {
+        if (candidate is String) {
+          final trimmed = candidate.trim();
+          if (trimmed.isNotEmpty && !trimmed.startsWith('local://')) {
+            effectiveAvatarUrl = trimmed;
+            break;
+          }
+        }
+      }
+    }
+
+    String effectiveBannerUrl = safeBannerUrl;
+    if (effectiveBannerUrl.isEmpty) {
+      final existingBanner = existingArtistData?['bannerUrl'] ??
+          existingArtistData?['coverImageUrl'] ??
+          existingArtistData?['headerImageUrl'];
+      if (existingBanner is String &&
+          existingBanner.trim().isNotEmpty &&
+          !existingBanner.trim().startsWith('local://')) {
+        effectiveBannerUrl = existingBanner.trim();
+      }
+    }
+
+    final resolvedArtist =
+        (effectiveAvatarUrl != safeAvatarUrl || effectiveBannerUrl != safeBannerUrl)
+            ? artist.copyWith(
+                avatarUrl: effectiveAvatarUrl,
+                bannerUrl: effectiveBannerUrl,
+              )
+            : artist;
+
+    final bool hasExistingDisplayName =
+        (existingData?['displayName'] as String?)?.trim().isNotEmpty == true;
+    final bool hasExistingUsername =
+        (existingData?['username'] as String?)?.trim().isNotEmpty == true;
+    final bool hasExistingBio =
+        (existingData?['bio'] as String?)?.trim().isNotEmpty == true;
+
     final batch = db.batch();
 
-    // 1. Update `/users/{uid}` (never setting 'role': 'artist' from client SDK).
+    // 1. Update `/users/{uid}` (never setting 'role': 'artist' from client SDK; preserve existing client persona fields, keep unified photo synced).
     final userPayload = <String, dynamic>{
       'uid': uid,
-      'displayName': artist.name,
-      if (artist.username.isNotEmpty) 'username': artist.username,
+      if (!existingUser.exists) 'role': 'client',
+      if (!hasExistingDisplayName) 'displayName': resolvedArtist.name,
+      if (!hasExistingUsername && resolvedArtist.username.isNotEmpty)
+        'username': resolvedArtist.username,
       if (email.trim().isNotEmpty) 'email': email.trim(),
-      if (safeAvatarUrl.isNotEmpty) 'photoUrl': safeAvatarUrl,
-      if (safeAvatarUrl.isNotEmpty) 'photoURL': safeAvatarUrl,
-      'bio': artist.bio,
+      if (effectiveAvatarUrl.isNotEmpty) 'photoUrl': effectiveAvatarUrl,
+      if (effectiveAvatarUrl.isNotEmpty) 'photoURL': effectiveAvatarUrl,
+      if (!hasExistingBio) 'bio': resolvedArtist.bio,
       if (normalizedHandle.isNotEmpty) 'instagramHandle': normalizedHandle,
       'onboardingRole': 'artist',
+      'activeMode': 'artist',
       'profileCompleted': true,
       if (discoveryCoords != null) 'latitude': discoveryCoords.latitude,
       if (discoveryCoords != null) 'longitude': discoveryCoords.longitude,
@@ -270,7 +338,7 @@ class ArtistRepository {
 
     // 2. Write privacy-safe public `/artists/{uid}` document.
     final artistPublicPayload = <String, dynamic>{
-      ...artist.toMap(),
+      ...resolvedArtist.toMap(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
     batch.set(artistRef, artistPublicPayload, SetOptions(merge: true));
@@ -293,21 +361,114 @@ class ArtistRepository {
 
     // 4. Invoke the `completeArtistOnboarding` callable Cloud Function and force-refresh token claims.
     await invokeCompleteArtistOnboarding(
-      name: artist.name,
+      name: resolvedArtist.name,
       instagramHandle: normalizedHandle,
-      bio: artist.bio,
+      bio: resolvedArtist.bio,
       city: locationDisplay,
       studioType: hydratedStudio.studioType,
       minDeposit: minDeposit,
       tags: mergedTags,
       phoneNumber: phoneNumber.trim(),
+      avatarUrl: effectiveAvatarUrl,
     );
 
     final savedSnapshot = await artistRef.get();
     if (savedSnapshot.exists && savedSnapshot.data() != null) {
       return Artist.fromMap(savedSnapshot.data()!, savedSnapshot.id);
     }
-    return artist;
+    return resolvedArtist;
+  }
+
+  /// Synchronizes a unified profile photo across `/users/{uid}` and `/artists/{uid}`
+  /// (when an artist document exists or [createArtistIfMissing] is true).
+  static Future<void> syncUnifiedProfilePhoto({
+    required String uid,
+    required String? photoUrl,
+    FirebaseFirestore? firestore,
+    bool createArtistIfMissing = false,
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    if (uid.trim().isEmpty) return;
+    FirebaseFirestore? db = firestore;
+    if (db == null) {
+      try {
+        db = FirebaseFirestore.instance;
+      } catch (_) {
+        return;
+      }
+    }
+
+    final normalizedPhoto =
+        (photoUrl != null && photoUrl.trim().isNotEmpty && !photoUrl.trim().startsWith('local://'))
+            ? photoUrl.trim()
+            : null;
+
+    try {
+      await db
+          .collection('users')
+          .doc(uid)
+          .set({
+            'uid': uid,
+            'photoUrl': normalizedPhoto,
+            'photoURL': normalizedPhoto,
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true))
+          .timeout(timeout);
+    } catch (_) {}
+
+    try {
+      final artistRef = db.collection('artists').doc(uid);
+      bool shouldUpdateArtist = createArtistIfMissing;
+      if (!shouldUpdateArtist) {
+        final snap = await artistRef.get().timeout(timeout);
+        shouldUpdateArtist = snap.exists;
+      }
+      if (shouldUpdateArtist) {
+        await artistRef
+            .set({
+              'id': uid,
+              'avatarUrl': normalizedPhoto ?? '',
+              'photoUrl': normalizedPhoto ?? '',
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true))
+            .timeout(timeout);
+      }
+    } catch (_) {}
+  }
+
+  /// Updates or resets (`bannerUrl: ''`) the artist's custom profile header banner on `/artists/{uid}`.
+  static Future<void> updateArtistBannerUrl({
+    required String uid,
+    required String? bannerUrl,
+    FirebaseFirestore? firestore,
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    if (uid.trim().isEmpty) return;
+    FirebaseFirestore? db = firestore;
+    if (db == null) {
+      try {
+        db = FirebaseFirestore.instance;
+      } catch (_) {
+        return;
+      }
+    }
+
+    final normalizedBanner =
+        (bannerUrl != null && bannerUrl.trim().isNotEmpty && !bannerUrl.trim().startsWith('local://'))
+            ? bannerUrl.trim()
+            : '';
+
+    try {
+      await db
+          .collection('artists')
+          .doc(uid)
+          .set({
+            'id': uid,
+            'bannerUrl': normalizedBanner,
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true))
+          .timeout(timeout);
+    } catch (_) {}
   }
 
   /// Invokes the `completeArtistOnboarding` callable Cloud Function to stamp
@@ -322,6 +483,7 @@ class ArtistRepository {
     int minDeposit = 100,
     List<String> tags = const [],
     String phoneNumber = '',
+    String avatarUrl = '',
   }) async {
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
@@ -346,6 +508,7 @@ class ArtistRepository {
                   'minDeposit': minDeposit,
                   'tags': tags,
                   'phoneNumber': phoneNumber,
+                  if (avatarUrl.trim().isNotEmpty) 'avatarUrl': avatarUrl.trim(),
                 },
               }),
             )
@@ -356,5 +519,292 @@ class ArtistRepository {
     try {
       await FirebaseAuth.instance.currentUser?.getIdToken(true);
     } catch (_) {}
+  }
+
+  /// Uploads binary JPEG image bytes to Firebase Storage under
+  /// `/artists/{uid}/flash/{artworkId}.jpg` and returns the public download URL.
+  static Future<String?> uploadFlashArtworkImage({
+    required String uid,
+    required String artworkId,
+    required Uint8List imageBytes,
+    FirebaseStorage? storage,
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    if (uid.trim().isEmpty || artworkId.trim().isEmpty) return null;
+    FirebaseStorage? resolvedStorage = storage;
+    if (resolvedStorage == null) {
+      try {
+        resolvedStorage = FirebaseStorage.instance;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    try {
+      final storageRef = resolvedStorage
+          .ref()
+          .child('artists')
+          .child(uid)
+          .child('flash')
+          .child('$artworkId.jpg');
+      await storageRef
+          .putData(imageBytes, SettableMetadata(contentType: 'image/jpeg'))
+          .timeout(timeout);
+      final downloadUrl = await storageRef.getDownloadURL().timeout(timeout);
+      return downloadUrl;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Atomically appends or prepends a new [artwork] to `/artists/{uid}`.
+  /// If [imageBytes] are supplied, uploads them via [uploadFlashArtworkImage].
+  /// Recalculates [availablePieces] and writes to Firestore.
+  static Future<Artist?> addFlashArtwork({
+    required String uid,
+    required FlashArtwork artwork,
+    Uint8List? imageBytes,
+    FirebaseFirestore? firestore,
+    FirebaseStorage? storage,
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    if (uid.trim().isEmpty) return null;
+    FirebaseFirestore? db = firestore;
+    if (db == null) {
+      try {
+        db = FirebaseFirestore.instance;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    String imageUrl = artwork.imageUrl;
+    if (imageBytes != null) {
+      final uploadedUrl = await uploadFlashArtworkImage(
+        uid: uid,
+        artworkId: artwork.id,
+        imageBytes: imageBytes,
+        storage: storage,
+        timeout: timeout,
+      );
+      if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
+        imageUrl = uploadedUrl;
+      }
+    }
+
+    final normalizedArtwork = artwork.copyWith(
+      artistId: uid,
+      imageUrl: imageUrl,
+    );
+
+    try {
+      final artistRef = db.collection('artists').doc(uid);
+      final snap = await artistRef.get().timeout(timeout);
+      if (!snap.exists || snap.data() == null) return null;
+
+      final currentArtist = Artist.fromMap(snap.data()!, snap.id);
+      final updatedFlashList = [
+        normalizedArtwork,
+        ...currentArtist.flashArtworks.where((a) => a.id != normalizedArtwork.id)
+      ];
+      final availableCount = updatedFlashList.where((f) => !f.isClaimed).length;
+
+      final previewImages = updatedFlashList
+          .map((f) => f.imageUrl)
+          .where((url) => url.isNotEmpty && !url.startsWith('local://'))
+          .take(4)
+          .toList(growable: false);
+
+      await artistRef.set({
+        'flashArtworks': updatedFlashList.map((f) => f.toMap()).toList(growable: false),
+        'availablePieces': availableCount,
+        'images': previewImages,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)).timeout(timeout);
+
+      return currentArtist.copyWith(
+        flashArtworks: updatedFlashList,
+        availablePieces: availableCount,
+        images: previewImages,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Updates an existing [artwork] on `/artists/{uid}` with matching [artwork.id].
+  static Future<Artist?> updateFlashArtwork({
+    required String uid,
+    required FlashArtwork artwork,
+    Uint8List? newImageBytes,
+    FirebaseFirestore? firestore,
+    FirebaseStorage? storage,
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    if (uid.trim().isEmpty) return null;
+    FirebaseFirestore? db = firestore;
+    if (db == null) {
+      try {
+        db = FirebaseFirestore.instance;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    String imageUrl = artwork.imageUrl;
+    if (newImageBytes != null) {
+      final uploadedUrl = await uploadFlashArtworkImage(
+        uid: uid,
+        artworkId: artwork.id,
+        imageBytes: newImageBytes,
+        storage: storage,
+        timeout: timeout,
+      );
+      if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
+        imageUrl = uploadedUrl;
+      }
+    }
+
+    final normalizedArtwork = artwork.copyWith(
+      artistId: uid,
+      imageUrl: imageUrl,
+    );
+
+    try {
+      final artistRef = db.collection('artists').doc(uid);
+      final snap = await artistRef.get().timeout(timeout);
+      if (!snap.exists || snap.data() == null) return null;
+
+      final currentArtist = Artist.fromMap(snap.data()!, snap.id);
+      final updatedFlashList = currentArtist.flashArtworks.map((item) {
+        return item.id == normalizedArtwork.id ? normalizedArtwork : item;
+      }).toList(growable: false);
+
+      final availableCount = updatedFlashList.where((f) => !f.isClaimed).length;
+
+      final previewImages = updatedFlashList
+          .map((f) => f.imageUrl)
+          .where((url) => url.isNotEmpty && !url.startsWith('local://'))
+          .take(4)
+          .toList(growable: false);
+
+      await artistRef.set({
+        'flashArtworks': updatedFlashList.map((f) => f.toMap()).toList(growable: false),
+        'availablePieces': availableCount,
+        'images': previewImages,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)).timeout(timeout);
+
+      return currentArtist.copyWith(
+        flashArtworks: updatedFlashList,
+        availablePieces: availableCount,
+        images: previewImages,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Deletes a flash piece by [artworkId] from `/artists/{uid}`.
+  static Future<Artist?> deleteFlashArtwork({
+    required String uid,
+    required String artworkId,
+    FirebaseFirestore? firestore,
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    if (uid.trim().isEmpty || artworkId.trim().isEmpty) return null;
+    FirebaseFirestore? db = firestore;
+    if (db == null) {
+      try {
+        db = FirebaseFirestore.instance;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    try {
+      final artistRef = db.collection('artists').doc(uid);
+      final snap = await artistRef.get().timeout(timeout);
+      if (!snap.exists || snap.data() == null) return null;
+
+      final currentArtist = Artist.fromMap(snap.data()!, snap.id);
+      final updatedFlashList = currentArtist.flashArtworks
+          .where((item) => item.id != artworkId)
+          .toList(growable: false);
+
+      final availableCount = updatedFlashList.where((f) => !f.isClaimed).length;
+
+      final previewImages = updatedFlashList
+          .map((f) => f.imageUrl)
+          .where((url) => url.isNotEmpty && !url.startsWith('local://'))
+          .take(4)
+          .toList(growable: false);
+
+      await artistRef.set({
+        'flashArtworks': updatedFlashList.map((f) => f.toMap()).toList(growable: false),
+        'availablePieces': availableCount,
+        'images': previewImages,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)).timeout(timeout);
+
+      return currentArtist.copyWith(
+        flashArtworks: updatedFlashList,
+        availablePieces: availableCount,
+        images: previewImages,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Toggles status of a flash piece (Available ↔ Claimed or Repeatable).
+  static Future<Artist?> toggleFlashArtworkStatus({
+    required String uid,
+    required String artworkId,
+    required FlashStatus newStatus,
+    FirebaseFirestore? firestore,
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    if (uid.trim().isEmpty || artworkId.trim().isEmpty) return null;
+    FirebaseFirestore? db = firestore;
+    if (db == null) {
+      try {
+        db = FirebaseFirestore.instance;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    try {
+      final artistRef = db.collection('artists').doc(uid);
+      final snap = await artistRef.get().timeout(timeout);
+      if (!snap.exists || snap.data() == null) return null;
+
+      final currentArtist = Artist.fromMap(snap.data()!, snap.id);
+      final updatedFlashList = currentArtist.flashArtworks.map((item) {
+        if (item.id == artworkId) {
+          return item.copyWith(
+            status: newStatus,
+            isExclusive: newStatus != FlashStatus.repeatable,
+          );
+        }
+        return item;
+      }).toList(growable: false);
+
+      final availableCount = updatedFlashList.where((f) => !f.isClaimed).length;
+
+      await artistRef.set({
+        'flashArtworks': updatedFlashList.map((f) => f.toMap()).toList(growable: false),
+        'availablePieces': availableCount,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)).timeout(timeout);
+
+      return currentArtist.copyWith(
+        flashArtworks: updatedFlashList,
+        availablePieces: availableCount,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 }

@@ -10,7 +10,10 @@ import 'package:flash_ink/screens/browse_artists_screen.dart';
 import 'package:flash_ink/screens/client_account_screen.dart';
 import 'package:flash_ink/screens/splash_screen.dart';
 import 'package:flash_ink/features/explore/presentation/screens/explore_screen.dart';
+import 'package:flash_ink/features/explore/presentation/screens/saved_bookmarks_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flash_ink/screens/location_settings_screen.dart';
 
 class MockTestUser extends Fake implements User {
   @override
@@ -115,7 +118,7 @@ void main() {
     );
 
     testWidgets(
-      'Tapping avatar icon at top right of ExploreScreen navigates to ClientAccountScreen',
+      'Tapping bookmark icon at top right of ExploreScreen navigates to SavedBookmarksScreen',
       (WidgetTester tester) async {
         final fakeAuth = FakeAccountAuthService();
         await tester.pumpWidget(
@@ -127,17 +130,17 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Verify avatar button is present in ExploreScreen actions
-        final avatarButton = find.byKey(const Key('discover_avatar_button'));
-        expect(avatarButton, findsOneWidget);
+        // Verify bookmark button is present in ExploreScreen actions
+        final bookmarkButton = find.byKey(const Key('explore_bookmark_button'));
+        expect(bookmarkButton, findsOneWidget);
 
-        // Tap avatar button
-        await tester.tap(avatarButton);
+        // Tap bookmark button
+        await tester.tap(bookmarkButton);
         await tester.pumpAndSettle();
 
-        // Verify navigation to ClientAccountScreen
-        expect(find.byType(ClientAccountScreen), findsOneWidget);
-        expect(find.text('Account'), findsOneWidget);
+        // Verify navigation to SavedBookmarksScreen
+        expect(find.byType(SavedBookmarksScreen), findsOneWidget);
+        expect(find.text('Saved & Bookmarks'), findsOneWidget);
       },
     );
 
@@ -174,15 +177,16 @@ void main() {
 
         await tester.pumpWidget(
           MaterialApp(
-            home: ExploreScreen(
+            home: BrowseArtistsScreen(
               authService: authWithoutPhoto,
+              showBottomNav: false,
             ),
           ),
         );
         await tester.pumpAndSettle();
 
         final iconFinder = find.descendant(
-          of: find.byKey(const Key('discover_avatar_button')),
+          of: find.byKey(const Key('client_avatar_button')),
           matching: find.byIcon(Icons.person),
         );
         expect(iconFinder, findsOneWidget);
@@ -368,6 +372,36 @@ void main() {
         expect(fakeAuth.user.wasDeleted, isTrue);
         expect(find.text('Account deleted. A confirmation email has been sent.'), findsOneWidget);
         expect(find.byType(SplashScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Tapping Location Permissions tile opens LocationSettingsScreen',
+      (WidgetTester tester) async {
+        final fakeAuth = FakeAccountAuthService();
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              home: ClientAccountScreen(
+                authService: fakeAuth,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final locationTile = find.byKey(const Key('client_location_permissions_tile'));
+        await tester.scrollUntilVisible(locationTile, 200);
+        await tester.pumpAndSettle();
+
+        expect(locationTile, findsOneWidget);
+        expect(find.text('Location Permissions'), findsOneWidget);
+
+        await tester.tap(locationTile);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(LocationSettingsScreen), findsOneWidget);
+        expect(find.byKey(const Key('location_settings_title')), findsOneWidget);
       },
     );
   });

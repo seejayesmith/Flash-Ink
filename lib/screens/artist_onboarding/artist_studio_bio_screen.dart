@@ -862,38 +862,57 @@ class _ArtistStudioBioScreenState extends State<ArtistStudioBioScreen> {
           ),
           const SizedBox(height: 8),
           Row(
-            children: _studioTypes.map((type) {
-              final isSelected = _selectedStudioType == type;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(
-                  key: Key('studio_type_chip_$type'),
-                  label: Text(type),
-                  selected: isSelected,
-                  onSelected: (selected) {
-                    if (selected) {
-                      setState(() {
-                        _selectedStudioType = type;
-                        if (type == 'Private Studio') {
-                          _isPrivateStudio = true;
-                        }
-                      });
-                    }
-                  },
-                  labelStyle: GoogleFonts.plusJakartaSans(
-                    color: isSelected ? Colors.black : Colors.white,
-                    fontSize: 12,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            children: [
+              for (int i = 0; i < _studioTypes.length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                Expanded(
+                  child: ChoiceChip(
+                    key: Key('studio_type_chip_${_studioTypes[i]}'),
+                    label: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(_studioTypes[i]),
+                      ),
+                    ),
+                    selected: _selectedStudioType == _studioTypes[i],
+                    showCheckmark: false,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                    labelPadding: EdgeInsets.zero,
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    onSelected: (selected) {
+                      if (selected) {
+                        setState(() {
+                          _selectedStudioType = _studioTypes[i];
+                          if (_studioTypes[i] == 'Private Studio') {
+                            _isPrivateStudio = true;
+                          }
+                        });
+                      }
+                    },
+                    labelStyle: GoogleFonts.plusJakartaSans(
+                      color: _selectedStudioType == _studioTypes[i]
+                          ? Colors.black
+                          : Colors.white,
+                      fontSize: 12,
+                      fontWeight: _selectedStudioType == _studioTypes[i]
+                          ? FontWeight.bold
+                          : FontWeight.w500,
+                    ),
+                    selectedColor: AppTheme.gold,
+                    backgroundColor: const Color(0xFF121414),
+                    side: BorderSide(
+                      color: _selectedStudioType == _studioTypes[i]
+                          ? AppTheme.gold
+                          : AppTheme.darkBorder,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.radiusSm),
+                    ),
                   ),
-                  selectedColor: AppTheme.gold,
-                  backgroundColor: const Color(0xFF121414),
-                  side: BorderSide(
-                    color: isSelected ? AppTheme.gold : AppTheme.darkBorder,
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 ),
-              );
-            }).toList(),
+              ],
+            ],
           ),
           const SizedBox(height: 12),
           const Divider(color: AppTheme.darkBorder, height: 1),

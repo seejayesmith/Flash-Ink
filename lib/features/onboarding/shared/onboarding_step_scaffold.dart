@@ -56,6 +56,7 @@ class OnboardingStepScaffold extends StatelessWidget {
   final bool resizeToAvoidBottomInset;
   final Widget? progressIndicator;
   final EdgeInsetsGeometry? contentPadding;
+  final bool showCta;
 
   const OnboardingStepScaffold({
     super.key,
@@ -81,6 +82,7 @@ class OnboardingStepScaffold extends StatelessWidget {
     this.resizeToAvoidBottomInset = false,
     this.progressIndicator,
     this.contentPadding,
+    this.showCta = true,
   });
 
   @override
@@ -232,15 +234,16 @@ class OnboardingStepScaffold extends StatelessWidget {
                       ],
                     ),
                   ),
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Column(
-                      children: [
-                        const Spacer(),
-                        ctaButtonWidget,
-                      ],
+                  if (showCta)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Column(
+                        children: [
+                          const Spacer(),
+                          ctaButtonWidget,
+                        ],
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),

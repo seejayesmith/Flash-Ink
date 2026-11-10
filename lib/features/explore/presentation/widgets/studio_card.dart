@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/flash_image.dart';
-import '../../../../widgets/flash_snack_bar.dart';
 import '../../domain/models/explore_studio.dart';
 
 /// Card component displaying tattoo studio details, resident artists, and style specialties.
@@ -20,14 +19,7 @@ class StudioCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap ??
-          () {
-            FlashSnackBar.showInfo(
-              context,
-              'Selected studio: ${studio.name}',
-              duration: const Duration(seconds: 1),
-            );
-          },
+      onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
         decoration: BoxDecoration(
@@ -99,7 +91,9 @@ class StudioCard extends StatelessWidget {
                           border: Border.all(color: AppTheme.goldBadgeBorder),
                         ),
                         child: Text(
-                          '${studio.residentArtistsCount} ARTISTS',
+                          studio.residentArtistsCount > 0
+                              ? '${studio.residentArtistsCount} ARTISTS'
+                              : 'TATTOO SHOP',
                           style: GoogleFonts.plusJakartaSans(
                             color: AppTheme.gold,
                             fontSize: 10,
@@ -145,11 +139,17 @@ class StudioCard extends StatelessWidget {
                     children: [
                       const Icon(Icons.location_on_outlined, color: AppTheme.navInactive, size: 13),
                       const SizedBox(width: 4),
-                      Text(
-                        '${studio.address}, ${studio.city}',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: AppTheme.navInactive,
-                          fontSize: 12,
+                      Expanded(
+                        child: Text(
+                          studio.distance != null && studio.distance!.isNotEmpty
+                              ? '${studio.address}, ${studio.city} • ${studio.distance}'
+                              : '${studio.address}, ${studio.city}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: AppTheme.navInactive,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ],

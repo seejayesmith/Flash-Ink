@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flash_ink/core/mock/mock_data_config.dart';
 import 'package:flash_ink/features/artist/presentation/widgets/artist_stats_row.dart';
 import 'package:flash_ink/features/artist/presentation/widgets/custom_request_banner.dart';
 import 'package:flash_ink/models/artist.dart';
@@ -14,6 +15,14 @@ import 'package:flash_ink/theme/app_theme.dart';
 import 'package:flash_ink/widgets/artist_card.dart';
 
 void main() {
+  setUp(() {
+    MockDataConfig.debugOverride = true;
+  });
+
+  tearDown(() {
+    MockDataConfig.resetDebugOverride();
+  });
+
   group('FlashArtwork & Artist Model Tests', () {
     test('All mock artists have populated flash artworks and 4 grid images', () {
       expect(Artist.mockArtists.length, 4);

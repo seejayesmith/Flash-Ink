@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 // ignore: depend_on_referenced_packages
 import 'package:firebase_core_platform_interface/test.dart';
 
+import 'package:flash_ink/core/mock/mock_data_config.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_dashboard_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_books_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_calendar_screen.dart';
@@ -37,6 +38,14 @@ void main() {
   });
 
   group('Artist Top Left TattooMachineIcon Size Tests', () {
+    setUp(() {
+      MockDataConfig.debugOverride = true;
+    });
+
+    tearDown(() {
+      MockDataConfig.resetDebugOverride();
+    });
+
     testWidgets('ArtistDashboardScreen tab 0 has TattooMachineIcon with size 43', (tester) async {
       await tester.pumpWidget(
         MaterialApp(

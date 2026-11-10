@@ -112,6 +112,14 @@ void main() {
       expect(style.height, 50 / 32);
     });
 
+    test('tabHeaderTitle matches 30pt Bold with -0.5 letterSpacing', () {
+      final style = AppTypography.tabHeaderTitle;
+      expect(style.fontSize, 30);
+      expect(style.fontWeight, FontWeight.bold);
+      expect(style.letterSpacing, -0.5);
+      expect(style.color, const Color(0xFFF9FAFA));
+    });
+
     test('textTheme produces valid TextTheme with Plus Jakarta Sans', () {
       final theme = AppTypography.textTheme();
       expect(theme.displayLarge?.fontSize, 40);

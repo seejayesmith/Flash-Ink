@@ -29,6 +29,8 @@ class AdaptiveGlassContainer extends StatelessWidget {
   final bool glassEnabled;
   final VoidCallback? onTap;
   final bool isBottomSheet;
+  final bool avoidKeyboard;
+  final double maxScreenHeightFraction;
 
   const AdaptiveGlassContainer({
     super.key,
@@ -53,6 +55,8 @@ class AdaptiveGlassContainer extends StatelessWidget {
     this.glassEnabled = true,
     this.onTap,
     this.isBottomSheet = false,
+    this.avoidKeyboard = true,
+    this.maxScreenHeightFraction = 0.90,
   });
 
   /// Factory constructor configured for modal bottom sheets that sit flush at the
@@ -79,6 +83,8 @@ class AdaptiveGlassContainer extends StatelessWidget {
     bool useGradient = false,
     bool glassEnabled = true,
     VoidCallback? onTap,
+    bool avoidKeyboard = true,
+    double maxScreenHeightFraction = 0.90,
   }) : this(
           key: key,
           child: child,
@@ -102,6 +108,8 @@ class AdaptiveGlassContainer extends StatelessWidget {
           glassEnabled: glassEnabled,
           onTap: onTap,
           isBottomSheet: true,
+          avoidKeyboard: avoidKeyboard,
+          maxScreenHeightFraction: maxScreenHeightFraction,
         );
 
   @override
@@ -145,17 +153,56 @@ class AdaptiveGlassContainer extends StatelessWidget {
       radius = (customBorderRadius as BorderRadius?) ?? BorderRadius.circular(borderRadius);
     }
 
-    Widget content = Container(
+    final hasKeyboard = isBottomSheet && avoidKeyboard && viewInsets.bottom > 0;
+
+    Widget effectiveChild;
+    if (isBottomSheet) {
+      if (hasKeyboard) {
+        effectiveChild = Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Flexible(
+              fit: FlexFit.loose,
+              child: Container(
+                padding: padding,
+                child: child,
+              ),
+            ),
+            // Subtle hairline accent divider visually separating sheet content from keyboard
+            Container(
+              key: const Key('sheet_keyboard_hairline_divider'),
+              height: 1.0,
+              color: const Color(0xFF2E3232),
+            ),
+            // Spacer extending behind the software keyboard, filled with surface background
+            SizedBox(
+              key: const Key('sheet_keyboard_spacer'),
+              height: viewInsets.bottom,
+            ),
+          ],
+        );
+      } else {
+        effectiveChild = Container(
+          padding: padding,
+          child: SafeArea(
+            top: false,
+            bottom: true,
+            child: child,
+          ),
+        );
+      }
+    } else {
+      effectiveChild = Container(
+        padding: padding,
+        child: child,
+      );
+    }
+
+    Widget content = SizedBox(
       width: width,
       height: height,
-      padding: padding,
-      child: isBottomSheet
-          ? SafeArea(
-              top: false,
-              bottom: true,
-              child: child,
-            )
-          : child,
+      child: effectiveChild,
     );
 
     Widget surface;
@@ -281,6 +328,15 @@ class AdaptiveGlassContainer extends StatelessWidget {
           ],
         ),
         child: content,
+      );
+    }
+
+    if (isBottomSheet && hasKeyboard) {
+      final screenHeight = MediaQuery.sizeOf(context).height;
+      final maxHeight = screenHeight * maxScreenHeightFraction;
+      surface = ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: surface,
       );
     }
 

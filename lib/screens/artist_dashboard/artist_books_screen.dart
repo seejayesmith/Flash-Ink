@@ -2,22 +2,26 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/mock/mock_data_config.dart';
 import '../../core/widgets/flash_bottom_nav_bar.dart';
 import '../../models/artist.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../models/waitlist_entry.dart';
 import '../../services/auth_service.dart';
+import '../../services/booking_sync_service.dart';
+import '../../theme/app_buttons.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/flash_switch.dart';
-import '../../widgets/tattoo_machine_icon.dart';
+import '../../widgets/artist_top_bar.dart';
 import 'add_waitlist_entry_sheet.dart';
 import 'artist_account_screen.dart';
 import 'artist_waitlist_screen.dart';
 import 'books_open_options_modal.dart';
 import 'early_access_outreach_sheet.dart';
+import '../../features/messages/presentation/screens/messages_screen.dart';
 
 /// Screen allowing tattoo artists to manage and create their "Books" schedule.
 ///
@@ -63,6 +67,15 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
   @override
   void initState() {
     super.initState();
+    _syncFieldsFromRepository(isInitial: true);
+    ArtistDashboardRepository.pendingRequestsNotifier.addListener(_onRepositoryChanged);
+    final uid = widget.artist?.id ?? _authService.currentUser?.uid;
+    if (uid != null && uid.isNotEmpty) {
+      BookingSyncService.hydrateArtistDataFromCloud(uid);
+    }
+  }
+
+  void _syncFieldsFromRepository({bool isInitial = false}) {
     final schedule = ArtistDashboardRepository.booksSchedule;
     _isBooksOpen = schedule.isBooksOpen;
     _windowStart = schedule.bookingWindowStart;
@@ -76,11 +89,35 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
     _acceptFlash = schedule.acceptFlash;
     _acceptCustom = schedule.acceptCustom;
     _acceptTouchUps = schedule.acceptTouchUps;
-    _locationController = TextEditingController(text: schedule.locationNote);
+    final defaultLoc = schedule.locationNote.isNotEmpty
+        ? schedule.locationNote
+        : (widget.artist != null
+            ? [
+                if (widget.artist!.studioName.isNotEmpty)
+                  widget.artist!.studioName
+                else if (widget.artist!.studioType.isNotEmpty)
+                  widget.artist!.studioType,
+                if (widget.artist!.location.isNotEmpty) widget.artist!.location,
+              ].join(' • ')
+            : '');
+    if (isInitial) {
+      _locationController = TextEditingController(text: defaultLoc);
+    } else if (_locationController.text.isEmpty && defaultLoc.isNotEmpty) {
+      _locationController.text = defaultLoc;
+    }
+  }
+
+  void _onRepositoryChanged() {
+    if (mounted) {
+      setState(() {
+        _isBooksOpen = ArtistDashboardRepository.booksSchedule.isBooksOpen;
+      });
+    }
   }
 
   @override
   void dispose() {
+    ArtistDashboardRepository.pendingRequestsNotifier.removeListener(_onRepositoryChanged);
     _locationController.dispose();
     super.dispose();
   }
@@ -89,18 +126,28 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
     if (widget.artist != null && widget.artist!.name.isNotEmpty) {
       return widget.artist!.name;
     }
-    final user = _authService.currentUser;
-    if (user != null && user.displayName != null && user.displayName!.isNotEmpty) {
-      return user.displayName!;
-    }
-    return 'OddMaree';
+    try {
+      final user = _authService.currentUser;
+      if (user != null && user.displayName != null && user.displayName!.isNotEmpty) {
+        return user.displayName!;
+      }
+    } catch (_) {}
+    return MockDataConfig.isEnabled ? 'OddMaree' : 'Artist';
   }
 
   String get _avatarUrl {
     if (widget.artist != null && widget.artist!.avatarUrl.isNotEmpty) {
       return widget.artist!.avatarUrl;
     }
-    return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
+    try {
+      final user = _authService.currentUser;
+      if (user?.photoURL != null && user!.photoURL!.isNotEmpty) {
+        return user.photoURL!;
+      }
+    } catch (_) {}
+    return MockDataConfig.isEnabled
+        ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'
+        : '';
   }
 
   String _formatDate(DateTime d) {
@@ -305,73 +352,66 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
 
   /// Top action bar with tattoo machine logo on left and avatar on right
   Widget _buildTopActionBar() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        if (!widget.isEmbeddedInTab && Navigator.canPop(context))
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-            onPressed: () {
-              if (widget.onBack != null) {
-                widget.onBack!();
-              } else {
-                Navigator.pop(context);
-              }
-            },
-          )
-        else
-          const TattooMachineIcon(
-            key: Key('tattoo_machine_logo'),
-            size: 43,
-            color: Color(0xFFEEC200),
-          ),
-        GestureDetector(
-          key: const Key('books_artist_avatar_button'),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ArtistAccountScreen(
-                  artist: widget.artist,
-                  authService: widget.authService,
-                ),
-              ),
-            );
-          },
-          child: Container(
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: const Color(0xFFEEC200).withAlpha(120),
-                width: 1.5,
-              ),
-            ),
-            child: CircleAvatar(
-              radius: 18,
-              backgroundColor: const Color(0xFF262929),
-              child: ClipOval(
-                child: FlashImage(
-                  urlOrPath: _avatarUrl,
-                  width: 36,
-                  height: 36,
-                  fit: BoxFit.cover,
-                  errorWidget: Center(
-                    child: Text(
-                      _artistDisplayName.isNotEmpty ? _artistDisplayName[0] : 'O',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFFEEC200),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
+    final canGoBack = !widget.isEmbeddedInTab && Navigator.canPop(context);
+
+    final avatarChild = CircleAvatar(
+      radius: 18,
+      backgroundColor: const Color(0xFF262929),
+      child: ClipOval(
+        child: FlashImage(
+          urlOrPath: _avatarUrl,
+          width: 36,
+          height: 36,
+          fit: BoxFit.cover,
+          errorWidget: Center(
+            child: Text(
+              _artistDisplayName.isNotEmpty ? _artistDisplayName[0] : 'O',
+              style: GoogleFonts.plusJakartaSans(
+                color: const Color(0xFFEEC200),
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
               ),
             ),
           ),
         ),
-      ],
+      ),
+    );
+
+    return ArtistTopBar(
+      leadingWidget: canGoBack
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+              onPressed: () {
+                if (widget.onBack != null) {
+                  widget.onBack!();
+                } else {
+                  Navigator.pop(context);
+                }
+              },
+            )
+          : null,
+      logoKey: const Key('tattoo_machine_logo'),
+      messagesKey: const Key('books_messages_button'),
+      avatarKey: const Key('books_artist_avatar_button'),
+      onMessagesTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MessagesScreen()),
+        );
+      },
+      onAvatarTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ArtistAccountScreen(
+              artist: widget.artist,
+              authService: widget.authService,
+            ),
+          ),
+        );
+      },
+      avatarChild: avatarChild,
+      artistId: widget.artist?.id ?? widget.authService?.currentUser?.uid,
     );
   }
 
@@ -1345,38 +1385,13 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
 
   /// Prominent save CTA button
   Widget _buildSaveButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 52,
-      child: ElevatedButton(
-        key: const Key('save_books_schedule_button'),
-        onPressed: _isSaving ? null : _handleSave,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFEEC200),
-          foregroundColor: const Color(0xFF121414),
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-        child: _isSaving
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF121414)),
-                ),
-              )
-            : Text(
-                'Save Books Schedule',
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
-                  letterSpacing: 0.2,
-                ),
-              ),
-      ),
+    return AppButtons.primaryCTA(
+      key: const Key('save_books_schedule_button'),
+      onPressed: _isSaving ? null : _handleSave,
+      text: 'Save Books Schedule',
+      isLoading: _isSaving,
+      backgroundColor: const Color(0xFFEEC200),
+      foregroundColor: const Color(0xFF121414),
     );
   }
 }

@@ -152,6 +152,55 @@ void main() {
         find.byWidgetPredicate((w) => w is Padding && w.padding == const EdgeInsets.fromLTRB(1.0, 0, 1.0, 0.0)),
         findsOneWidget,
       );
+
+      // Verifies subtle hairline accent divider and keyboard spacer backdrop
+      expect(find.byKey(const Key('sheet_keyboard_hairline_divider')), findsOneWidget);
+      expect(find.byKey(const Key('sheet_keyboard_spacer')), findsOneWidget);
+      final spacer = tester.widget<SizedBox>(find.byKey(const Key('sheet_keyboard_spacer')));
+      expect(spacer.height, equals(300.0));
+    });
+
+    testWidgets('Does not render hairline divider or keyboard spacer when viewInsets.bottom == 0', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(
+              size: Size(390, 844),
+              viewPadding: EdgeInsets.only(bottom: 34),
+              viewInsets: EdgeInsets.zero,
+            ),
+            child: AdaptiveGlassContainer.bottomSheet(
+              glassEnabled: false,
+              child: Text('No Keyboard Content'),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byKey(const Key('sheet_keyboard_hairline_divider')), findsNothing);
+      expect(find.byKey(const Key('sheet_keyboard_spacer')), findsNothing);
+    });
+
+    testWidgets('Respects avoidKeyboard: false even when viewInsets.bottom > 0', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(
+              size: Size(390, 844),
+              viewPadding: EdgeInsets.only(bottom: 34),
+              viewInsets: EdgeInsets.only(bottom: 300),
+            ),
+            child: AdaptiveGlassContainer.bottomSheet(
+              glassEnabled: false,
+              avoidKeyboard: false,
+              child: Text('Opt-out Content'),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byKey(const Key('sheet_keyboard_hairline_divider')), findsNothing);
+      expect(find.byKey(const Key('sheet_keyboard_spacer')), findsNothing);
     });
 
     testWidgets('Preserves custom padding on standard AdaptiveGlassContainer', (tester) async {

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/mock/mock_data_config.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../models/waitlist_entry.dart';
+import '../../services/booking_sync_service.dart';
+import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
@@ -59,42 +62,6 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
   String _designType = 'Custom';
   String _availability = 'Flexible';
   String? _referenceImageUrl;
-
-  // Mock Flash users for quick search
-  static const List<Map<String, String>> _mockFlashUsers = [
-    {
-      'id': 'user_chloe_b',
-      'name': 'Chloe Bennett',
-      'handle': '@chloeb_ink',
-      'avatar': 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80',
-      'email': 'chloe.bennett@example.com',
-      'phone': '(503) 555-0192',
-    },
-    {
-      'id': 'user_julian_a',
-      'name': 'Julian Alvarez',
-      'handle': '@julian_arts',
-      'avatar': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
-      'email': 'julian.ink@example.com',
-      'phone': '(503) 555-0841',
-    },
-    {
-      'id': 'user_marcus_c',
-      'name': 'Marcus Cole',
-      'handle': '@marcus_tats',
-      'avatar': 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80',
-      'email': 'marcus.cole@example.com',
-      'phone': '(503) 555-9923',
-    },
-    {
-      'id': 'user_elena_r',
-      'name': 'Elena Rostova',
-      'handle': '@elena_pnw',
-      'avatar': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-      'email': 'elena.rostova@example.com',
-      'phone': '(503) 555-4412',
-    },
-  ];
 
   @override
   void initState() {
@@ -155,10 +122,17 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
 
     final budget = int.tryParse(_budgetController.text.trim());
     final isEditing = widget.initialEntry != null;
+    final resolvedArtistId = widget.initialEntry?.artistId ??
+        BookingSyncService.resolveCurrentUid(
+          MockDataConfig.isEnabled ? 'artist_odd_maree' : 'artist_unknown',
+        );
+    final artistSlug = MockDataConfig.isEnabled
+        ? 'oddmaree'
+        : resolvedArtistId.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
 
     final entry = WaitlistEntry(
       id: widget.initialEntry?.id ?? 'wl_${DateTime.now().millisecondsSinceEpoch}',
-      artistId: 'artist_odd_maree',
+      artistId: resolvedArtistId,
       clientName: name,
       clientEmail: _emailController.text.trim().isEmpty ? null : _emailController.text.trim(),
       clientPhone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
@@ -178,7 +152,7 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
       createdAt: widget.initialEntry?.createdAt ?? DateTime.now(),
       vipAccessCode: widget.initialEntry?.vipAccessCode ?? 'VIP-${name.toUpperCase().replaceAll(' ', '')}-99',
       vipBookingLink: widget.initialEntry?.vipBookingLink ??
-          'https://flashink.app/vip/oddmaree?pass=VIP-${name.toUpperCase().replaceAll(' ', '')}-99',
+          'https://flashink.app/vip/$artistSlug?pass=VIP-${name.toUpperCase().replaceAll(' ', '')}-99',
     );
 
     if (isEditing) {
@@ -416,27 +390,11 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
                 const SizedBox(height: 28),
 
                 // Save Action Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: _handleSubmit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEEC200),
-                      foregroundColor: const Color(0xFF121414),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.radiusLg),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      widget.initialEntry != null ? 'Save Changes' : 'Add to VIP Waitlist',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
+                AppButtons.primaryCTA(
+                  onPressed: _handleSubmit,
+                  text: widget.initialEntry != null ? 'Save Changes' : 'Add to VIP Waitlist',
+                  backgroundColor: const Color(0xFFEEC200),
+                  foregroundColor: const Color(0xFF121414),
                 ),
               ],
             ),
@@ -484,10 +442,11 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
 
   Widget _buildFlashUserSearchSection() {
     final query = _searchController.text.toLowerCase().trim();
-    final filtered = _mockFlashUsers.where((u) {
+    final availableClients = ArtistDashboardRepository.searchableFlashClients;
+    final filtered = availableClients.where((u) {
       if (query.isEmpty) return true;
-      return u['name']!.toLowerCase().contains(query) ||
-          u['handle']!.toLowerCase().contains(query);
+      return (u['name'] ?? '').toLowerCase().contains(query) ||
+          (u['handle'] ?? '').toLowerCase().contains(query);
     }).toList();
 
     return Column(
@@ -517,73 +476,124 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
           ),
         ),
         const SizedBox(height: 10),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 180),
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: filtered.length,
-            itemBuilder: (context, i) {
-              final user = filtered[i];
-              final isSelected = _selectedFlashUserId == user['id'];
-              return InkWell(
-                onTap: () => _selectFlashUser(user),
-                borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 6),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFFEEC200).withAlpha(30) : const Color(0xFF1B1E1E),
-                    borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-                    border: Border.all(
-                      color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF282D2D),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: const Color(0xFF282D2D),
-                        child: ClipOval(
-                          child: FlashImage(
-                            urlOrPath: user['avatar']!,
-                            width: 32,
-                            height: 32,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              user['name']!,
-                              style: GoogleFonts.plusJakartaSans(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Text(
-                              user['handle']!,
-                              style: GoogleFonts.plusJakartaSans(
-                                color: const Color(0xFF8C9191),
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (isSelected)
-                        const Icon(Icons.check_circle_rounded, color: Color(0xFFEEC200), size: 18),
-                    ],
+        if (filtered.isEmpty)
+          Container(
+            key: const Key('empty_flash_profiles_search_state'),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1B1E1E),
+              borderRadius: BorderRadius.circular(AppRadius.radiusMd),
+              border: Border.all(color: const Color(0xFF282D2D)),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  query.isEmpty
+                      ? 'No past or active Flash clients found yet.'
+                      : 'No matching Flash profiles found.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFF919696),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              );
-            },
+                const SizedBox(height: 10),
+                TextButton.icon(
+                  onPressed: () => setState(() => _activeTabIndex = 1),
+                  icon: const Icon(
+                    Icons.person_add_alt_1_rounded,
+                    color: Color(0xFFEEC200),
+                    size: 16,
+                  ),
+                  label: Text(
+                    'Enter Manual Contact Instead',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFEEC200),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 180),
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: filtered.length,
+              itemBuilder: (context, i) {
+                final user = filtered[i];
+                final isSelected = _selectedFlashUserId == user['id'];
+                final avatarUrl = user['avatar'] ?? '';
+                return InkWell(
+                  onTap: () => _selectFlashUser(user),
+                  borderRadius: BorderRadius.circular(AppRadius.radiusMd),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected ? const Color(0xFFEEC200).withAlpha(30) : const Color(0xFF1B1E1E),
+                      borderRadius: BorderRadius.circular(AppRadius.radiusMd),
+                      border: Border.all(
+                        color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF282D2D),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: const Color(0xFF282D2D),
+                          child: avatarUrl.isNotEmpty
+                              ? ClipOval(
+                                  child: FlashImage(
+                                    urlOrPath: avatarUrl,
+                                    width: 32,
+                                    height: 32,
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.person_rounded,
+                                  color: Color(0xFFEEC200),
+                                  size: 18,
+                                ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                user['name'] ?? '',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                user['handle'] ?? '',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: const Color(0xFF8C9191),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (isSelected)
+                          const Icon(Icons.check_circle_rounded, color: Color(0xFFEEC200), size: 18),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
-        ),
       ],
     );
   }

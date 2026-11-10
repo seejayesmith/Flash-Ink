@@ -19,6 +19,9 @@ class ArtistHeaderSection extends StatelessWidget {
   final bool isFavorited;
   final VoidCallback onToggleFavorite;
   final VoidCallback? onBack;
+  final bool isOwner;
+  final bool isUpdatingBanner;
+  final VoidCallback? onEditBanner;
 
   const ArtistHeaderSection({
     super.key,
@@ -26,14 +29,15 @@ class ArtistHeaderSection extends StatelessWidget {
     required this.isFavorited,
     required this.onToggleFavorite,
     this.onBack,
+    this.isOwner = false,
+    this.isUpdatingBanner = false,
+    this.onEditBanner,
   });
 
   @override
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
-    final coverImage = artist.images.isNotEmpty
-        ? artist.images.first
-        : 'assets/images/flash_traditional_dagger.jpg';
+    final coverImage = artist.effectiveBannerUrl;
 
     return Stack(
       clipBehavior: Clip.none,
@@ -65,7 +69,7 @@ class ArtistHeaderSection extends StatelessWidget {
           ),
         ),
 
-        // 2. Floating Top Right Action Buttons (Share & Favorite)
+        // 2. Floating Top Right Action Buttons (Share & Favorite or Edit Banner for owner)
         Positioned(
           top: topPadding + AppSpacing.spaceXs,
           right: AppSpacing.screenGutter,
@@ -73,6 +77,7 @@ class ArtistHeaderSection extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildCircularActionButton(
+                buttonKey: const Key('artist_share_profile_button'),
                 icon: Icons.share_outlined,
                 onTap: () {
                   Clipboard.setData(ClipboardData(
@@ -86,12 +91,23 @@ class ArtistHeaderSection extends StatelessWidget {
                 tooltip: 'Share Profile',
               ),
               const SizedBox(width: AppSpacing.spaceSm),
-              _buildCircularActionButton(
-                icon: isFavorited ? Icons.favorite : Icons.favorite_border,
-                iconColor: isFavorited ? AppTheme.favoriteActive : AppTheme.textPrimary,
-                onTap: onToggleFavorite,
-                tooltip: isFavorited ? 'Unfavorite' : 'Favorite',
-              ),
+              if (isOwner && onEditBanner != null)
+                _buildCircularActionButton(
+                  buttonKey: const Key('artist_edit_banner_button'),
+                  icon: Icons.add_a_photo_outlined,
+                  iconColor: AppTheme.gold,
+                  isLoading: isUpdatingBanner,
+                  onTap: isUpdatingBanner ? () {} : onEditBanner!,
+                  tooltip: 'Edit Header Banner',
+                )
+              else
+                _buildCircularActionButton(
+                  buttonKey: const Key('artist_favorite_profile_button'),
+                  icon: isFavorited ? Icons.favorite : Icons.favorite_border,
+                  iconColor: isFavorited ? AppTheme.favoriteActive : AppTheme.textPrimary,
+                  onTap: onToggleFavorite,
+                  tooltip: isFavorited ? 'Unfavorite' : 'Favorite',
+                ),
             ],
           ),
         ),
@@ -174,12 +190,9 @@ class ArtistHeaderSection extends StatelessWidget {
                             // Name
                             Text(
                               artist.name,
-                              style: AppTypography.h4.copyWith(
-                                color: AppTheme.gold,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: -0.2,
-                                fontSize: 22,
-                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.profileHeaderTitle,
                             ),
                             const SizedBox(height: AppSpacing.spaceXxs + 2),
 
@@ -242,33 +255,85 @@ class ArtistHeaderSection extends StatelessWidget {
   }
 
   Widget _buildCoverImage(String coverImage) {
-    if (coverImage.startsWith('http://') || coverImage.startsWith('https://')) {
+    final trimmed = coverImage.trim();
+    if (trimmed.isEmpty) {
+      return _buildPlaceholderBanner();
+    }
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       return CachedNetworkImage(
-        imageUrl: coverImage,
+        key: ValueKey('artist_banner_image_$trimmed'),
+        imageUrl: trimmed,
         fit: BoxFit.cover,
-        placeholder: (context, url) => Container(color: AppTheme.shimmerBase),
-        errorWidget: (context, url, error) => Container(
-          color: AppTheme.shimmerBase,
-          child: const Icon(Icons.broken_image, color: AppTheme.navInactive),
-        ),
+        placeholder: (context, url) => _buildPlaceholderBanner(),
+        errorWidget: (context, url, error) => _buildPlaceholderBanner(),
       );
     }
     return Image.asset(
-      coverImage,
+      trimmed,
+      key: ValueKey('artist_banner_image_$trimmed'),
       fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) => Container(
-        color: AppTheme.shimmerBase,
+      errorBuilder: (context, error, stackTrace) => _buildPlaceholderBanner(),
+    );
+  }
+
+  Widget _buildPlaceholderBanner() {
+    return Container(
+      key: const Key('artist_banner_placeholder'),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF232018),
+            Color(0xFF171A1A),
+            AppTheme.onyxBackground,
+          ],
+          stops: [0.0, 0.55, 1.0],
+        ),
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+            right: -30,
+            top: -20,
+            child: Container(
+              width: 180,
+              height: 180,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppTheme.gold.withAlpha(28),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildAvatarImage() {
-    if (artist.avatarUrl.startsWith('http://') || artist.avatarUrl.startsWith('https://')) {
+    final trimmedUrl = artist.avatarUrl.trim();
+    if (trimmedUrl.isEmpty) {
+      return Container(
+        color: AppTheme.onyxContainer,
+        child: const Icon(
+          Icons.person,
+          color: AppTheme.gold,
+          size: 42,
+        ),
+      );
+    }
+    if (trimmedUrl.startsWith('http://') || trimmedUrl.startsWith('https://')) {
       return CachedNetworkImage(
-        imageUrl: artist.avatarUrl,
+        imageUrl: trimmedUrl,
         fit: BoxFit.cover,
         placeholder: (context, url) => Container(color: AppTheme.shimmerBase),
-        errorWidget: (context, error, stackTrace) => Container(
+        errorWidget: (context, url, error) => Container(
           color: AppTheme.onyxContainer,
           child: const Icon(
             Icons.person,
@@ -279,7 +344,7 @@ class ArtistHeaderSection extends StatelessWidget {
       );
     }
     return Image.asset(
-      artist.avatarUrl,
+      trimmedUrl,
       fit: BoxFit.cover,
       errorBuilder: (context, error, stackTrace) => Container(
         color: AppTheme.onyxContainer,
@@ -293,14 +358,17 @@ class ArtistHeaderSection extends StatelessWidget {
   }
 
   Widget _buildCircularActionButton({
+    Key? buttonKey,
     required IconData icon,
     Color iconColor = AppTheme.textPrimary,
+    bool isLoading = false,
     required VoidCallback onTap,
     String? tooltip,
   }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        key: buttonKey,
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadius.radiusFull),
         child: Tooltip(
@@ -317,11 +385,20 @@ class ArtistHeaderSection extends StatelessWidget {
               ),
             ),
             child: Center(
-              child: Icon(
-                icon,
-                color: iconColor,
-                size: 20,
-              ),
+              child: isLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(AppTheme.gold),
+                      ),
+                    )
+                  : Icon(
+                      icon,
+                      color: iconColor,
+                      size: 20,
+                    ),
             ),
           ),
         ),
@@ -332,10 +409,19 @@ class ArtistHeaderSection extends StatelessWidget {
   Widget _buildFunFactsRow() {
     final facts = artist.funFacts.isNotEmpty
         ? artist.funFacts
-        : const [
-            ArtistFunFact(label: 'Fun Fact', value: 'XYZ'),
-            ArtistFunFact(label: 'Fun Fact', value: 'XYZ'),
-            ArtistFunFact(label: 'Fun Fact', value: 'XYZ'),
+        : [
+            ArtistFunFact(
+              label: 'Specialty',
+              value: artist.tags.isNotEmpty ? artist.tags.first : 'Flash & Custom',
+            ),
+            ArtistFunFact(
+              label: 'Studio',
+              value: artist.studioType.isNotEmpty ? artist.studioType : 'Independent',
+            ),
+            ArtistFunFact(
+              label: 'Booking',
+              value: artist.isBooksOpen ? 'Books Open' : 'Waitlist',
+            ),
           ];
 
     return Row(

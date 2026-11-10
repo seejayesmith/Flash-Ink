@@ -6,7 +6,7 @@ import 'package:flash_ink/theme/app_theme.dart';
 
 void main() {
   group('FlashBottomNavBar Widget Tests', () {
-    testWidgets('Renders client destinations: Feed, Explore, Appointments, Messages', (tester) async {
+    testWidgets('Renders client destinations: Feed, Explore, Bookings, Messages', (tester) async {
       int activeIndex = 0;
 
       await tester.pumpWidget(
@@ -23,7 +23,7 @@ void main() {
 
       expect(find.text('Feed'), findsOneWidget);
       expect(find.text('Explore'), findsOneWidget);
-      expect(find.text('Appointments'), findsOneWidget);
+      expect(find.text('Bookings'), findsOneWidget);
       expect(find.text('Messages'), findsOneWidget);
 
       expect(find.byKey(const Key('nav_item_0')), findsOneWidget);
@@ -32,7 +32,7 @@ void main() {
       expect(find.byKey(const Key('nav_item_3')), findsOneWidget);
     });
 
-    testWidgets('Renders artist destinations: Home, Calendar, Messages, Books, Earnings with badge', (tester) async {
+    testWidgets('Renders artist destinations: Home, Calendar, Collections, Books, Earnings', (tester) async {
       int activeIndex = 0;
 
       await tester.pumpWidget(
@@ -49,7 +49,7 @@ void main() {
 
       expect(find.text('Home'), findsOneWidget);
       expect(find.text('Calendar'), findsOneWidget);
-      expect(find.text('Messages'), findsOneWidget);
+      expect(find.text('Collections'), findsOneWidget);
       expect(find.text('Books'), findsOneWidget);
       expect(find.text('Earnings'), findsOneWidget);
 

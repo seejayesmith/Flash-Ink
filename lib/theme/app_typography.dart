@@ -24,6 +24,15 @@ class AppTypography {
   // Headings & Titles
   // ---------------------------------------------------------------------------
 
+  /// Profile Header Title · 36/1.15 (w800 / Extra Bold) - standardized for Artist & Studio profile headers
+  static TextStyle get profileHeaderTitle => GoogleFonts.plusJakartaSans(
+        color: Colors.white,
+        fontSize: 36,
+        height: 1.15,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.4,
+      );
+
   /// Hero Title · 34/1.15 (w800 / Extra Bold) - standardized for all onboarding hero headings
   static TextStyle get heroTitle => GoogleFonts.plusJakartaSans(
         fontSize: 34,
@@ -36,6 +45,14 @@ class AppTypography {
         fontSize: 15,
         height: 1.4,
         fontWeight: FontWeight.normal,
+      );
+
+  /// Client Primary Tab Header Title · 30pt (w700 / Bold) - standardized for all primary client tabs
+  static TextStyle get tabHeaderTitle => GoogleFonts.plusJakartaSans(
+        color: const Color(0xFFF9FAFA),
+        fontSize: 30,
+        fontWeight: FontWeight.bold,
+        letterSpacing: -0.5,
       );
 
   /// Title · 40/50 (Bold)

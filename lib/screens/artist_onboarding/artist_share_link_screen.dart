@@ -10,6 +10,7 @@ import '../../models/studio_information.dart';
 import '../../providers/app_providers.dart';
 import '../../repositories/artist_repository.dart';
 import '../../services/auth_service.dart';
+import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/fade_page_route.dart';
@@ -96,9 +97,16 @@ class ArtistShareLinkScreen extends StatelessWidget {
         ? artistName.trim().replaceFirst(RegExp(r'^@'), '')
         : 'Artist';
     final cleanUsername = _displayHandle.replaceFirst(RegExp(r'^@'), '');
+    String? authPhotoUrl;
+    try {
+      authPhotoUrl = user?.photoURL;
+    } catch (_) {}
+    final candidatePhotoUrl = (photoUrl != null && photoUrl!.trim().isNotEmpty)
+        ? photoUrl!.trim()
+        : (authPhotoUrl?.trim() ?? '');
     final safePhotoUrl =
-        (photoUrl != null && !photoUrl!.startsWith('local://'))
-            ? photoUrl!
+        (candidatePhotoUrl.isNotEmpty && !candidatePhotoUrl.startsWith('local://'))
+            ? candidatePhotoUrl
             : '';
     final effectiveLocation =
         studioInformation?.displayLocation.isNotEmpty == true
@@ -164,6 +172,7 @@ class ArtistShareLinkScreen extends StatelessWidget {
           minDeposit: deposit,
           tags: <String>{...styleTags, ...identityTags}.toList(),
           phoneNumber: userPhone,
+          avatarUrl: persistedArtist.avatarUrl,
         );
         try {
           await FirebaseAuth.instance.currentUser?.getIdToken(true);
@@ -305,30 +314,17 @@ class ArtistShareLinkScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(bottomSheetContext);
-                      FlashSnackBar.showSuccess(
-                        context,
-                        'Sticker link copied! Ready to print.',
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEEC200),
-                      foregroundColor: const Color(0xFF121414),
-                      shape: const StadiumBorder(),
-                    ),
-                    child: Text(
-                      'Copy Sticker Pack Link',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
+                AppButtons.primaryCTA(
+                  onPressed: () {
+                    Navigator.pop(bottomSheetContext);
+                    FlashSnackBar.showSuccess(
+                      context,
+                      'Sticker link copied! Ready to print.',
+                    );
+                  },
+                  text: 'Copy Sticker Pack Link',
+                  backgroundColor: const Color(0xFFEEC200),
+                  foregroundColor: const Color(0xFF121414),
                 ),
               ],
             ),
@@ -343,6 +339,7 @@ class ArtistShareLinkScreen extends StatelessWidget {
     return OnboardingStepScaffold(
       currentStep: 9,
       totalSteps: 9,
+      scrollable: false,
       onBack: Navigator.canPop(context)
           ? () {
               FocusManager.instance.primaryFocus?.unfocus();
@@ -370,7 +367,7 @@ class ArtistShareLinkScreen extends StatelessWidget {
               children: [
                 // Top half: Stylized QR code
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 24),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                   child: Center(
                     child: _buildStylizedQrCode(),
                   ),
@@ -379,7 +376,7 @@ class ArtistShareLinkScreen extends StatelessWidget {
                 // Bottom ticket section (light background)
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: const BoxDecoration(
                     color: Color(0xFFECEEEE),
                     borderRadius: BorderRadius.only(
@@ -393,18 +390,20 @@ class ArtistShareLinkScreen extends StatelessWidget {
                       Text(
                         _displayHandle,
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.w800,
                           color: const Color(0xFF121414),
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Text(
                         _artistBio,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.spaceMono(
-                          fontSize: 12,
+                          fontSize: 11.5,
                           color: const Color(0xFF4A4E50),
-                          height: 1.35,
+                          height: 1.3,
                         ),
                       ),
                     ],
@@ -413,7 +412,7 @@ class ArtistShareLinkScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 10),
 
           // "Want to go beyond digital?" text
           Center(
@@ -422,7 +421,7 @@ class ArtistShareLinkScreen extends StatelessWidget {
                 Text(
                   'Want to go beyond digital?',
                   style: GoogleFonts.plusJakartaSans(
-                    fontSize: 14,
+                    fontSize: 13,
                     color: const Color(0xFF8C9191),
                   ),
                 ),
@@ -431,50 +430,26 @@ class ArtistShareLinkScreen extends StatelessWidget {
                   'Follow the link to create custom\nstickers with your name and code!',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.plusJakartaSans(
-                    fontSize: 14,
+                    fontSize: 13,
                     color: const Color(0xFF8C9191),
-                    height: 1.3,
+                    height: 1.25,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 10),
 
           // Outline Button: Create a sticker
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: OutlinedButton(
-              key: const Key('create_sticker_button'),
-              onPressed: () => _showStickerSheet(context),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFF383C3C), width: 1.5),
-                backgroundColor: const Color(0xFF161818),
-                shape: const StadiumBorder(),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.file_upload_outlined,
-                    size: 18,
-                    color: Colors.white,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Create a sticker',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          AppButtons.secondaryCTA(
+            key: const Key('create_sticker_button'),
+            onPressed: () => _showStickerSheet(context),
+            text: 'Create a sticker',
+            icon: Icons.file_upload_outlined,
+            borderColor: const Color(0xFF383C3C),
+            foregroundColor: Colors.white,
+            backgroundColor: const Color(0xFF161818),
           ),
-          const SizedBox(height: 16),
         ],
       ),
     );
@@ -482,9 +457,9 @@ class ArtistShareLinkScreen extends StatelessWidget {
 
   Widget _buildStylizedQrCode() {
     return Container(
-      width: 210,
-      height: 210,
-      padding: const EdgeInsets.all(12),
+      width: 160,
+      height: 160,
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(AppRadius.radiusLg),
@@ -500,18 +475,18 @@ class ArtistShareLinkScreen extends StatelessWidget {
         painter: _StylizedQrPainter(),
         child: Center(
           child: Container(
-            width: 44,
-            height: 44,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: const Color(0xFF121414),
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 3),
+              border: Border.all(color: Colors.white, width: 2),
             ),
             alignment: Alignment.center,
             child: Text(
               'F',
               style: GoogleFonts.caveat(
-                fontSize: 26,
+                fontSize: 20,
                 fontWeight: FontWeight.w900,
                 color: const Color(0xFFEEC200),
                 fontStyle: FontStyle.italic,

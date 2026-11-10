@@ -155,5 +155,145 @@ void main() {
 
       expect(find.byType(ArtistSetPriceScreen), findsOneWidget);
     });
+
+    testWidgets('Deleting a policy from card shows confirmation dialog, can cancel or confirm', (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Deposits & Cancellations'), findsOneWidget);
+      expect(find.byKey(const Key('delete_policy_btn_0')), findsOneWidget);
+
+      // Tap Delete on first policy
+      await tester.tap(find.byKey(const Key('delete_policy_btn_0')));
+      await tester.pumpAndSettle();
+
+      // Verify dialog is shown
+      expect(find.byKey(const Key('delete_policy_dialog')), findsOneWidget);
+      expect(find.byKey(const Key('delete_policy_modal_title')), findsOneWidget);
+      expect(
+        find.text('Are you sure you want to delete "Deposits & Cancellations"? This action cannot be undone.'),
+        findsOneWidget,
+      );
+
+      // Tap Cancel
+      await tester.tap(find.byKey(const Key('delete_policy_cancel_button')));
+      await tester.pumpAndSettle();
+
+      // Dialog is gone, policy is still there
+      expect(find.byKey(const Key('delete_policy_dialog')), findsNothing);
+      expect(find.text('Deposits & Cancellations'), findsOneWidget);
+
+      // Tap Delete again and confirm
+      await tester.tap(find.byKey(const Key('delete_policy_btn_0')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('delete_policy_confirm_button')));
+      await tester.pumpAndSettle();
+
+      // Policy is deleted
+      expect(find.text('Deposits & Cancellations'), findsNothing);
+      expect(find.text('"Deposits & Cancellations" deleted.'), findsOneWidget);
+      // Other policies still exist
+      expect(find.text('Health & Day-of Prep'), findsOneWidget);
+      expect(find.text('Studio Etiquette & Guests'), findsOneWidget);
+      expect(find.text('Touch-ups'), findsOneWidget);
+    });
+
+    testWidgets('Deleting a policy from within the edit modal works', (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      // Tap Edit text on first policy
+      await tester.tap(find.byKey(const Key('edit_policy_btn_0')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit Policy'), findsOneWidget);
+      expect(find.byKey(const Key('modal_delete_policy_button')), findsOneWidget);
+      expect(find.byKey(const Key('modal_header_delete_policy_button')), findsOneWidget);
+
+      // Tap Delete Policy button inside the modal
+      await tester.tap(find.byKey(const Key('modal_delete_policy_button')));
+      await tester.pumpAndSettle();
+
+      // Edit modal should be closed and confirmation dialog should be visible
+      expect(find.text('Edit Policy'), findsNothing);
+      expect(find.byKey(const Key('delete_policy_dialog')), findsOneWidget);
+
+      // Confirm deletion
+      await tester.tap(find.byKey(const Key('delete_policy_confirm_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Deposits & Cancellations'), findsNothing);
+    });
+
+    testWidgets('Deleting all policies shows empty state banner and disables CTA until custom policy added', (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      // Delete all 4 policies
+      for (int i = 0; i < 4; i++) {
+        await tester.tap(find.byKey(const Key('delete_policy_btn_0')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('delete_policy_confirm_button')));
+        await tester.pumpAndSettle();
+      }
+
+      // Empty state should be visible
+      expect(find.text('No policies added yet'), findsOneWidget);
+      expect(find.text('Add a custom policy below to protect your workflow.'), findsOneWidget);
+      expect(
+        find.text('Enable at least one studio policy to protect both you and your clients.'),
+        findsOneWidget,
+      );
+
+      // CTA should be disabled
+      final continueButton = tester.widget<ElevatedButton>(find.byType(ElevatedButton));
+      expect(continueButton.onPressed, isNull);
+
+      // Add a custom policy
+      await tester.tap(find.byKey(const Key('add_custom_policy_button')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('custom_policy_title_field')),
+        'Late Arrival Notice',
+      );
+      await tester.enterText(
+        find.byKey(const Key('custom_policy_desc_field')),
+        'Clients more than 20 minutes late may need to reschedule.',
+      );
+      await tester.tap(find.byKey(const Key('add_custom_policy_submit_button')));
+      await tester.pumpAndSettle();
+
+      // Empty state should be gone, new policy is visible
+      expect(find.text('No policies added yet'), findsNothing);
+      expect(find.text('Late Arrival Notice'), findsOneWidget);
+
+      // CTA is now enabled
+      final updatedButton = tester.widget<ElevatedButton>(find.byType(ElevatedButton));
+      expect(updatedButton.onPressed, isNotNull);
+    });
+
+    testWidgets('Can delete a disabled policy section', (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      // Disable first policy
+      await tester.tap(find.byKey(const Key('policy_switch_0')));
+      await tester.pumpAndSettle();
+
+      // Edit button should be hidden for disabled policy, but Delete button is still available
+      expect(find.byKey(const Key('edit_policy_btn_0')), findsNothing);
+      expect(find.byKey(const Key('delete_policy_btn_0')), findsOneWidget);
+
+      // Delete the disabled policy
+      await tester.tap(find.byKey(const Key('delete_policy_btn_0')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('delete_policy_confirm_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Deposits & Cancellations'), findsNothing);
+    });
   });
 }

@@ -45,11 +45,7 @@ class _AccountRecoveryHubScreenState
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (bottomSheetContext) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(bottomSheetContext).viewInsets.bottom,
-        ),
-        child: Consumer(
+      builder: (bottomSheetContext) => Consumer(
           builder: (context, ref, _) {
             final state = ref.watch(authTroubleshootingControllerProvider);
             final status = state.value?.status ?? AuthTroubleshootingStatus.idle;
@@ -76,6 +72,7 @@ class _AccountRecoveryHubScreenState
                   ),
                   child: SingleChildScrollView(
                     physics: const ClampingScrollPhysics(),
+                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -319,7 +316,6 @@ class _AccountRecoveryHubScreenState
             );
           },
         ),
-      ),
     );
   }
 
@@ -328,27 +324,24 @@ class _AccountRecoveryHubScreenState
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
-        ),
-        child: AdaptiveGlassContainer.bottomSheet(
-          key: const Key('recovery_forgot_method_sheet'),
-          glassEnabled: false,
-          androidSurfaceColor: AppTheme.onyxSurface,
-          topRadius: AppRadius.radiusSheet,
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.screenMargin,
-                AppSpacing.spaceSm,
-                AppSpacing.screenMargin,
-                AppSpacing.ctaBottomPadding,
-              ),
-              child: SingleChildScrollView(
-                physics: const ClampingScrollPhysics(),
-                child: Column(
+      builder: (sheetContext) => AdaptiveGlassContainer.bottomSheet(
+        key: const Key('recovery_forgot_method_sheet'),
+        glassEnabled: false,
+        androidSurfaceColor: AppTheme.onyxSurface,
+        topRadius: AppRadius.radiusSheet,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.screenMargin,
+              AppSpacing.spaceSm,
+              AppSpacing.screenMargin,
+              AppSpacing.ctaBottomPadding,
+            ),
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -435,8 +428,7 @@ class _AccountRecoveryHubScreenState
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
   void _showShortCodeDiagnosticModal() {

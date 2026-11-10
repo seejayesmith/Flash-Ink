@@ -1,7 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/artist.dart';
+import '../services/auth_service.dart';
+import '../theme/app_buttons.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/flash_image.dart';
 import '../widgets/flash_snack_bar.dart';
@@ -320,36 +323,35 @@ class _FlashDetailsScreenState extends State<FlashDetailsScreen> {
           );
         }
 
+  bool _isOwnFlashListing(FlashArtwork flash) {
+    String? currentUid = AuthService.devMockUser?.uid;
+    if (currentUid == null || currentUid.isEmpty) {
+      try {
+        currentUid = FirebaseAuth.instance.currentUser?.uid;
+      } catch (_) {}
+    }
+    if (currentUid == null || currentUid.isEmpty) return false;
+    final artistId = widget.artist?.id ?? flash.artistId;
+    return artistId.isNotEmpty && artistId == currentUid;
+  }
+
   Widget _buildInlineCTA(FlashArtwork flash) {
+    final bool isOwnListing = _isOwnFlashListing(flash);
+    final bool isDisabled = _isClaimed || isOwnListing;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton(
-            onPressed: _isClaimed ? null : _claimFlash,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEEC200),
-              foregroundColor: const Color(0xFF121414),
-              disabledBackgroundColor: const Color(0xFF2E3333),
-              disabledForegroundColor: const Color(0xFF6B7272),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 0,
-            ),
-            child: Text(
-              _isClaimed ? 'PIECE ALREADY CLAIMED' : 'CLAIM & BOOK FLASH',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8,
-              ),
-            ),
-          ),
+        AppButtons.primaryCTA(
+          onPressed: isDisabled ? null : _claimFlash,
+          text: isOwnListing
+              ? 'YOUR FLASH LISTING'
+              : (_isClaimed ? 'PIECE ALREADY CLAIMED' : 'CLAIM & BOOK FLASH'),
+          backgroundColor: const Color(0xFFEEC200),
+          foregroundColor: const Color(0xFF121414),
+          disabledBackgroundColor: const Color(0xFF2E3333),
+          disabledForegroundColor: const Color(0xFF6B7272),
         ),
-        if (!_isClaimed) ...[
+        if (!isDisabled) ...[
           Padding(
             padding: const EdgeInsets.only(top: 10),
             child: Row(

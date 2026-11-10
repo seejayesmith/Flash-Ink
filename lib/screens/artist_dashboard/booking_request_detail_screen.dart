@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../models/booking.dart';
+import '../../theme/app_buttons.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/pinned_bottom_action_scaffold.dart';
@@ -210,36 +211,21 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                     }).toList(),
                   ),
                   const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      key: const Key('confirm_proposal_button'),
-                      onPressed: () {
-                        setState(() {
-                          _selectedDate = tempDate;
-                          _selectedTimeSlot = tempSlot;
-                          _estimatedPrice = tempPrice;
-                          _deposit = tempDeposit;
-                        });
-                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                        Navigator.pop(modalContext);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFEEC200),
-                        foregroundColor: const Color(0xFF121414),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                      ),
-                      child: Text(
-                        'Apply Proposed Slot',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
+                  AppButtons.primaryCTA(
+                    key: const Key('confirm_proposal_button'),
+                    onPressed: () {
+                      setState(() {
+                        _selectedDate = tempDate;
+                        _selectedTimeSlot = tempSlot;
+                        _estimatedPrice = tempPrice;
+                        _deposit = tempDeposit;
+                      });
+                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                      Navigator.pop(modalContext);
+                    },
+                    text: 'Apply Proposed Slot',
+                    backgroundColor: const Color(0xFFEEC200),
+                    foregroundColor: const Color(0xFF121414),
                   ),
                 ],
               ),
@@ -519,33 +505,18 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
             const SizedBox(height: 32),
 
             // Secondary Actions
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: OutlinedButton(
-                key: const Key('propose_time_button'),
-                onPressed: () {
-                  FlashSnackBar.showInfo(
-                    context,
-                    'Proposal modal opened.',
-                  );
-                  _openProposeTimeModal();
-                },
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFF383C3C), width: 1.5),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(25),
-                  ),
-                ),
-                child: Text(
-                  'Propose New Time',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
-              ),
+            AppButtons.secondaryCTA(
+              key: const Key('propose_time_button'),
+              onPressed: () {
+                FlashSnackBar.showInfo(
+                  context,
+                  'Proposal modal opened.',
+                );
+                _openProposeTimeModal();
+              },
+              text: 'Propose New Time',
+              borderColor: const Color(0xFF383C3C),
+              foregroundColor: Colors.white,
             ),
             const SizedBox(height: 12),
             Center(
