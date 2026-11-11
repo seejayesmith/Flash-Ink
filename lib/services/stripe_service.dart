@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
@@ -96,6 +97,34 @@ class StripeService {
     // 1. If client secret is not provided, attempt to create a PaymentIntent
     String? effectiveClientSecret = clientSecret;
     String? intentId;
+    final payload = {
+      'amount': (amountInDollars * 100).round(),
+      'currency': 'usd',
+      if (artistStripeAccountId != null && artistStripeAccountId.startsWith('acct_'))
+        'accountId': artistStripeAccountId,
+      if (artistStripeAccountId != null && !artistStripeAccountId.startsWith('acct_'))
+        'artistId': artistStripeAccountId,
+      'flashTitle': flashTitle,
+      'customerEmail': customerEmail,
+      'customerName': customerName,
+      'bookingId': bookingId,
+      'selectedDate': selectedDate,
+      'selectedTimeSlot': selectedTimeSlot,
+      'placement': placement,
+    };
+
+    if (effectiveClientSecret == null && isStripeConfigured) {
+      try {
+        final callable = FirebaseFunctions.instance.httpsCallable('createPaymentIntent');
+        final result = await callable.call<Map<dynamic, dynamic>>(payload);
+        final data = result.data;
+        effectiveClientSecret = data['clientSecret']?.toString();
+        intentId = data['id']?.toString();
+      } catch (_) {
+        // Cloud Function call unavailable or not yet deployed; try optional local backend URL
+      }
+    }
+
     if (effectiveClientSecret == null && dotenv.isInitialized) {
       final backendUrl = dotenv.env['STRIPE_BACKEND_URL'];
       if (backendUrl != null && backendUrl.isNotEmpty) {
@@ -103,19 +132,7 @@ class StripeService {
           final res = await http.post(
             Uri.parse('$backendUrl/api/create-payment-intent'),
             headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'amount': (amountInDollars * 100).round(),
-              'currency': 'usd',
-              if (artistStripeAccountId != null && artistStripeAccountId.startsWith('acct_'))
-                'accountId': artistStripeAccountId,
-              'flashTitle': flashTitle,
-              'customerEmail': customerEmail,
-              'customerName': customerName,
-              'bookingId': bookingId,
-              'selectedDate': selectedDate,
-              'selectedTimeSlot': selectedTimeSlot,
-              'placement': placement,
-            }),
+            body: jsonEncode(payload),
           );
           if (res.statusCode == 200) {
             final data = jsonDecode(res.body) as Map<String, dynamic>;

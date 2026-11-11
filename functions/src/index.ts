@@ -1,13 +1,16 @@
 import * as crypto from 'crypto';
 import * as admin from 'firebase-admin';
+import { defineSecret } from 'firebase-functions/params';
 import { onCall, HttpsError, onRequest } from 'firebase-functions/v2/https';
 import Stripe from 'stripe';
 
 admin.initializeApp();
 const db = admin.firestore();
 
+const stripeSecretKey = defineSecret('STRIPE_SECRET_KEY');
+
 const getStripeClient = (): Stripe => {
-  const secretKey = process.env.STRIPE_SECRET_KEY || '';
+  const secretKey = stripeSecretKey.value() || process.env.STRIPE_SECRET_KEY || '';
   return new Stripe(secretKey, {
     apiVersion: '2025-02-24.acacia',
   });
@@ -141,7 +144,85 @@ export const completeArtistOnboarding = onCall(async (request) => {
 });
 
 /**
- * 2. Stripe Connect Webhook: Verify Artist Payout Account & Lock Deposit Escrow
+ * 2. Callable Cloud Function: Create Stripe PaymentIntent for Flash Deposit
+ *
+ * Unlocks `STRIPE_SECRET_KEY` from Firebase Secret Manager, creates a PaymentIntent
+ * in Stripe, and returns the one-time `clientSecret` to the Flutter app so it can
+ * present the native Stripe PaymentSheet.
+ */
+export const createPaymentIntent = onCall(
+  { secrets: [stripeSecretKey] },
+  async (request) => {
+    const data = (request.data || {}) as {
+      amount?: number;
+      currency?: string;
+      flashTitle?: string;
+      customerEmail?: string;
+      customerName?: string;
+      accountId?: string;
+      artistId?: string;
+      bookingId?: string;
+      selectedDate?: string;
+      selectedTimeSlot?: string;
+      placement?: string;
+    };
+
+    const rawAmount = typeof data.amount === 'number' ? Math.round(data.amount) : 5000;
+    if (rawAmount < 50 || rawAmount > 1000000) {
+      throw new HttpsError(
+        'invalid-argument',
+        'Deposit amount must be between $0.50 and $10,000.00.'
+      );
+    }
+
+    const currency = (data.currency || 'usd').toLowerCase();
+    const clientUid = request.auth?.uid || 'guest_client';
+
+    try {
+      const stripe = getStripeClient();
+
+      const params: Stripe.PaymentIntentCreateParams = {
+        amount: rawAmount,
+        currency,
+        automatic_payment_methods: { enabled: true },
+        description: data.flashTitle
+          ? `Flash.Ink Deposit: ${data.flashTitle}`
+          : 'Flash.Ink Tattoo Deposit',
+        ...(data.customerEmail ? { receipt_email: data.customerEmail } : {}),
+        metadata: {
+          booking_id: data.bookingId || '',
+          client_id: clientUid,
+          artist_id: data.artistId || data.accountId || '',
+          flash_title: data.flashTitle || '',
+          customer_name: data.customerName || '',
+          selected_date: data.selectedDate || '',
+          selected_time_slot: data.selectedTimeSlot || '',
+          placement: data.placement || '',
+        },
+      };
+
+      if (data.accountId && data.accountId.startsWith('acct_')) {
+        params.transfer_data = {
+          destination: data.accountId,
+        };
+      }
+
+      const paymentIntent = await stripe.paymentIntents.create(params);
+
+      return {
+        clientSecret: paymentIntent.client_secret,
+        id: paymentIntent.id,
+      };
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Unable to create Stripe PaymentIntent.';
+      throw new HttpsError('internal', message);
+    }
+  }
+);
+
+/**
+ * 3. Stripe Connect Webhook: Verify Artist Payout Account & Lock Deposit Escrow
  *
  * Handles:
  * - `account.updated`: Confirms Stripe Connect onboarding and records `stripeAccountId`
@@ -149,7 +230,9 @@ export const completeArtistOnboarding = onCall(async (request) => {
  * - `payment_intent.succeeded`: Transitions booking status to `deposit_confirmed`
  *   and provisions the deposit-gated direct message thread (`chats/{threadId}`).
  */
-export const stripeConnectWebhook = onRequest(async (req, res) => {
+export const stripeConnectWebhook = onRequest(
+  { secrets: [stripeSecretKey] },
+  async (req, res) => {
   const sig = req.headers['stripe-signature'];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
