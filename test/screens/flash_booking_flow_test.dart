@@ -10,6 +10,7 @@ import 'package:flash_ink/screens/artist_dashboard/booking_request_detail_screen
 import 'package:flash_ink/screens/booking/flash_booking_screen.dart';
 import 'package:flash_ink/screens/flash_details_screen.dart';
 import 'package:flash_ink/services/booking_sync_service.dart';
+import 'package:flash_ink/theme/app_theme.dart';
 import 'package:flash_ink/widgets/flash_switch.dart';
 
 void main() {
@@ -72,6 +73,15 @@ void main() {
       expect(find.text('Details'), findsOneWidget);
       expect(find.text('Payment'), findsOneWidget);
       expect(find.text('Confirmed'), findsOneWidget);
+
+      // Verify header and stepper share the exact same background color
+      final appBar = tester.widget<AppBar>(find.byType(AppBar));
+      final stepperContainer = tester.widget<Container>(find.byKey(const Key('booking_progress_stepper')));
+      final stepperDecoration = stepperContainer.decoration as BoxDecoration;
+      expect(appBar.backgroundColor, AppTheme.onyxBackground);
+      expect(stepperDecoration.color, AppTheme.onyxBackground);
+      expect(stepperDecoration.color, appBar.backgroundColor);
+      expect(stepperDecoration.border?.bottom.color, const Color(0xFF262929));
 
       // Artwork recap
       expect(find.text('Obsidian Serpent & Peony'), findsOneWidget);

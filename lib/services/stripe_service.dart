@@ -162,13 +162,16 @@ class StripeService {
           paymentIntentClientSecret: effectiveClientSecret,
           merchantDisplayName: 'Flash.Ink',
           style: ThemeMode.dark,
+          applePay: const PaymentSheetApplePay(
+            merchantCountryCode: 'US',
+          ),
           appearance: const PaymentSheetAppearance(
             colors: PaymentSheetAppearanceColors(
               primary: Color(0xFFEEC200),
               background: Color(0xFF171A1A),
               componentBackground: Color(0xFF1E2020),
               componentText: Color(0xFFF9FAFA),
-              primaryText: Color(0xFF121414),
+              primaryText: Color(0xFFF9FAFA),
               secondaryText: Color(0xFF919696),
             ),
           ),

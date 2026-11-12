@@ -57,6 +57,12 @@ post_install do |installer|
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
+      # Xcode's Module Verifier (recommended setting) builds each pod's headers
+      # in isolation via a synthetic "Test" framework. CocoaPods-only plugins
+      # like google_maps_flutter_ios / Google-Maps-iOS-Utils fail it because the
+      # GoogleMaps binary xcframework isn't visible to the verifier
+      # ("module 'GoogleMaps' not found", "could not build module 'Test'").
+      config.build_settings['ENABLE_MODULE_VERIFIER'] = 'NO'
     end
   end
   installer.pods_project.save

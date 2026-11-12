@@ -62,12 +62,8 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
   bool _agreedToPolicies = true;
 
   // Step 3 State: Payment
-  String _selectedPaymentMethod = 'Apple Pay';
+  final String _selectedPaymentMethod = 'Stripe';
   bool _isProcessingPayment = false;
-  late final TextEditingController _cardNumberController;
-  late final TextEditingController _cardExpiryController;
-  late final TextEditingController _cardCvcController;
-  late final TextEditingController _cardZipController;
 
   // Step 4 State: Confirmation
   late final String _confirmationCode;
@@ -154,31 +150,8 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     final codeNum = (10000 + (_selectedDate.millisecondsSinceEpoch % 89999)).toString();
     _confirmationCode = 'INK-$codeNum';
 
-    _cardNumberController = TextEditingController(text: '4242 4242 4242 4242');
-    _cardExpiryController = TextEditingController(text: '12/28');
-    _cardCvcController = TextEditingController(text: '123');
-    _cardZipController = TextEditingController(text: '90210');
-    _cardNumberController.addListener(_onCardFieldChanged);
-    _cardExpiryController.addListener(_onCardFieldChanged);
-    _cardCvcController.addListener(_onCardFieldChanged);
-    _cardZipController.addListener(_onCardFieldChanged);
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ScaffoldMessenger.maybeOf(context)?.clearSnackBars();
-    });
-  }
-
-  void _onCardFieldChanged() {
-    setState(() {});
-  }
-
-  void _autoFillTestCard() {
-    setState(() {
-      _selectedPaymentMethod = 'Credit Card (•••• 4242)';
-      _cardNumberController.text = '4242 4242 4242 4242';
-      _cardExpiryController.text = '12/28';
-      _cardCvcController.text = '123';
-      _cardZipController.text = '90210';
     });
   }
 
@@ -188,14 +161,6 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     _phoneController.dispose();
     _emailController.dispose();
     _notesController.dispose();
-    _cardNumberController.removeListener(_onCardFieldChanged);
-    _cardExpiryController.removeListener(_onCardFieldChanged);
-    _cardCvcController.removeListener(_onCardFieldChanged);
-    _cardZipController.removeListener(_onCardFieldChanged);
-    _cardNumberController.dispose();
-    _cardExpiryController.dispose();
-    _cardCvcController.dispose();
-    _cardZipController.dispose();
     super.dispose();
   }
 
@@ -539,7 +504,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF121414),
+        backgroundColor: AppTheme.onyxBackground,
         appBar: _buildAppBar(),
         body: SafeArea(
           bottom: false,
@@ -577,7 +542,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: const Color(0xFF121414),
+      backgroundColor: AppTheme.onyxBackground,
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: true,
@@ -613,9 +578,10 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     final steps = ['Date & Time', 'Details', 'Payment', 'Confirmed'];
 
     return Container(
+      key: const Key('booking_progress_stepper'),
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter, vertical: 12),
       decoration: const BoxDecoration(
-        color: Color(0xFF171A1A),
+        color: AppTheme.onyxBackground,
         border: Border(
           bottom: BorderSide(color: Color(0xFF262929), width: 1),
         ),
@@ -1447,57 +1413,94 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         ),
         const SizedBox(height: 24),
 
-        // Payment Method Selector
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'SELECT PAYMENT METHOD',
-              style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFF919696),
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8,
+        // Secure Checkout Information Card
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF171A1A),
+            borderRadius: BorderRadius.circular(AppRadius.radiusMd),
+            border: Border.all(color: const Color(0xFF38352A), width: 1.2),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEC200).withAlpha(30),
+                      borderRadius: BorderRadius.circular(AppRadius.radiusSm),
+                    ),
+                    child: const Icon(Icons.shield_outlined, color: Color(0xFFEEC200), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'SECURE CHECKOUT VIA STRIPE',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFFF9FAFA),
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Supports Apple Pay, Cards & Link',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF919696),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.lock_outline, color: Color(0xFF22C55E), size: 18),
+                ],
               ),
-            ),
-            GestureDetector(
-              onTap: _autoFillTestCard,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEEC200).withAlpha(30),
-                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-                  border: Border.all(color: const Color(0xFFEEC200), width: 1),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.flash_on, color: Color(0xFFEEC200), size: 12),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Auto-fill Test Card',
+              const Divider(color: Color(0xFF262929), height: 24),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.check_circle_outline, color: Color(0xFFEEC200), size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Your \$$deposit deposit locks this appointment exclusively for you. 100% applies directly to your tattoo total.',
                       style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFFEEC200),
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFFC0C5C5),
+                        fontSize: 12,
+                        height: 1.4,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.info_outline, color: Color(0xFF919696), size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Remaining balance of \$$balance will be paid directly to $_artistName on your appointment date.',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF919696),
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 10),
-        _buildPaymentMethodTile('Apple Pay', Icons.phone_iphone),
-        const SizedBox(height: 8),
-        _buildPaymentMethodTile('Credit Card (•••• 4242)', Icons.credit_card),
-        if (_selectedPaymentMethod == 'Credit Card (•••• 4242)') ...[
-          const SizedBox(height: 8),
-          _buildCreditCardForm(),
-        ],
-        const SizedBox(height: 8),
-        _buildPaymentMethodTile('Cash App Pay', Icons.attach_money),
       ],
     );
   }
@@ -1543,236 +1546,6 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
             color: color ?? const Color(0xFFF9FAFA),
             fontSize: isBold ? 16 : 14,
             fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPaymentMethodTile(String method, IconData icon) {
-    final isSelected = _selectedPaymentMethod == method;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedPaymentMethod = method;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF171A1A),
-          borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-          border: Border.all(
-            color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF262929),
-            width: isSelected ? 1.5 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF919696),
-              size: 20,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                method,
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFF9FAFA),
-                  fontSize: 14,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                ),
-              ),
-            ),
-            if (isSelected)
-              const Icon(Icons.check_circle, color: Color(0xFFEEC200), size: 18),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCreditCardForm() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF191C1C),
-        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-        border: Border.all(color: const Color(0xFF38352A), width: 1.2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.credit_card, color: Color(0xFFEEC200), size: 16),
-                  const SizedBox(width: 6),
-                  Text(
-                    'CARD DETAILS',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFF9FAFA),
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF22C55E).withAlpha(35),
-                  borderRadius: BorderRadius.circular(AppRadius.radiusXs),
-                  border: Border.all(color: const Color(0xFF22C55E), width: 0.8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.check, color: Color(0xFF22C55E), size: 10),
-                    const SizedBox(width: 3),
-                    Text(
-                      'Test Card Ready',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFF22C55E),
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Card Number Field
-          _buildCardField(
-            label: 'CARD NUMBER',
-            controller: _cardNumberController,
-            hintText: 'Card number (16 digits)',
-            icon: Icons.lock_outline,
-            keyboardType: TextInputType.number,
-          ),
-          const SizedBox(height: 12),
-
-          // Expiry, CVC, Zip Row
-          Row(
-            children: [
-              Expanded(
-                flex: 3,
-                child: _buildCardField(
-                  label: 'EXPIRES',
-                  controller: _cardExpiryController,
-                  hintText: 'MM/YY',
-                  keyboardType: TextInputType.datetime,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: _buildCardField(
-                  label: 'CVC',
-                  controller: _cardCvcController,
-                  hintText: 'CVC',
-                  keyboardType: TextInputType.number,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 3,
-                child: _buildCardField(
-                  label: 'ZIP',
-                  controller: _cardZipController,
-                  hintText: 'ZIP Code',
-                  keyboardType: TextInputType.number,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Notice badge
-          Row(
-            children: [
-              const Icon(Icons.info_outline, color: Color(0xFF919696), size: 14),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Stripe mock test card auto-filled. You can proceed without actual charges.',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFF919696),
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCardField({
-    required String label,
-    required TextEditingController controller,
-    required String hintText,
-    IconData? icon,
-    TextInputType? keyboardType,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFF919696),
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.5,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Container(
-          height: 44,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            color: const Color(0xFF141616),
-            borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-            border: Border.all(color: const Color(0xFF2E3333)),
-          ),
-          child: Row(
-            children: [
-              if (icon != null) ...[
-                Icon(icon, color: const Color(0xFF919696), size: 16),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  keyboardType: keyboardType,
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFFF9FAFA),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  decoration: InputDecoration(
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                    hintText: hintText,
-                    hintStyle: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFF6B7272),
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ),
         ),
       ],
@@ -2034,14 +1807,8 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
             }
           : null;
     } else {
-      final isCardMethod = _selectedPaymentMethod == 'Credit Card (•••• 4242)';
-      final isCardValid = !isCardMethod ||
-          (_cardNumberController.text.trim().isNotEmpty &&
-              _cardExpiryController.text.trim().isNotEmpty &&
-              _cardCvcController.text.trim().isNotEmpty);
-
       buttonText = 'PAY \$${widget.flash.deposit} DEPOSIT & CONFIRM';
-      onPressed = (_isProcessingPayment || !isCardValid)
+      onPressed = _isProcessingPayment
           ? null
           : _processPaymentAndConfirm;
     }
