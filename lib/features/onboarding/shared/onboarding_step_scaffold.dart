@@ -70,7 +70,7 @@ class OnboardingStepScaffold extends StatelessWidget {
     required this.title,
     this.subtitle,
     required this.child,
-    this.ctaText = 'CONTINUE',
+    this.ctaText = 'Continue',
     this.onCtaPressed,
     this.isCtaLoading = false,
     this.isCtaEnabled = true,

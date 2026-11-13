@@ -40,7 +40,7 @@ void main() {
 
       final clientCardTop = tester.getTopLeft(clientCardFinder).dy;
       final artistCardBottom = tester.getBottomLeft(artistCardFinder).dy;
-      final ctaTop = tester.getTopLeft(find.text('CONTINUE')).dy;
+      final ctaTop = tester.getTopLeft(find.text('Continue')).dy;
       final subtitleBottom = tester.getBottomLeft(subtitleFinder).dy;
 
       // Space above the cards container (between subtitle and client card)
@@ -64,7 +64,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Initially CONTINUE is disabled (tapping it does not throw or proceed)
-      await tester.tap(find.text('CONTINUE'));
+      await tester.tap(find.text('Continue'));
       await tester.pump();
 
       // Tap 'I get tattoos'

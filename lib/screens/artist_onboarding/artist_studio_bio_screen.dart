@@ -306,7 +306,7 @@ class _ArtistStudioBioScreenState extends State<ArtistStudioBioScreen> {
       totalSteps: 9,
       title: 'Where do you tattoo?',
       subtitle: 'Search for your home shop or studio, and add a quick bio for clients.',
-      ctaText: 'CONTINUE',
+      ctaText: 'Continue',
       isCtaEnabled: _isContinueEnabled,
       onCtaPressed: _handleContinue,
       onBack: () {

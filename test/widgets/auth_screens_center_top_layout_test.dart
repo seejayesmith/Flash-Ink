@@ -84,7 +84,7 @@ void main() {
       expect(cardRect.right, equals(400.0 - AppSpacing.screenMargin));
 
       // Verify CTA button is at the bottom
-      final ctaFinder = find.text('SEND VERIFICATION CODE');
+      final ctaFinder = find.text('Send Verification Code');
       expect(ctaFinder, findsOneWidget);
       final ctaTop = tester.getTopLeft(ctaFinder).dy;
 
@@ -128,7 +128,7 @@ void main() {
       expect(cardRect.left, equals(AppSpacing.screenMargin));
       expect(cardRect.right, equals(400.0 - AppSpacing.screenMargin));
 
-      final ctaFinder = find.text('VERIFY');
+      final ctaFinder = find.text('Verify');
       expect(ctaFinder, findsOneWidget);
       final ctaTop = tester.getTopLeft(ctaFinder).dy;
       expect(ctaTop - cardRect.bottom, greaterThan(80.0));
@@ -165,7 +165,7 @@ void main() {
       expect(cardRect.left, equals(AppSpacing.screenMargin));
       expect(cardRect.right, equals(400.0 - AppSpacing.screenMargin));
 
-      final ctaFinder = find.text('CREATE ACCOUNT');
+      final ctaFinder = find.text('Create Account');
       expect(ctaFinder, findsOneWidget);
     });
 

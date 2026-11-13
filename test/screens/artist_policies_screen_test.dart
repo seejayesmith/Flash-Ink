@@ -120,7 +120,7 @@ void main() {
       await tester.tap(find.byKey(const Key('add_custom_policy_button')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Add Custom Policy'), findsOneWidget);
+      expect(find.text('Add Custom Policy'), findsWidgets);
       expect(find.byKey(const Key('custom_policy_title_field')), findsOneWidget);
       expect(find.byKey(const Key('custom_policy_desc_field')), findsOneWidget);
 

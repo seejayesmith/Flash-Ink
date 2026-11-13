@@ -157,10 +157,44 @@ void main() {
 
       expect(find.byType(FlashTabHeader), findsOneWidget);
       expect(find.text('Messages'), findsOneWidget);
+      expect(find.byKey(const Key('messages_back_button')), findsNothing);
 
       final textWidget = tester.widget<Text>(find.text('Messages'));
       expect(textWidget.style?.fontSize, 30);
       expect(textWidget.style?.fontWeight, FontWeight.bold);
+    });
+
+    testWidgets('MessagesScreen shows back button when pushed and pops on tap', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const MessagesScreen()),
+                  );
+                },
+                child: const Text('Open Messages'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Messages'));
+      await tester.pumpAndSettle();
+
+      final backButton = find.byKey(const Key('messages_back_button'));
+      expect(backButton, findsOneWidget);
+      expect(find.byIcon(Icons.arrow_back_ios_new), findsOneWidget);
+
+      await tester.tap(backButton);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Open Messages'), findsOneWidget);
+      expect(find.byType(MessagesScreen), findsNothing);
     });
   });
 }

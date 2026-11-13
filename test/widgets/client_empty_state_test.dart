@@ -121,7 +121,7 @@ void main() {
 
       // Starts on Upcoming empty state
       expect(find.text('No Upcoming Appointments'), findsOneWidget);
-      expect(find.text('BROWSE FLASH DESIGNS'), findsOneWidget);
+      expect(find.text('Browse Flash Designs'), findsOneWidget);
 
       final upcomingIconCenter =
           tester.getCenter(find.byIcon(Icons.calendar_today_outlined));
@@ -129,7 +129,7 @@ void main() {
           tester.getTopLeft(find.text('No Upcoming Appointments')).dy;
 
       // Tap CTA button
-      await tester.tap(find.text('BROWSE FLASH DESIGNS'));
+      await tester.tap(find.text('Browse Flash Designs'));
       await tester.pumpAndSettle();
       expect(exploreTapped, isTrue);
 
@@ -138,7 +138,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('No Past Sessions'), findsOneWidget);
-      expect(find.text('BROWSE FLASH DESIGNS'), findsNothing);
+      expect(find.text('Browse Flash Designs'), findsNothing);
 
       final pastIconCenter =
           tester.getCenter(find.byIcon(Icons.calendar_today_outlined));

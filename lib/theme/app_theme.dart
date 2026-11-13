@@ -118,13 +118,13 @@ class AppTheme {
 
   /// Padding around each individual destination item.
   static const EdgeInsets navItemPadding = EdgeInsets.symmetric(
-    horizontal: 10.0,
+    horizontal: 4.0,
     vertical: 4.0,
   );
 
   /// Corner radius for active destination indicator pill.
-  /// Concentric math: navBarBorderRadius (36.0) - navBarPadding / vertical margin (4.0) = 32.0.
-  static const double navItemBorderRadius = 32.0;
+  /// Softened from a full stadium (32.0) to 24.0 so bottom corners do not pinch longer labels.
+  static const double navItemBorderRadius = 24.0;
 
   /// Icon size for navigation destinations.
   static const double navIconSize = 22.0;
@@ -147,7 +147,7 @@ class AppTheme {
         fontSize: 10.0,
         height: 1.1,
         fontWeight: FontWeight.bold,
-        letterSpacing: 0.6,
+        letterSpacing: 0.2,
         color: gold,
       );
 
@@ -156,7 +156,7 @@ class AppTheme {
         fontSize: 10.0,
         height: 1.1,
         fontWeight: FontWeight.bold,
-        letterSpacing: 0.6,
+        letterSpacing: 0.2,
         color: navInactive,
       );
 
@@ -199,16 +199,15 @@ class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
+        elevation: 0,
+        backgroundColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12.0),
+          borderRadius: BorderRadius.circular(16.0),
         ),
-        showCloseIcon: true,
-        closeIconColor: Colors.white,
-        backgroundColor: onyxContainer,
         contentTextStyle: GoogleFonts.plusJakartaSans(
-          color: Colors.white,
+          color: textPrimary,
           fontWeight: FontWeight.w600,
-          fontSize: 14.0,
+          fontSize: 13.5,
         ),
       ),
       chipTheme: const ChipThemeData(

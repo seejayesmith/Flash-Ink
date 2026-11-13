@@ -166,7 +166,7 @@ void main() {
         expect(find.text('Add a username'), findsOneWidget);
         await tester.enterText(find.byType(TextField), '@OfflineTester');
         await tester.pump();
-        await tester.tap(find.text('CONTINUE'));
+        await tester.tap(find.text('Continue'));
         await tester.pumpAndSettle();
 
         // 2. Reach photo step with no photo selected

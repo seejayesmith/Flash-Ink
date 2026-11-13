@@ -16,10 +16,12 @@ import '../widgets/vip_waitlist_invitation_card.dart';
 /// Main inbox view displaying direct message threads with tattoo artists.
 class MessagesScreen extends StatefulWidget {
   final List<MessageThread>? mockThreads;
+  final bool? showBackButton;
 
   const MessagesScreen({
     super.key,
     this.mockThreads,
+    this.showBackButton,
   });
 
   @override
@@ -74,6 +76,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final filtered = _filteredThreads;
+    final shouldShowBackButton =
+        widget.showBackButton ?? Navigator.canPop(context);
 
     return Scaffold(
       backgroundColor: AppTheme.onyxBackground,
@@ -82,6 +86,24 @@ class _MessagesScreenState extends State<MessagesScreen> {
         child: Column(
           children: [
             FlashTabHeader(
+              leading: shouldShowBackButton
+                  ? IconButton(
+                      key: const Key('messages_back_button'),
+                      onPressed: () => Navigator.maybePop(context),
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new,
+                        color: AppTheme.textPrimary,
+                        size: 20,
+                      ),
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(
+                        minWidth: 40,
+                        minHeight: 40,
+                      ),
+                      tooltip: 'Back',
+                    )
+                  : null,
               title: 'Messages',
               titleAccessory: _totalUnreadCount > 0
                   ? Container(

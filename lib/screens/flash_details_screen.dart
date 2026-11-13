@@ -344,8 +344,8 @@ class _FlashDetailsScreenState extends State<FlashDetailsScreen> {
         AppButtons.primaryCTA(
           onPressed: isDisabled ? null : _claimFlash,
           text: isOwnListing
-              ? 'YOUR FLASH LISTING'
-              : (_isClaimed ? 'PIECE ALREADY CLAIMED' : 'CLAIM & BOOK FLASH'),
+              ? 'Your Flash Listing'
+              : (_isClaimed ? 'Piece Already Claimed' : 'Claim & Book Flash'),
           backgroundColor: const Color(0xFFEEC200),
           foregroundColor: const Color(0xFF121414),
           disabledBackgroundColor: const Color(0xFF2E3333),

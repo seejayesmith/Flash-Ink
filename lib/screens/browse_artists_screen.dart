@@ -339,8 +339,10 @@ class _BrowseArtistsContentState extends ConsumerState<_BrowseArtistsContent> {
     final mediaQuery = MediaQuery.of(context);
     return Scaffold(
       backgroundColor: const Color(0xFF121414),
-      body: Stack(
-        children: [
+      body: FlashNavBarScope(
+        hasFloatingNavBar: widget.showBottomNav,
+        child: Stack(
+          children: [
           // 1. Edge-to-Edge Feed with Header and Snapping List
           SafeArea(
             bottom: false,
@@ -452,7 +454,8 @@ class _BrowseArtistsContentState extends ConsumerState<_BrowseArtistsContent> {
                 role: 'legacy_client',
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }

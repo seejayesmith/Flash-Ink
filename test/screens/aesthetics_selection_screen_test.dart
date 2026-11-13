@@ -63,7 +63,7 @@ void main() {
 
         // 4. Verify CTA button is disabled initially
         final finishElevatedButton = tester.widget<ElevatedButton>(
-          find.widgetWithText(ElevatedButton, 'FINISH'),
+          find.widgetWithText(ElevatedButton, 'Finish'),
         );
         expect(finishElevatedButton.onPressed, isNull);
       },
@@ -81,7 +81,7 @@ void main() {
 
         // Initially disabled
         var finishButton = tester.widget<ElevatedButton>(
-          find.widgetWithText(ElevatedButton, 'FINISH'),
+          find.widgetWithText(ElevatedButton, 'Finish'),
         );
         expect(finishButton.onPressed, isNull);
 
@@ -94,7 +94,7 @@ void main() {
 
         // CTA button is now enabled
         finishButton = tester.widget<ElevatedButton>(
-          find.widgetWithText(ElevatedButton, 'FINISH'),
+          find.widgetWithText(ElevatedButton, 'Finish'),
         );
         expect(finishButton.onPressed, isNotNull);
 
@@ -105,7 +105,7 @@ void main() {
         // No checkmarks and CTA is disabled again
         expect(find.byIcon(Icons.check_circle), findsNothing);
         finishButton = tester.widget<ElevatedButton>(
-          find.widgetWithText(ElevatedButton, 'FINISH'),
+          find.widgetWithText(ElevatedButton, 'Finish'),
         );
         expect(finishButton.onPressed, isNull);
 
@@ -117,7 +117,7 @@ void main() {
 
         expect(find.byIcon(Icons.check_circle), findsNWidgets(2));
         finishButton = tester.widget<ElevatedButton>(
-          find.widgetWithText(ElevatedButton, 'FINISH'),
+          find.widgetWithText(ElevatedButton, 'Finish'),
         );
         expect(finishButton.onPressed, isNotNull);
       },
@@ -199,7 +199,7 @@ void main() {
 
         // Verify CTA button text is DONE in guest mode
         var doneButton = tester.widget<ElevatedButton>(
-          find.widgetWithText(ElevatedButton, 'DONE'),
+          find.widgetWithText(ElevatedButton, 'Done'),
         );
         expect(doneButton.onPressed, isNull);
 
@@ -208,7 +208,7 @@ void main() {
         await tester.pumpAndSettle();
 
         doneButton = tester.widget<ElevatedButton>(
-          find.widgetWithText(ElevatedButton, 'DONE'),
+          find.widgetWithText(ElevatedButton, 'Done'),
         );
         expect(doneButton.onPressed, isNotNull);
 
@@ -237,7 +237,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Tap FINISH
-        await tester.tap(find.text('FINISH'));
+        await tester.tap(find.text('Finish'));
         await tester.pumpAndSettle();
 
         // Verifies navigation to MainFeedScreen

@@ -219,7 +219,7 @@ class _EmailAuthScreenState extends State<EmailAuthScreen> {
         ],
       ),
       centerContent: false,
-      ctaText: _isSignUp ? 'CREATE ACCOUNT' : 'SIGN IN',
+      ctaText: _isSignUp ? 'Create Account' : 'Sign In',
       onCtaPressed: _submit,
       isCtaLoading: _isLoading,
       secondaryAction: Column(

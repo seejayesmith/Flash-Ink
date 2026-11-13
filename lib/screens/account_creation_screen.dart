@@ -546,7 +546,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
                         AppGaps.gapMd,
                         AppButtons.primaryCTA(
                           key: const Key('unified_auth_continue_button'),
-                          text: 'CONTINUE',
+                          text: 'Continue',
                           icon: Icons.arrow_forward,
                           isLoading: _isLoading,
                           onPressed: _isLoading ? null : _handleUnifiedContinue,

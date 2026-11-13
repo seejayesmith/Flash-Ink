@@ -469,7 +469,7 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
         subtitle: _isGoogleUser
             ? 'Enter your artist name to get set up.'
             : 'Enter your artist name and contact number to get set up.',
-        ctaText: 'CONTINUE',
+        ctaText: 'Continue',
         ctaIcon: Icons.arrow_forward,
         ctaKey: const Key('continue_artist_info_button'),
         isCtaLoading: _isLoading,
@@ -480,7 +480,7 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
           subtitle: _isGoogleUser
               ? 'Enter your artist name to get set up.'
               : 'Enter your artist name and contact number to get set up.',
-          ctaText: 'CONTINUE',
+          ctaText: 'Continue',
           ctaKey: const Key('continue_artist_info_button'),
           onCtaPressed: _isLoading ? null : _handleContinue,
           renderInternalHeaderAndCTA: false,

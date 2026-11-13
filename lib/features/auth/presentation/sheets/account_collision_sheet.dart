@@ -290,7 +290,7 @@ class AccountCollisionSheet extends ConsumerWidget {
                 // Primary CTA: Sign in with [Provider] and link
                 AppButtons.primaryCTA(
                   key: const Key('account_collision_primary_cta'),
-                  text: 'Sign in with $formattedExisting to Link',
+                  text: 'Sign In with $formattedExisting to Link',
                   icon: _providerIcon(existingProvider),
                   isLoading: isBusy,
                   onPressed: isBusy
@@ -331,7 +331,7 @@ class AccountCollisionSheet extends ConsumerWidget {
                         ? null
                         : () => Navigator.of(context).pop(false),
                     child: Text(
-                      'Use a different account',
+                      'Use a Different Account',
                       style: GoogleFonts.plusJakartaSans(
                         color: AppTheme.navInactive,
                         fontSize: 13,

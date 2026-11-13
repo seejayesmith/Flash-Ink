@@ -328,7 +328,7 @@ class _ArtistProfilePhotoScreenState extends State<ArtistProfilePhotoScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                 ),
                 child: Text(
-                  'Skip for now',
+                  'Skip for Now',
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,

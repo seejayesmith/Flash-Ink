@@ -657,7 +657,7 @@ class _ArtistCollectionsScreenState extends State<ArtistCollectionsScreen> {
             key: const Key('empty_state_upload_flash_button'),
             onPressed: () => _openUploadScreen(),
             icon: const Icon(Icons.add, size: 18),
-            label: const Text('UPLOAD FLASH WORK'),
+            label: const Text('Upload Flash Work'),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFEEC200),
               foregroundColor: const Color(0xFF121414),
@@ -725,7 +725,7 @@ class _ArtistCollectionsScreenState extends State<ArtistCollectionsScreen> {
                   key: const Key('add_new_flash_button'),
                   onPressed: () => _openUploadScreen(),
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('NEW FLASH'),
+                  label: const Text('New Flash'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFEEC200),
                     foregroundColor: const Color(0xFF121414),

@@ -162,7 +162,7 @@ class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
       totalSteps: 3,
       title: 'Never miss a drop',
       subtitle: 'Be the first to claim 1-of-1 flash designs and snag slots when artists open their books.',
-      ctaText: 'DONE',
+      ctaText: 'Done',
       ctaKey: const Key('client_notifications_done_button'),
       isCtaLoading: _isLoading,
       isCtaEnabled: true,

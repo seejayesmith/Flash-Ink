@@ -119,7 +119,7 @@ class _ClientStyleDiscoveryScreenState extends State<ClientStyleDiscoveryScreen>
       totalSteps: 3,
       title: 'Discover your style',
       subtitle: 'Pick the styles you love. We\'ll tailor your feed and artist recommendations.',
-      ctaText: 'CONTINUE',
+      ctaText: 'Continue',
       ctaKey: const Key('client_styles_continue_button'),
       isCtaLoading: _isLoading,
       isCtaEnabled: _selectedStyles.isNotEmpty,

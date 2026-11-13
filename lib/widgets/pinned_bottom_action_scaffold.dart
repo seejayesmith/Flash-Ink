@@ -312,7 +312,7 @@ class PinnedBottomActionScaffold extends StatelessWidget {
       primaryWidget = AppButtons.primaryCTA(
         key: ctaKey,
         onPressed: enabled ? onCtaPressed : null,
-        text: ctaText ?? 'CONTINUE',
+        text: ctaText ?? 'Continue',
         icon: ctaIcon,
         isLoading: isCtaLoading,
         backgroundColor: ctaBackgroundColor ??
@@ -353,7 +353,7 @@ class PinnedBottomActionScaffold extends StatelessWidget {
       primaryWidget = AppButtons.primaryCTA(
         key: ctaKey,
         onPressed: enabled ? onCtaPressed : null,
-        text: ctaText ?? 'CONTINUE',
+        text: ctaText ?? 'Continue',
         icon: ctaIcon,
         isLoading: isCtaLoading,
         backgroundColor: ctaBackgroundColor ??

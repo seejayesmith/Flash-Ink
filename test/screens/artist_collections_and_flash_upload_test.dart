@@ -296,7 +296,7 @@ void main() {
       expect(find.byKey(const Key('flash_dimensions_input')), findsOneWidget);
       expect(find.byKey(const Key('flash_repeatable_switch')), findsOneWidget);
       expect(find.byKey(const Key('publish_flash_button')), findsOneWidget);
-      expect(find.text('PUBLISH FLASH'), findsOneWidget);
+      expect(find.text('Publish Flash'), findsOneWidget);
     });
 
     testWidgets('Validation blocks submission when required title is empty', (tester) async {
@@ -392,7 +392,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Edit Flash Piece'), findsOneWidget);
-      expect(find.text('SAVE CHANGES'), findsOneWidget);
+      expect(find.text('Save Changes'), findsOneWidget);
       expect(find.text('Original Panther'), findsOneWidget);
       expect(find.text('160'), findsOneWidget);
       expect(find.text('60'), findsOneWidget);

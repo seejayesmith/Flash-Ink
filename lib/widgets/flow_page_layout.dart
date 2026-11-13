@@ -122,7 +122,7 @@ class FlowPageLayout extends StatelessWidget {
                 AppButtons.primaryCTA(
                   key: ctaKey,
                   onPressed: onCtaPressed,
-                  text: ctaText ?? 'CONTINUE',
+                  text: ctaText ?? 'Continue',
                   icon: ctaIcon,
                   isLoading: isCtaLoading,
                 ),

@@ -248,7 +248,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
               const SizedBox(height: 24),
               AppButtons.primaryCTA(
                 key: const Key('go_to_account_settings_button'),
-                text: 'ADD PHONE IN SETTINGS',
+                text: 'Add Phone in Settings',
                 onPressed: () {
                   Navigator.pop(sheetContext);
                   Navigator.push(
@@ -1691,7 +1691,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           },
           icon: const Icon(Icons.calendar_month, color: Color(0xFFEEC200), size: 18),
           label: Text(
-            'ADD TO CALENDAR',
+            'Add to Calendar',
             style: GoogleFonts.plusJakartaSans(
               color: const Color(0xFFEEC200),
               fontSize: 13,
@@ -1742,7 +1742,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           onPressed: () {
             Navigator.of(context).pop(true);
           },
-          text: 'DONE',
+          text: 'Done',
           backgroundColor: const Color(0xFFEEC200),
           foregroundColor: const Color(0xFF121414),
         ),
@@ -1782,14 +1782,14 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     VoidCallback? onPressed;
 
     if (_currentStep == 0) {
-      buttonText = 'CONTINUE TO DETAILS';
+      buttonText = 'Continue to Details';
       onPressed = () {
         setState(() {
           _currentStep = 1;
         });
       };
     } else if (_currentStep == 1) {
-      buttonText = 'CONTINUE TO PAYMENT';
+      buttonText = 'Continue to Payment';
       final isFormValid = _nameController.text.trim().isNotEmpty &&
           _emailController.text.trim().isNotEmpty &&
           _agreedToPolicies;
@@ -1807,7 +1807,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
             }
           : null;
     } else {
-      buttonText = 'PAY \$${widget.flash.deposit} DEPOSIT & CONFIRM';
+      buttonText = 'Pay \$${widget.flash.deposit} Deposit & Confirm';
       onPressed = _isProcessingPayment
           ? null
           : _processPaymentAndConfirm;

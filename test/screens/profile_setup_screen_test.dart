@@ -131,7 +131,7 @@ void main() {
       await tester.tap(find.byType(TextField));
       await tester.pump();
 
-      await tester.tap(find.text('CONTINUE'));
+      await tester.tap(find.text('Continue'));
       await tester.pump();
 
       expect(find.text('Please enter a username'), findsOneWidget);
@@ -149,7 +149,7 @@ void main() {
       await tester.pump();
       expect(find.text('@OddMaree'), findsWidgets);
 
-      await tester.tap(find.text('CONTINUE'));
+      await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
 
       expect(find.text('Add a profile photo'), findsOneWidget);
@@ -176,7 +176,7 @@ void main() {
       await tester.pump();
 
       // Tap CONTINUE to advance to photo step
-      await tester.tap(find.text('CONTINUE'));
+      await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
 
       // Verify on photo step
@@ -201,7 +201,7 @@ void main() {
       expect(find.text('Upload a Photo'), findsNothing);
       expect(find.text('Take a Picture'), findsNothing);
       expect(find.text('Continue'), findsOneWidget);
-      expect(find.text('Skip for now'), findsOneWidget);
+      expect(find.text('Skip for Now'), findsOneWidget);
 
       // Verify camera icon and '+' badge are present
       expect(find.byIcon(Icons.camera_alt_outlined), findsOneWidget);

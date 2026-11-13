@@ -77,7 +77,7 @@ void main() {
       expect(find.byKey(const Key('photo_crop_reset_button')), findsNothing);
       expect(find.byKey(const Key('photo_crop_rotate_button')), findsNothing);
       expect(find.byKey(const Key('confirm_crop_button')), findsOneWidget);
-      expect(find.text('APPLY & USE PHOTO'), findsOneWidget);
+      expect(find.text('Apply & Use Photo'), findsOneWidget);
       expect(find.byType(InteractiveViewer), findsOneWidget);
     });
 
@@ -361,7 +361,7 @@ void main() {
             title: 'CROP & RESIZE FLASH',
             cropShape: CropShape.rectangle,
             subtitle: 'Pinch to zoom • Drag to frame your flash artwork',
-            ctaText: 'APPLY & USE FLASH',
+            ctaText: 'Apply & Use Flash',
           ),
         ),
       );
@@ -369,7 +369,7 @@ void main() {
 
       expect(find.text('CROP & RESIZE FLASH'), findsOneWidget);
       expect(find.text('Pinch to zoom • Drag to frame your flash artwork'), findsOneWidget);
-      expect(find.text('APPLY & USE FLASH'), findsOneWidget);
+      expect(find.text('Apply & Use Flash'), findsOneWidget);
 
       // Check aspect ratio selector chips
       expect(find.byKey(const Key('aspect_ratio_4_3')), findsOneWidget);
@@ -437,7 +437,7 @@ void main() {
                       imageBytes: samplePngBytes,
                       cropShape: CropShape.rectangle,
                       title: 'CROP & RESIZE FLASH',
-                      ctaText: 'APPLY & USE FLASH',
+                      ctaText: 'Apply & Use Flash',
                     ),
                   ),
                 );
@@ -517,7 +517,7 @@ void main() {
 
       // Verifies PhotoCropScreen opened with rectangular controls
       expect(find.text('CROP & RESIZE FLASH'), findsOneWidget);
-      expect(find.text('APPLY & USE FLASH'), findsOneWidget);
+      expect(find.text('Apply & Use Flash'), findsOneWidget);
       expect(find.byKey(const Key('aspect_ratio_4_3')), findsOneWidget);
       expect(find.byKey(const Key('aspect_ratio_1_1')), findsOneWidget);
 

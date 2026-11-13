@@ -178,7 +178,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('VIEW PROFILE'));
+      await tester.tap(find.text('View Profile'));
       await tester.pump();
       expect(profileTapped, isTrue);
 

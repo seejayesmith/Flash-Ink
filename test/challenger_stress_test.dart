@@ -297,7 +297,7 @@ void main() {
       await tester.enterText(find.byType(TextField), '123');
       await tester.pump();
 
-      await tester.tap(find.text('VERIFY'));
+      await tester.tap(find.text('Verify'));
       await tester.pump();
 
       expect(find.text('Please enter a valid 6-digit verification code'), findsOneWidget);

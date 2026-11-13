@@ -57,7 +57,7 @@ void main() {
       expect(find.text('Forearm / Calf'), findsAtLeastNWidgets(1));
 
       // Purchasing CTA
-      expect(find.text('INSTANT CLAIM • \$60 DEP'), findsOneWidget);
+      expect(find.text('Instant Claim • \$60 Dep'), findsOneWidget);
     });
 
     testWidgets('Tapping instant claim calls onClaim callback', (tester) async {
@@ -83,7 +83,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('INSTANT CLAIM • \$60 DEP'));
+      await tester.tap(find.text('Instant Claim • \$60 Dep'));
       await tester.pumpAndSettle();
 
       expect(claimCalled, isTrue);
@@ -107,8 +107,8 @@ void main() {
       );
 
       expect(find.text('CLAIMED (1/1)'), findsOneWidget);
-      expect(find.text('PIECE ALREADY CLAIMED'), findsOneWidget);
-      expect(find.text('INSTANT CLAIM • \$60 DEP'), findsNothing);
+      expect(find.text('Piece Already Claimed'), findsOneWidget);
+      expect(find.text('Instant Claim • \$60 Dep'), findsNothing);
     });
 
     testWidgets('Displays REPEATABLE badge for repeatable flash', (tester) async {

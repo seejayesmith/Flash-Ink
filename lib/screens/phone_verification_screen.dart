@@ -309,7 +309,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
           ],
         ),
         centerContent: false,
-        ctaText: 'VERIFY',
+        ctaText: 'Verify',
         onCtaPressed: _verifyCode,
         isCtaLoading: _isLoading,
         secondaryAction: Column(

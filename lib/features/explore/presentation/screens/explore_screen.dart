@@ -467,7 +467,7 @@ class _ExploreScreenContentState extends ConsumerState<_ExploreScreenContent> {
                   foregroundColor: AppTheme.gold,
                   borderColor: AppTheme.goldBorder,
                   icon: Icons.map_outlined,
-                  text: 'Search shops on Map',
+                  text: 'Search Shops on Map',
                   width: 220,
                   onPressed: () {
                     Navigator.push(

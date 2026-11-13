@@ -60,7 +60,7 @@ void main() {
       final scrollFinder = find.byType(SingleChildScrollView);
       expect(scrollFinder, findsOneWidget);
 
-      final ctaFinder = find.widgetWithText(ElevatedButton, 'SEND VERIFICATION CODE');
+      final ctaFinder = find.widgetWithText(ElevatedButton, 'Send Verification Code');
       expect(ctaFinder, findsOneWidget);
 
       // Verify CTA is NOT inside SingleChildScrollView
@@ -82,7 +82,7 @@ void main() {
       final scrollFinder = find.byType(SingleChildScrollView);
       expect(scrollFinder, findsOneWidget);
 
-      final ctaFinder = find.widgetWithText(ElevatedButton, 'VERIFY');
+      final ctaFinder = find.widgetWithText(ElevatedButton, 'Verify');
       expect(ctaFinder, findsOneWidget);
       expect(find.descendant(of: scrollFinder, matching: ctaFinder), findsNothing);
 
@@ -105,7 +105,7 @@ void main() {
       final scrollFinder = find.byType(SingleChildScrollView);
       expect(scrollFinder, findsOneWidget);
 
-      final ctaFinder = find.widgetWithText(ElevatedButton, 'CREATE ACCOUNT');
+      final ctaFinder = find.widgetWithText(ElevatedButton, 'Create Account');
       expect(ctaFinder, findsOneWidget);
       expect(find.descendant(of: scrollFinder, matching: ctaFinder), findsNothing);
     });

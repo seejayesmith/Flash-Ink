@@ -103,7 +103,7 @@ void main() {
         // 2. Enter valid username and tap CONTINUE
         await tester.enterText(find.byType(TextField), '@FlashClient');
         await tester.pump();
-        await tester.tap(find.text('CONTINUE'));
+        await tester.tap(find.text('Continue'));
         await tester.pumpAndSettle();
 
         // 3. Verify Photo Step is reached and "Skip" button is visible
@@ -126,7 +126,7 @@ void main() {
         await tester.tap(traditionalCardFinder);
         await tester.pumpAndSettle();
 
-        final finishButtonFinder = find.text('FINISH');
+        final finishButtonFinder = find.text('Finish');
         await tester.ensureVisible(finishButtonFinder);
         await tester.tap(finishButtonFinder);
         await tester.pumpAndSettle();

@@ -204,7 +204,7 @@ void main() {
         expect(find.text('AVAIL PIECES'), findsOneWidget);
         expect(find.text('\$50'), findsOneWidget);
         expect(find.text('MIN DEPOSIT'), findsOneWidget);
-        expect(find.text('VIEW PROFILE'), findsOneWidget);
+        expect(find.text('View Profile'), findsOneWidget);
 
         // Hero actions: Directions & Favorite toggle
         await tester.tap(find.byKey(const Key('studio_directions_button')));

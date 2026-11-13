@@ -249,7 +249,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     return FlowPageLayout(
       title: 'Add a username',
       subtitle: 'Build a report. Tell the artists who you are.',
-      ctaText: 'CONTINUE',
+      ctaText: 'Continue',
       ctaIcon: Icons.arrow_forward_rounded,
       onCtaPressed: _nextStep,
       child: AdaptiveGlassContainer(
@@ -348,7 +348,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
               padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
             ),
             child: Text(
-              'Skip for now',
+              'Skip for Now',
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 14,
                 fontWeight: FontWeight.w500,

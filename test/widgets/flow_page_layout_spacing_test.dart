@@ -35,7 +35,7 @@ void main() {
             body: FlowPageLayout(
               title: 'Test Title',
               subtitle: 'Test Subtitle',
-              ctaText: 'CONTINUE',
+              ctaText: 'Continue',
               onCtaPressed: () => ctaPressed = true,
               child: const SizedBox(height: 100, child: Text('Content')),
             ),
@@ -49,15 +49,15 @@ void main() {
       expect(find.text('Content'), findsOneWidget);
 
       // Verify CTA button
-      expect(find.text('CONTINUE'), findsOneWidget);
-      await tester.tap(find.text('CONTINUE'));
+      expect(find.text('Continue'), findsOneWidget);
+      await tester.tap(find.text('Continue'));
       expect(ctaPressed, isTrue);
 
       // Verify that CTA is outside the SingleChildScrollView
       final scrollFinder = find.byType(SingleChildScrollView);
       expect(scrollFinder, findsOneWidget);
 
-      final ctaFinder = find.widgetWithText(ElevatedButton, 'CONTINUE');
+      final ctaFinder = find.widgetWithText(ElevatedButton, 'Continue');
       expect(find.descendant(of: scrollFinder, matching: ctaFinder), findsNothing);
     });
 
@@ -74,7 +74,7 @@ void main() {
 
       final flowLayout = tester.widget<FlowPageLayout>(find.byType(FlowPageLayout));
       expect(flowLayout.title, equals('Artist Profile'));
-      expect(flowLayout.ctaText, equals('CONTINUE'));
+      expect(flowLayout.ctaText, equals('Continue'));
 
       // CTA is anchored outside the scroll view
       final scrollFinder = find.byType(SingleChildScrollView);
@@ -95,7 +95,7 @@ void main() {
 
       final flowLayout = tester.widget<FlowPageLayout>(find.byType(FlowPageLayout));
       expect(flowLayout.title, equals('Set your price'));
-      expect(flowLayout.ctaText, equals('CONTINUE'));
+      expect(flowLayout.ctaText, equals('Continue'));
 
       // CTA is anchored outside the scroll view
       final scrollFinder = find.byType(SingleChildScrollView);

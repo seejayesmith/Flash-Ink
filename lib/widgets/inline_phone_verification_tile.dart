@@ -527,7 +527,7 @@ class _InlinePhoneVerificationTileState
             const SizedBox(height: 14),
             AppButtons.primaryCTA(
               key: const Key('inline_phone_send_code_button'),
-              text: 'SEND VERIFICATION CODE',
+              text: 'Send Verification Code',
               isLoading: _isSendingCode,
               onPressed: _isSendingCode ? null : _sendCode,
             ),
@@ -597,7 +597,7 @@ class _InlinePhoneVerificationTileState
                 Expanded(
                   child: AppButtons.primaryCTA(
                     key: const Key('inline_phone_verify_button'),
-                    text: 'VERIFY & SAVE',
+                    text: 'Verify & Save',
                     isLoading: _isVerifying,
                     onPressed: _isVerifying ? null : _verifyOtp,
                   ),

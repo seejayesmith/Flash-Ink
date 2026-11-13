@@ -100,7 +100,7 @@ void main() {
       // Enter username to advance to photo step
       await tester.enterText(find.byType(TextField), 'OddMaree');
       await tester.pump();
-      await tester.tap(find.text('CONTINUE'));
+      await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
 
       // Verify title is "Add a profile photo"
@@ -183,8 +183,8 @@ void main() {
       );
       await tester.pump();
 
-      // Existing photo hides "Skip for now" and enables "Continue"
-      expect(find.text('Skip for now'), findsNothing);
+      // Existing photo hides "Skip for Now" and enables "Continue"
+      expect(find.text('Skip for Now'), findsNothing);
       expect(find.text('Continue'), findsOneWidget);
 
       await tester.tap(find.text('Continue'));

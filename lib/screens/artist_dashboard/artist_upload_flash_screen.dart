@@ -136,7 +136,7 @@ class _ArtistUploadFlashScreenState extends State<ArtistUploadFlashScreen> {
           title: 'CROP & RESIZE FLASH',
           cropShape: CropShape.rectangle,
           subtitle: 'Pinch to zoom • Drag to frame your flash artwork',
-          ctaText: 'APPLY & USE FLASH',
+          ctaText: 'Apply & Use Flash',
         ),
       ),
     );
@@ -698,8 +698,8 @@ class _ArtistUploadFlashScreenState extends State<ArtistUploadFlashScreen> {
         onBackPressed: () => Navigator.pop(context),
       ),
       ctaText: _isSaving
-          ? 'SAVING...'
-          : (_isEditing ? 'SAVE CHANGES' : 'PUBLISH FLASH'),
+          ? 'Saving...'
+          : (_isEditing ? 'Save Changes' : 'Publish Flash'),
       ctaKey: const Key('publish_flash_button'),
       isCtaEnabled: !_isSaving,
       isCtaLoading: _isSaving,

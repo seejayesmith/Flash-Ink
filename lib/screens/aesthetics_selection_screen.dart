@@ -437,8 +437,8 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
                     isLoading: _isLoading,
                     onPressed: _selectedAesthetics.isEmpty ? null : _saveAesthetics,
                     text: widget.isGuest
-                        ? 'DONE'
-                        : (_shouldRouteToOnboarding ? 'CONTINUE' : 'FINISH'),
+                        ? 'Done'
+                        : (_shouldRouteToOnboarding ? 'Continue' : 'Finish'),
                     backgroundColor: _selectedAesthetics.isEmpty
                         ? const Color(0xFF4D5252)
                         : const Color(0xFFEEC200),

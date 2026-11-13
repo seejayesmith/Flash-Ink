@@ -262,7 +262,7 @@ void main() {
         )));
 
         // Empty code
-        await tester.tap(find.text('VERIFY'));
+        await tester.tap(find.text('Verify'));
         await tester.pump();
 
         expect(find.text('Please enter a valid 6-digit verification code'), findsOneWidget);
@@ -274,7 +274,7 @@ void main() {
         await tester.enterText(find.byType(TextField), '123');
         await tester.pump();
 
-        await tester.tap(find.text('VERIFY'));
+        await tester.tap(find.text('Verify'));
         await tester.pump();
 
         expect(find.text('Please enter a valid 6-digit verification code'), findsOneWidget);
@@ -297,7 +297,7 @@ void main() {
         await tester.pump();
 
         // Tap verify or trigger verification
-        await tester.tap(find.text('VERIFY'));
+        await tester.tap(find.text('Verify'));
         await tester.pumpAndSettle();
 
         // 1. Error must be surfaced
@@ -507,7 +507,7 @@ void main() {
         await tester.enterText(find.byType(TextField), '      ');
         await tester.pump();
 
-        await tester.tap(find.text('VERIFY'));
+        await tester.tap(find.text('Verify'));
         await tester.pump();
 
         expect(find.text('Please enter a valid 6-digit verification code'), findsOneWidget);

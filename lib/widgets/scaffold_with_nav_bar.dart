@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/widgets/flash_bottom_nav_bar.dart';
 import '../models/nav_destination_item.dart';
 import '../theme/app_theme.dart';
+import 'flash_snack_bar.dart';
 
 /// A root shell scaffold widget integrating [FlashBottomNavBar] with [IndexedStack].
 ///
@@ -81,27 +82,29 @@ class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
     return Scaffold(
       backgroundColor: widget.backgroundColor,
       resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
-      body: Stack(
-        children: [
-          // Primary view stack preserving tab scroll position & view state
-          IndexedStack(
-            index: _effectiveIndex,
-            children: widget.pages,
-          ),
-
-          // Floating translucent/glassmorphic bottom navigation bar
-          Positioned(
-            left: widget.horizontalMargin,
-            right: widget.horizontalMargin,
-            bottom: safeBottom + widget.bottomMargin,
-            child: FlashBottomNavBar(
-              currentIndex: _effectiveIndex,
-              onTap: _handleDestinationTap,
-              items: widget.items,
-              role: widget.role,
+      body: FlashNavBarScope(
+        child: Stack(
+          children: [
+            // Primary view stack preserving tab scroll position & view state
+            IndexedStack(
+              index: _effectiveIndex,
+              children: widget.pages,
             ),
-          ),
-        ],
+
+            // Floating translucent/glassmorphic bottom navigation bar
+            Positioned(
+              left: widget.horizontalMargin,
+              right: widget.horizontalMargin,
+              bottom: safeBottom + widget.bottomMargin,
+              child: FlashBottomNavBar(
+                currentIndex: _effectiveIndex,
+                onTap: _handleDestinationTap,
+                items: widget.items,
+                role: widget.role,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

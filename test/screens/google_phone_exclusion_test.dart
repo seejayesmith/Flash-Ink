@@ -185,7 +185,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Advance from Step 0 (Schedule) to Step 1 (Details)
-      await tester.tap(find.text('CONTINUE TO DETAILS'));
+      await tester.tap(find.text('Continue to Details'));
       await tester.pumpAndSettle();
 
       // Enter required fields (Full Legal Name and Email)
@@ -194,7 +194,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap CONTINUE TO PAYMENT
-      await tester.tap(find.text('CONTINUE TO PAYMENT'));
+      await tester.tap(find.text('Continue to Payment'));
       await tester.pumpAndSettle();
 
       // Verified Phone Required modal bottom sheet is shown

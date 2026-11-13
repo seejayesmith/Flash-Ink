@@ -98,7 +98,7 @@ void main() {
       // Placement & Silent appointment toggle
       expect(find.text('BODY PLACEMENT'), findsOneWidget);
       expect(find.text('Silent Appointment'), findsOneWidget);
-      expect(find.text('CONTINUE TO DETAILS'), findsOneWidget);
+      expect(find.text('Continue to Details'), findsOneWidget);
     });
 
     testWidgets('Selecting time slot, toggling silent appointment, and proceeding to Step 2 (Details)',
@@ -126,13 +126,13 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap CONTINUE TO DETAILS
-      await tester.tap(find.text('CONTINUE TO DETAILS'));
+      await tester.tap(find.text('Continue to Details'));
       await tester.pumpAndSettle();
 
       // Verify Step 2 rendered
       expect(find.text('CLIENT INFORMATION'), findsOneWidget);
       expect(find.text('STUDIO POLICIES & TERMS'), findsOneWidget);
-      expect(find.text('CONTINUE TO PAYMENT'), findsOneWidget);
+      expect(find.text('Continue to Payment'), findsOneWidget);
       expect(find.text('Alex Rivers'), findsOneWidget);
     });
 
@@ -153,7 +153,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Go to Step 2
-      await tester.tap(find.text('CONTINUE TO DETAILS'));
+      await tester.tap(find.text('Continue to Details'));
       await tester.pumpAndSettle();
 
       // Uncheck policies
@@ -161,7 +161,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Attempt tapping Continue To Payment when disabled
-      await tester.tap(find.text('CONTINUE TO PAYMENT'));
+      await tester.tap(find.text('Continue to Payment'));
       await tester.pumpAndSettle();
 
       // Still on step 2
@@ -172,7 +172,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap Continue to payment
-      await tester.tap(find.text('CONTINUE TO PAYMENT'));
+      await tester.tap(find.text('Continue to Payment'));
       await tester.pumpAndSettle();
 
       // Verify Step 3 Payment Breakdown
@@ -183,7 +183,7 @@ void main() {
       expect(find.text('\$75'), findsOneWidget);
       expect(find.text('Balance Due at Studio'), findsOneWidget);
       expect(find.text('\$175'), findsOneWidget);
-      expect(find.text('PAY \$75 DEPOSIT & CONFIRM'), findsOneWidget);
+      expect(find.text('Pay \$75 Deposit & Confirm'), findsOneWidget);
     });
 
     testWidgets('Step 3: Processing payment transitions to Step 4 (Confirmation screen)',
@@ -203,19 +203,15 @@ void main() {
       await tester.pumpAndSettle();
 
       // Step 1 -> Step 2
-      await tester.tap(find.text('CONTINUE TO DETAILS'));
+      await tester.tap(find.text('Continue to Details'));
       await tester.pumpAndSettle();
 
       // Step 2 -> Step 3
-      await tester.tap(find.text('CONTINUE TO PAYMENT'));
-      await tester.pumpAndSettle();
-
-      // Select Credit Card
-      await tester.tap(find.text('Credit Card (•••• 4242)'));
+      await tester.tap(find.text('Continue to Payment'));
       await tester.pumpAndSettle();
 
       // Tap PAY DEPOSIT & CONFIRM
-      await tester.tap(find.text('PAY \$75 DEPOSIT & CONFIRM'));
+      await tester.tap(find.text('Pay \$75 Deposit & Confirm'));
       await tester.pump(); // Starts loading
 
       // Wait for simulated payment processing
@@ -225,9 +221,9 @@ void main() {
       // Verify Step 4 Confirmation
       expect(find.text('Flash Claimed & Booked!'), findsOneWidget);
       expect(find.textContaining('Ref: INK-'), findsOneWidget);
-      expect(find.text('ADD TO CALENDAR'), findsOneWidget);
+      expect(find.text('Add to Calendar'), findsOneWidget);
       expect(find.text('SESSION PREPARATION TIPS'), findsOneWidget);
-      expect(find.text('DONE'), findsOneWidget);
+      expect(find.text('Done'), findsOneWidget);
 
       // Verify End-to-End Persistence to Artist Calendar and Client Appointments
       final artistApt = ArtistDashboardRepository.calendarAppointments.firstWhere(
@@ -262,26 +258,26 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify initial state
-      expect(find.text('CLAIM & BOOK FLASH'), findsOneWidget);
+      expect(find.text('Claim & Book Flash'), findsOneWidget);
       expect(find.text('EXCLUSIVE'), findsOneWidget);
 
       // Tap CLAIM & BOOK FLASH to launch flow
-      await tester.tap(find.text('CLAIM & BOOK FLASH'));
+      await tester.tap(find.text('Claim & Book Flash'));
       await tester.pumpAndSettle();
 
       // We are in FlashBookingScreen Step 1
       expect(find.text('SELECT DATE'), findsOneWidget);
 
       // Progress through flow: Step 1 -> Step 2
-      await tester.tap(find.text('CONTINUE TO DETAILS'));
+      await tester.tap(find.text('Continue to Details'));
       await tester.pumpAndSettle();
 
       // Step 2 -> Step 3
-      await tester.tap(find.text('CONTINUE TO PAYMENT'));
+      await tester.tap(find.text('Continue to Payment'));
       await tester.pumpAndSettle();
 
       // Step 3 -> Pay
-      await tester.tap(find.text('PAY \$75 DEPOSIT & CONFIRM'));
+      await tester.tap(find.text('Pay \$75 Deposit & Confirm'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 1000));
       await tester.pumpAndSettle();
@@ -290,12 +286,12 @@ void main() {
       expect(find.text('Flash Claimed & Booked!'), findsOneWidget);
 
       // Tap DONE to return
-      await tester.ensureVisible(find.text('DONE'));
-      await tester.tap(find.text('DONE'));
+      await tester.ensureVisible(find.text('Done'));
+      await tester.tap(find.text('Done'));
       await tester.pumpAndSettle();
 
       // Back on FlashDetailsScreen: verify artwork is now claimed!
-      expect(find.text('PIECE ALREADY CLAIMED'), findsOneWidget);
+      expect(find.text('Piece Already Claimed'), findsOneWidget);
       expect(find.text('CLAIMED'), findsOneWidget);
       expect(find.textContaining('Deposit \$75 confirmed'), findsOneWidget);
     });
@@ -597,7 +593,7 @@ void main() {
       );
     });
 
-    testWidgets('Step 3: Selecting Credit Card displays auto-filled card details and Auto-fill Test Card button',
+    testWidgets('Step 3: Displays secure Stripe checkout card and processes payment',
         (tester) async {
       tester.view.physicalSize = const Size(800, 1400);
       tester.view.devicePixelRatio = 1.0;
@@ -614,33 +610,20 @@ void main() {
       await tester.pumpAndSettle();
 
       // Navigate to Step 2
-      await tester.tap(find.text('CONTINUE TO DETAILS'));
+      await tester.tap(find.text('Continue to Details'));
       await tester.pumpAndSettle();
 
       // Navigate to Step 3
-      await tester.tap(find.text('CONTINUE TO PAYMENT'));
+      await tester.tap(find.text('Continue to Payment'));
       await tester.pumpAndSettle();
 
-      // Tap Auto-fill Test Card button
-      expect(find.text('Auto-fill Test Card'), findsOneWidget);
-      await tester.tap(find.text('Auto-fill Test Card'));
-      await tester.pumpAndSettle();
-
-      // Verify Credit Card is selected and card fields are populated
-      expect(find.text('CARD DETAILS'), findsOneWidget);
-      expect(find.text('Test Card Ready'), findsOneWidget);
-      expect(find.text('4242 4242 4242 4242'), findsOneWidget);
-      expect(find.text('12/28'), findsOneWidget);
-      expect(find.text('123'), findsOneWidget);
-      expect(find.text('90210'), findsOneWidget);
-      expect(
-        find.text('Stripe mock test card auto-filled. You can proceed without actual charges.'),
-        findsOneWidget,
-      );
+      // Verify Stripe checkout card
+      expect(find.text('SECURE CHECKOUT VIA STRIPE'), findsOneWidget);
+      expect(find.text('Supports Apple Pay, Cards & Link'), findsOneWidget);
 
       // Verify payment button is enabled and can process purchase
-      expect(find.text('PAY \$75 DEPOSIT & CONFIRM'), findsOneWidget);
-      await tester.tap(find.text('PAY \$75 DEPOSIT & CONFIRM'));
+      expect(find.text('Pay \$75 Deposit & Confirm'), findsOneWidget);
+      await tester.tap(find.text('Pay \$75 Deposit & Confirm'));
       await tester.pump(const Duration(milliseconds: 1000));
       await tester.pumpAndSettle();
 

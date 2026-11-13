@@ -10,6 +10,7 @@ import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/fade_page_route.dart';
+import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/flash_switch.dart';
 import '../../widgets/tattoo_background_wrapper.dart';
 import 'artist_set_price_screen.dart';
@@ -170,16 +171,7 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
       setState(() {
         _policies.removeAt(index);
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '"${policy.title}" deleted.',
-            style: GoogleFonts.plusJakartaSans(color: Colors.white),
-          ),
-          backgroundColor: const Color(0xFF1E2020),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      FlashSnackBar.showInfo(context, '"${policy.title}" deleted.');
     }
   }
 
@@ -347,7 +339,7 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
                   Navigator.pop(sheetContext);
                 },
                 child: Text(
-                  'SAVE CHANGES',
+                  'Save Changes',
                   style: GoogleFonts.plusJakartaSans(
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.5,
@@ -617,7 +609,7 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
                             }
                           },
                           child: Text(
-                            'ADD POLICY',
+                            'Add Policy',
                             style: GoogleFonts.plusJakartaSans(
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.5,
@@ -667,7 +659,7 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
       totalSteps: 9,
       title: 'Studio Policies & Rules',
       subtitle: 'Review industry-standard client rules or tailor them to match your workflow.',
-      ctaText: 'CONTINUE',
+      ctaText: 'Continue',
       isCtaEnabled: _hasActivePolicy,
       onCtaPressed: _handleContinue,
       onBack: () {
@@ -884,7 +876,7 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
               ),
               icon: const Icon(Icons.add_circle_outline, color: AppTheme.gold, size: 18),
               label: Text(
-                'ADD CUSTOM POLICY',
+                'Add Custom Policy',
                 style: GoogleFonts.plusJakartaSans(
                   color: AppTheme.gold,
                   fontSize: 13,

@@ -474,7 +474,7 @@ class FlashCard extends StatelessWidget {
             const Icon(Icons.lock_outline, size: 16, color: Color(0xFF6B7280)),
             const SizedBox(width: 6),
             Text(
-              'PIECE ALREADY CLAIMED',
+              'Piece Already Claimed',
               style: GoogleFonts.plusJakartaSans(
                 color: const Color(0xFF6B7280),
                 fontSize: 13,
@@ -492,7 +492,7 @@ class FlashCard extends StatelessWidget {
         Expanded(
           child: AppButtons.primaryCTA(
             onPressed: () => _handleDefaultClaim(context),
-            text: 'INSTANT CLAIM • \$${flash.deposit} DEP',
+            text: 'Instant Claim • \$${flash.deposit} Dep',
             backgroundColor: const Color(0xFFEEC200),
             foregroundColor: const Color(0xFF121414),
           ),
@@ -712,7 +712,7 @@ void showFlashBookingSheet(
                         onConfirmed();
                       }
                     },
-                    text: 'CONFIRM CLAIM & SELECT DATE',
+                    text: 'Confirm Claim & Select Date',
                     backgroundColor: const Color(0xFFEEC200),
                     foregroundColor: const Color(0xFF121414),
                   ),

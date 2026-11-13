@@ -22,6 +22,8 @@ import 'artist_calendar_screen.dart';
 import 'artist_collections_screen.dart';
 import 'artist_earnings_screen.dart';
 import 'booking_request_detail_screen.dart';
+import 'books_status_card.dart';
+import 'create_book_drop_screen.dart';
 
 /// The central Artist Dashboard screen shown after completing account onboarding
 /// or when returning to the app as an authenticated artist.
@@ -280,29 +282,31 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF121414),
-      body: Stack(
-        children: [
-          IndexedStack(
-            index: _selectedTabIndex,
-            children: [
-              _buildDashboardContent(),
-              _buildCalendarTab(),
-              _buildCollectionsTab(),
-              _buildBooksTab(),
-              _buildEarningsTab(),
-            ],
-          ),
-          Positioned(
-            left: AppSpacing.screenGutter,
-            right: AppSpacing.screenGutter,
-            bottom: MediaQuery.paddingOf(context).bottom + AppTheme.navBarBottomMargin,
-            child: FlashBottomNavBar(
-              currentIndex: _selectedTabIndex,
-              onTap: (index) => setState(() => _selectedTabIndex = index),
-              role: 'artist',
+      body: FlashNavBarScope(
+        child: Stack(
+          children: [
+            IndexedStack(
+              index: _selectedTabIndex,
+              children: [
+                _buildDashboardContent(),
+                _buildCalendarTab(),
+                _buildCollectionsTab(),
+                _buildBooksTab(),
+                _buildEarningsTab(),
+              ],
             ),
-          ),
-        ],
+            Positioned(
+              left: AppSpacing.screenGutter,
+              right: AppSpacing.screenGutter,
+              bottom: MediaQuery.paddingOf(context).bottom + AppTheme.navBarBottomMargin,
+              child: FlashBottomNavBar(
+                currentIndex: _selectedTabIndex,
+                onTap: (index) => setState(() => _selectedTabIndex = index),
+                role: 'artist',
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -327,6 +331,38 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
             _buildHeaderTitleRow(),
             const SizedBox(height: 20),
             _buildMetricsRow(),
+            const SizedBox(height: 20),
+            BooksStatusCard(
+              onPlanDrop: () async {
+                final result = await CreateBookDropScreen.show(context, artist: _resolvedArtist);
+                if (result == true) {
+                  setState(() {});
+                }
+              },
+              onReviewRequests: () {
+                final requests = ArtistDashboardRepository.pendingRequests;
+                if (requests.isNotEmpty) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => BookingRequestDetailScreen(request: requests.first),
+                    ),
+                  ).then((_) => setState(() {}));
+                } else {
+                  setState(() => _selectedTabIndex = 1); // Switch to Calendar / Schedule tab
+                }
+              },
+              onAddDays: () async {
+                final result = await CreateBookDropScreen.show(context, artist: _resolvedArtist);
+                if (result == true) {
+                  setState(() {});
+                }
+              },
+              onOpenSettings: () {
+                setState(() => _selectedTabIndex = 3); // Switch to Books & Schedule Tab
+              },
+              onStatusChanged: () => setState(() {}),
+            ),
             const SizedBox(height: 20),
             _buildHeroNextAppointmentCard(),
             const SizedBox(height: 28),

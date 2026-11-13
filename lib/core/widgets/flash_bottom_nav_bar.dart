@@ -157,10 +157,10 @@ class FlashBottomNavBar extends StatelessWidget {
                                   AnimatedPositioned(
                                     duration: AppTheme.navAnimationDuration,
                                     curve: AppTheme.navAnimationCurve,
-                                    left: currentIndex * slotWidth + 4.0,
+                                    left: currentIndex * slotWidth + 1.0,
                                     top: 4.0,
                                     bottom: 4.0,
-                                    width: (slotWidth - 8.0).clamp(0.0, double.infinity),
+                                    width: (slotWidth - 2.0).clamp(0.0, double.infinity),
                                     child: Container(
                                       decoration: BoxDecoration(
                                         color: AppTheme.navActivePillBackground,

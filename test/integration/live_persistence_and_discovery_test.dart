@@ -572,7 +572,7 @@ void main() {
         );
 
         // Open Rowan Vale's ArtistProfileScreen and verify live distance on profile header/stats
-        await tester.tap(find.text('VIEW PROFILE').first);
+        await tester.tap(find.text('View Profile').first);
         await tester.pumpAndSettle();
 
         expect(find.byType(ArtistProfileScreen), findsOneWidget);

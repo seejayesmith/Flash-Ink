@@ -20,6 +20,7 @@ import 'add_waitlist_entry_sheet.dart';
 import 'artist_account_screen.dart';
 import 'artist_waitlist_screen.dart';
 import 'books_open_options_modal.dart';
+import 'create_book_drop_screen.dart';
 import 'early_access_outreach_sheet.dart';
 import '../../features/messages/presentation/screens/messages_screen.dart';
 
@@ -110,7 +111,7 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
   void _onRepositoryChanged() {
     if (mounted) {
       setState(() {
-        _isBooksOpen = ArtistDashboardRepository.booksSchedule.isBooksOpen;
+        _syncFieldsFromRepository();
       });
     }
   }
@@ -328,24 +329,26 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF121414),
-      body: Stack(
-        children: [
-          content,
-          Positioned(
-            left: AppSpacing.screenGutter,
-            right: AppSpacing.screenGutter,
-            bottom: MediaQuery.paddingOf(context).bottom + AppTheme.navBarBottomMargin,
-            child: FlashBottomNavBar(
-              currentIndex: 3,
-              onTap: (index) {
-                if (widget.onBack != null && index != 3) {
-                  widget.onBack!();
-                }
-              },
-              role: 'artist',
+      body: FlashNavBarScope(
+        child: Stack(
+          children: [
+            content,
+            Positioned(
+              left: AppSpacing.screenGutter,
+              right: AppSpacing.screenGutter,
+              bottom: MediaQuery.paddingOf(context).bottom + AppTheme.navBarBottomMargin,
+              child: FlashBottomNavBar(
+                currentIndex: 3,
+                onTap: (index) {
+                  if (widget.onBack != null && index != 3) {
+                    widget.onBack!();
+                  }
+                },
+                role: 'artist',
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -438,6 +441,27 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
             fontWeight: FontWeight.w400,
           ),
         ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: AppButtons.primaryCTA(
+                key: const Key('plan_book_drop_button'),
+                onPressed: () async {
+                  final res = await CreateBookDropScreen.show(context, artist: widget.artist);
+                  if (res == true && mounted) {
+                    setState(() {
+                      _syncFieldsFromRepository();
+                    });
+                  }
+                },
+                text: 'Plan a Book Drop',
+                backgroundColor: const Color(0xFFEEC200),
+                foregroundColor: const Color(0xFF121414),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -445,14 +469,57 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
   /// Hero card displaying current Books Open / Closed status with live toggle
   Widget _buildStatusHeroCard() {
     final schedule = ArtistDashboardRepository.booksSchedule;
+    final mode = ArtistDashboardRepository.bookingMode;
+    final drop = ArtistDashboardRepository.currentBookDrop;
+    final isPaused = ArtistDashboardRepository.isPaused;
     final isEarlyAccess = schedule.isEarlyAccessActive;
+    final isDropScheduled = mode == BookingMode.drops && drop?.status == BookDropStatus.scheduled;
+    final isDropActive = mode == BookingMode.drops && _isBooksOpen && drop != null && drop.status != BookDropStatus.closed;
 
-    final activeColor = isEarlyAccess
-        ? const Color(0xFFEEC200)
-        : (_isBooksOpen ? const Color(0xFF22C55E) : const Color(0xFF919696));
-    final borderColor = isEarlyAccess
-        ? const Color(0xFFEEC200)
-        : (_isBooksOpen ? const Color(0xFF22C55E) : const Color(0xFF282C2C));
+    final Color activeColor = isPaused
+        ? const Color(0xFFF97316)
+        : (isDropScheduled
+            ? const Color(0xFFA855F7)
+            : (isEarlyAccess
+                ? const Color(0xFFEEC200)
+                : (_isBooksOpen ? const Color(0xFF22C55E) : const Color(0xFF919696))));
+    final Color borderColor = isPaused
+        ? const Color(0xFFF97316)
+        : (isDropScheduled
+            ? const Color(0xFFA855F7)
+            : (isEarlyAccess
+                ? const Color(0xFFEEC200)
+                : (_isBooksOpen ? const Color(0xFF22C55E) : const Color(0xFF282C2C))));
+
+    final String statusLabel = isPaused
+        ? 'INQUIRIES PAUSED'
+        : (isDropScheduled
+            ? 'DROP SCHEDULED'
+            : (isEarlyAccess
+                ? 'VIP EARLY ACCESS ACTIVE'
+                : (isDropActive
+                    ? 'BOOKS OPEN (DROP)'
+                    : (_isBooksOpen ? 'BOOKS OPEN' : 'BOOKS CLOSED'))));
+
+    final String titleText = isPaused
+        ? 'Inquiries Currently Paused'
+        : (isDropScheduled
+            ? (drop?.title ?? 'Upcoming Booking Drop')
+            : (isEarlyAccess
+                ? 'VIP Waitlist Early Access Live'
+                : (isDropActive
+                    ? drop.title
+                    : (_isBooksOpen ? 'Accepting New Appointments' : 'Currently Closed to Inquiries'))));
+
+    final String subtitleText = isPaused
+        ? 'Clients can view your portfolio, but cannot submit new requests.'
+        : (isDropScheduled
+            ? 'Your next drop is scheduled and waiting to go live.'
+            : (isEarlyAccess
+                ? 'Your private waitlist members have exclusive access before public release.'
+                : (_isBooksOpen
+                    ? 'Clients can view your available calendar slots and request bookings directly.'
+                    : 'Clients can browse your portfolio, but general booking submissions are paused.')));
 
     return Container(
       key: const Key('books_status_card'),
@@ -460,11 +527,14 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFF1A1C1C),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: borderColor, width: (_isBooksOpen || isEarlyAccess) ? 1.5 : 1.0),
+        border: Border.all(
+          color: borderColor,
+          width: (_isBooksOpen || isEarlyAccess || isPaused || isDropScheduled) ? 1.5 : 1.0,
+        ),
         boxShadow: [
-          if (_isBooksOpen || isEarlyAccess)
+          if (_isBooksOpen || isEarlyAccess || isPaused || isDropScheduled)
             BoxShadow(
-              color: (isEarlyAccess ? const Color(0xFFEEC200) : const Color(0xFF22C55E)).withAlpha(20),
+              color: activeColor.withAlpha(20),
               blurRadius: 18,
               offset: const Offset(0, 4),
             ),
@@ -494,9 +564,7 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    isEarlyAccess
-                        ? 'VIP EARLY ACCESS ACTIVE'
-                        : (_isBooksOpen ? 'BOOKS OPEN' : 'BOOKS CLOSED'),
+                    statusLabel,
                     style: GoogleFonts.plusJakartaSans(
                       color: activeColor,
                       fontSize: 12,
@@ -508,12 +576,13 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
               ),
               FlashSwitch(
                 key: const Key('books_status_switch'),
-                value: _isBooksOpen,
+                value: _isBooksOpen && !isPaused,
                 onChanged: (val) {
                   setState(() => _isBooksOpen = val);
                   if (!val) {
                     ArtistDashboardRepository.closeBooks();
                   } else {
+                    ArtistDashboardRepository.openBooksPublicly();
                     final waitingCount = ArtistDashboardRepository.waitlistEntries
                         .where((e) => e.status.name == 'waiting')
                         .length;
@@ -543,9 +612,7 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            isEarlyAccess
-                ? 'VIP Waitlist Early Access Live'
-                : (_isBooksOpen ? 'Accepting New Appointments' : 'Currently Closed to Inquiries'),
+            titleText,
             style: GoogleFonts.plusJakartaSans(
               color: Colors.white,
               fontSize: 20,
@@ -554,11 +621,7 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            isEarlyAccess
-                ? 'Your private waitlist members have exclusive access before public release.'
-                : (_isBooksOpen
-                    ? 'Clients can view your available calendar slots and request bookings directly.'
-                    : 'Clients can browse your portfolio, but general booking submissions are paused.'),
+            subtitleText,
             style: GoogleFonts.plusJakartaSans(
               color: const Color(0xFFB0B6B6),
               fontSize: 12.5,
@@ -896,7 +959,7 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
                     const Icon(Icons.edit_calendar_outlined, color: Color(0xFFEEC200), size: 16),
                     const SizedBox(width: 4),
                     Text(
-                      'EDIT RANGE',
+                      'Edit Range',
                       style: GoogleFonts.plusJakartaSans(
                         color: const Color(0xFFEEC200),
                         fontSize: 11,
@@ -1020,42 +1083,45 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
           ),
           const SizedBox(height: 12),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: days.map((d) {
               final dayVal = d['val'] as int;
               final dayLabel = d['label'] as String;
               final isSelected = _workingDays.contains(dayVal);
 
-              return GestureDetector(
-                key: Key('working_day_$dayVal'),
-                onTap: () {
-                  setState(() {
-                    if (isSelected) {
-                      if (_workingDays.length > 1) {
-                        _workingDays.remove(dayVal);
-                      }
-                    } else {
-                      _workingDays.add(dayVal);
-                    }
-                  });
-                },
-                child: Container(
-                  width: 40,
-                  height: 44,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF161818),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF2C2F30),
-                    ),
-                  ),
-                  child: Text(
-                    dayLabel,
-                    style: GoogleFonts.plusJakartaSans(
-                      color: isSelected ? const Color(0xFF121414) : const Color(0xFF8C9191),
-                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                      fontSize: 12,
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2.5),
+                  child: GestureDetector(
+                    key: Key('working_day_$dayVal'),
+                    onTap: () {
+                      setState(() {
+                        if (isSelected) {
+                          if (_workingDays.length > 1) {
+                            _workingDays.remove(dayVal);
+                          }
+                        } else {
+                          _workingDays.add(dayVal);
+                        }
+                      });
+                    },
+                    child: Container(
+                      height: 44,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF161818),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF2C2F30),
+                        ),
+                      ),
+                      child: Text(
+                        dayLabel,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: isSelected ? const Color(0xFF121414) : const Color(0xFF8C9191),
+                          fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ),
                 ),

@@ -103,7 +103,7 @@ void main() {
         // Fill username to reach photo step
         await tester.enterText(find.byType(TextField), '@rapid_skipper');
         await tester.pump();
-        await tester.tap(find.text('CONTINUE'));
+        await tester.tap(find.text('Continue'));
         await tester.pumpAndSettle();
 
         // Verify we are on Photo step
@@ -188,7 +188,7 @@ void main() {
         // Fill username
         await tester.enterText(find.byType(TextField), '@onboarding_skipper');
         await tester.pump();
-        await tester.tap(find.text('CONTINUE'));
+        await tester.tap(find.text('Continue'));
         await tester.pumpAndSettle();
 
         // Tap Skip
@@ -206,7 +206,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Tap FINISH on AestheticsSelectionScreen
-        final finishFinder = find.text('FINISH');
+        final finishFinder = find.text('Finish');
         await tester.ensureVisible(finishFinder);
         await tester.tap(finishFinder);
         await tester.pumpAndSettle();

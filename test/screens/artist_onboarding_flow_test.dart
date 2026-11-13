@@ -274,7 +274,7 @@ void main() {
       expect(find.text('Name or Artist Handle'), findsOneWidget);
       expect(find.text('Phone Number'), findsOneWidget);
       expect(find.text('I agree to the Terms of Service and Privacy Policy.'), findsOneWidget);
-      expect(find.text('CONTINUE'), findsOneWidget);
+      expect(find.text('Continue'), findsOneWidget);
       expect(find.byType(TattooBackgroundWrapper), findsOneWidget);
       expect(find.byType(AdaptiveGlassContainer), findsWidgets);
     });
@@ -314,7 +314,7 @@ void main() {
       await tester.pump();
 
       // Tap CONTINUE without filling fields
-      await tester.tap(find.text('CONTINUE'));
+      await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
 
       expect(find.text('Please enter your name or artist handle'), findsOneWidget);
@@ -354,7 +354,7 @@ void main() {
 
       expect(find.text('Verify your phone\nnumber'), findsOneWidget);
       expect(find.byIcon(Icons.chat_bubble), findsOneWidget);
-      expect(find.text('VERIFY'), findsOneWidget);
+      expect(find.text('Verify'), findsOneWidget);
       expect(find.text("Didn't receive code? "), findsOneWidget);
       expect(find.byType(TextField), findsNWidgets(6));
       expect(find.text('Skip'), findsOneWidget);
@@ -395,7 +395,7 @@ void main() {
       expect(find.text('Show the community who you are!\nYou can always change this later.'), findsOneWidget);
       expect(find.text('Upload a Photo'), findsNothing);
       expect(find.text('Take a Picture'), findsNothing);
-      expect(find.text('Skip for now'), findsOneWidget);
+      expect(find.text('Skip for Now'), findsOneWidget);
       expect(find.text('Continue'), findsOneWidget);
     });
 
@@ -414,7 +414,7 @@ void main() {
       expect(find.text('Upload a Photo'), findsNothing);
       expect(find.text('Change Photo'), findsNothing);
       expect(find.text('Take a Picture'), findsNothing);
-      expect(find.text('Skip for now'), findsNothing);
+      expect(find.text('Skip for Now'), findsNothing);
       expect(find.text('Continue'), findsOneWidget);
     });
 
@@ -468,7 +468,7 @@ void main() {
       expect(find.byKey(const Key('price_display_card')), findsOneWidget);
       expect(find.byKey(const Key('price_text_field')), findsOneWidget);
       expect(find.text('100'), findsOneWidget);
-      expect(find.text('CONTINUE'), findsOneWidget);
+      expect(find.text('Continue'), findsOneWidget);
       expect(find.byKey(const Key('skip_price_button')), findsOneWidget);
       expect(find.text('Skip'), findsOneWidget);
     });

@@ -1089,24 +1089,26 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF121414),
-      body: Stack(
-        children: [
-          content,
-          Positioned(
-            left: AppSpacing.screenGutter,
-            right: AppSpacing.screenGutter,
-            bottom: MediaQuery.paddingOf(context).bottom + AppTheme.navBarBottomMargin,
-            child: FlashBottomNavBar(
-              currentIndex: 4,
-              onTap: (index) {
-                if (widget.onBack != null && index != 4) {
-                  widget.onBack!();
-                }
-              },
-              role: 'artist',
+      body: FlashNavBarScope(
+        child: Stack(
+          children: [
+            content,
+            Positioned(
+              left: AppSpacing.screenGutter,
+              right: AppSpacing.screenGutter,
+              bottom: MediaQuery.paddingOf(context).bottom + AppTheme.navBarBottomMargin,
+              child: FlashBottomNavBar(
+                currentIndex: 4,
+                onTap: (index) {
+                  if (widget.onBack != null && index != 4) {
+                    widget.onBack!();
+                  }
+                },
+                role: 'artist',
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

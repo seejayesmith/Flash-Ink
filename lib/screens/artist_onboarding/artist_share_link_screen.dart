@@ -350,7 +350,7 @@ class ArtistShareLinkScreen extends StatelessWidget {
       skipKey: const Key('skip_share_link_button'),
       skipText: 'Skip',
       title: 'Tell em where to\nfind you',
-      ctaText: 'DONE',
+      ctaText: 'Done',
       ctaKey: const Key('done_share_button'),
       onCtaPressed: () => _finishOnboarding(context),
       backgroundOverlay: const TattooBackgroundWrapper(child: SizedBox.expand()),
@@ -444,7 +444,7 @@ class ArtistShareLinkScreen extends StatelessWidget {
           AppButtons.secondaryCTA(
             key: const Key('create_sticker_button'),
             onPressed: () => _showStickerSheet(context),
-            text: 'Create a sticker',
+            text: 'Create a Sticker',
             icon: Icons.file_upload_outlined,
             borderColor: const Color(0xFF383C3C),
             foregroundColor: Colors.white,

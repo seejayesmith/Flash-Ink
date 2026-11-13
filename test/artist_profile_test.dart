@@ -214,7 +214,7 @@ void main() {
 
       // Verify FlashDetailsScreen opened
       expect(find.byType(FlashDetailsScreen), findsOneWidget);
-      expect(find.text('CLAIM & BOOK FLASH'), findsOneWidget);
+      expect(find.text('Claim & Book Flash'), findsOneWidget);
       expect(find.text('PLACEMENT'), findsOneWidget);
       expect(find.text('SIZE'), findsOneWidget);
       expect(find.text('DEPOSIT'), findsOneWidget);
@@ -231,7 +231,7 @@ void main() {
       );
 
       // Tap Claim button
-      await tester.tap(find.text('CLAIM & BOOK FLASH'));
+      await tester.tap(find.text('Claim & Book Flash'));
       await tester.pump();
 
       // Verify confirmation snackbar
@@ -259,7 +259,7 @@ void main() {
       // Verify CustomRequestScreen is displayed
       expect(find.byType(CustomRequestScreen), findsOneWidget);
       expect(find.text('Custom Tattoo Brief'), findsOneWidget);
-      expect(find.text('SUBMIT CUSTOM BRIEF'), findsOneWidget);
+      expect(find.text('Submit Custom Brief'), findsOneWidget);
     });
 
     testWidgets('AppBar is transparent with surfaceTintColor and scrolledUnderElevation set to 0', (tester) async {
@@ -387,7 +387,7 @@ void main() {
       expect(find.text('\$${artist.minDeposit}'), findsOneWidget);
 
       // Action row: VIEW PROFILE + Favorite button
-      expect(find.text('VIEW PROFILE'), findsOneWidget);
+      expect(find.text('View Profile'), findsOneWidget);
       expect(find.byIcon(Icons.favorite_border), findsOneWidget);
     });
   });
@@ -441,7 +441,7 @@ void main() {
       );
 
       // Button should reflect claimed state
-      expect(find.text('PIECE ALREADY CLAIMED'), findsOneWidget);
+      expect(find.text('Piece Already Claimed'), findsOneWidget);
 
       // Caption should be hidden
       expect(
@@ -473,7 +473,7 @@ void main() {
         ),
       );
 
-      final ctaFinder = find.widgetWithText(ElevatedButton, 'CLAIM & BOOK FLASH');
+      final ctaFinder = find.widgetWithText(ElevatedButton, 'Claim & Book Flash');
       final disclaimerFinder = find.text('\$60 deposit reserves this exclusive piece • Applied to final balance');
 
       expect(ctaFinder, findsOneWidget);
@@ -650,7 +650,7 @@ void main() {
       expect(find.byType(FlashDetailsScreen), findsOneWidget);
 
       // Tap CLAIM & BOOK FLASH
-      await tester.tap(find.text('CLAIM & BOOK FLASH'));
+      await tester.tap(find.text('Claim & Book Flash'));
       await tester.pumpAndSettle();
 
       // Verify on FlashBookingScreen step 1
@@ -658,26 +658,26 @@ void main() {
       expect(find.text('SELECT DATE'), findsOneWidget);
 
       // Step 1 -> Step 2
-      await tester.tap(find.text('CONTINUE TO DETAILS'));
+      await tester.tap(find.text('Continue to Details'));
       await tester.pumpAndSettle();
 
       // Step 2 -> Step 3
-      await tester.tap(find.text('CONTINUE TO PAYMENT'));
+      await tester.tap(find.text('Continue to Payment'));
       await tester.pumpAndSettle();
 
       // Step 3 -> Pay
-      await tester.tap(find.textContaining('DEPOSIT & CONFIRM'));
+      await tester.tap(find.textContaining('Deposit & Confirm'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 1000));
       await tester.pumpAndSettle();
 
       // Verify confirmation screen (Step 4)
       expect(find.text('Flash Claimed & Booked!'), findsOneWidget);
-      expect(find.text('DONE'), findsOneWidget);
+      expect(find.text('Done'), findsOneWidget);
 
       // Close confirmation screen via DONE button
-      await tester.ensureVisible(find.text('DONE'));
-      await tester.tap(find.text('DONE'));
+      await tester.ensureVisible(find.text('Done'));
+      await tester.tap(find.text('Done'));
       await tester.pumpAndSettle();
 
       // Verify navigated back to ArtistProfileScreen
@@ -717,15 +717,15 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap CLAIM & BOOK FLASH
-      await tester.tap(find.text('CLAIM & BOOK FLASH'));
+      await tester.tap(find.text('Claim & Book Flash'));
       await tester.pumpAndSettle();
 
       // Step 1 -> Step 2 -> Step 3 -> Pay
-      await tester.tap(find.text('CONTINUE TO DETAILS'));
+      await tester.tap(find.text('Continue to Details'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('CONTINUE TO PAYMENT'));
+      await tester.tap(find.text('Continue to Payment'));
       await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('DEPOSIT & CONFIRM'));
+      await tester.tap(find.textContaining('Deposit & Confirm'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 1000));
       await tester.pumpAndSettle();
@@ -766,22 +766,22 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap CLAIM & BOOK FLASH
-      await tester.tap(find.text('CLAIM & BOOK FLASH'));
+      await tester.tap(find.text('Claim & Book Flash'));
       await tester.pumpAndSettle();
 
       // Step 1 -> Step 2 -> Step 3 -> Pay
-      await tester.tap(find.text('CONTINUE TO DETAILS'));
+      await tester.tap(find.text('Continue to Details'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('CONTINUE TO PAYMENT'));
+      await tester.tap(find.text('Continue to Payment'));
       await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('DEPOSIT & CONFIRM'));
+      await tester.tap(find.textContaining('Deposit & Confirm'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 1000));
       await tester.pumpAndSettle();
 
       // Close confirmation screen
-      await tester.ensureVisible(find.text('DONE'));
-      await tester.tap(find.text('DONE'));
+      await tester.ensureVisible(find.text('Done'));
+      await tester.tap(find.text('Done'));
       await tester.pumpAndSettle();
 
       // Verify back on ArtistProfileScreen

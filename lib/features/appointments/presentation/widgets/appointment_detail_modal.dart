@@ -234,7 +234,7 @@ class AppointmentDetailModal extends StatelessWidget {
                       );
                     },
                     icon: Icons.directions,
-                    text: 'DIRECTIONS',
+                    text: 'Directions',
                     borderColor: AppTheme.goldBorder,
                     foregroundColor: AppTheme.gold,
                   ),
@@ -250,7 +250,7 @@ class AppointmentDetailModal extends StatelessWidget {
                         duration: const Duration(seconds: 2),
                       );
                     },
-                    text: 'CONTACT',
+                    text: 'Contact',
                     backgroundColor: AppTheme.gold,
                     foregroundColor: AppTheme.onyxBackground,
                   ),

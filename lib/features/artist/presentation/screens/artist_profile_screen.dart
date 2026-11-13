@@ -837,7 +837,7 @@ class _BannerSourceBottomSheet extends StatelessWidget {
               initialAspectRatio: 3.0 / 2.0,
               title: 'CROP HEADER BANNER',
               subtitle: 'Pinch to zoom • Drag to frame your profile banner',
-              ctaText: 'APPLY & SAVE BANNER',
+              ctaText: 'Apply & Save Banner',
             ),
           ),
         );

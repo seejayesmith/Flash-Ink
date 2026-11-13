@@ -194,7 +194,7 @@ class _ArtistChooseStyleScreenState extends State<ArtistChooseStyleScreen> {
       skipText: 'Skip',
       title: 'Choose your\nstyle',
       subtitle: 'Pick the styles you specialize in so clients searching for your specific aesthetic can easily find your profile and flash',
-      ctaText: 'DONE',
+      ctaText: 'Done',
       ctaKey: const Key('done_styles_button'),
       onCtaPressed: () => _proceedToShareScreen(),
       backgroundOverlay: const TattooBackgroundWrapper(child: SizedBox.expand()),

@@ -260,7 +260,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                   ),
                   child: AppButtons.primaryCTA(
                     onPressed: _selectedRole == null ? null : _handleContinue,
-                    text: 'CONTINUE',
+                    text: 'Continue',
                     backgroundColor: _selectedRole == null
                         ? const Color(0xFF4D5252)
                         : const Color(0xFFEEC200),

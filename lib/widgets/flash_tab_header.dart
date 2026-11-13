@@ -7,6 +7,9 @@ import '../theme/app_typography.dart';
 /// Ensures uniform height, 30pt bold typography, padding, and alignment
 /// across client-side screens (Feed, Explore, Appointments, Messages).
 class FlashTabHeader extends StatelessWidget {
+  /// Optional leading widget displayed to the left of the title (e.g. back button).
+  final Widget? leading;
+
   /// The primary title text (e.g. 'Browse Artists', 'Explore', 'Appointments', 'Messages').
   final String title;
 
@@ -27,6 +30,7 @@ class FlashTabHeader extends StatelessWidget {
 
   const FlashTabHeader({
     super.key,
+    this.leading,
     required this.title,
     this.titleStyle,
     this.titleAccessory,
@@ -52,6 +56,10 @@ class FlashTabHeader extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (leading != null) ...[
+                  leading!,
+                  const SizedBox(width: 8),
+                ],
                 Flexible(
                   child: Text(
                     title,

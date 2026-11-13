@@ -150,7 +150,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       action: isUpcoming
           ? AppButtons.primaryCTA(
               onPressed: widget.onExploreTap,
-              text: 'BROWSE FLASH DESIGNS',
+              text: 'Browse Flash Designs',
               width: 220,
               backgroundColor: AppTheme.gold,
               foregroundColor: AppTheme.onyxBackground,

@@ -517,7 +517,7 @@ class ArtistCard extends StatelessWidget {
         Expanded(
           child: AppButtons.primaryCTA(
             onPressed: onViewProfile,
-            text: 'VIEW PROFILE',
+            text: 'View Profile',
             backgroundColor: const Color(0xFFEEC200),
             foregroundColor: const Color(0xFF121414),
           ),

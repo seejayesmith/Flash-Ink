@@ -114,8 +114,8 @@ class _PhotoCropScreenState extends State<PhotoCropScreen> {
   String get _effectiveCtaText {
     if (widget.ctaText != null) return widget.ctaText!;
     return widget.cropShape == CropShape.rectangle
-        ? 'APPLY & USE FLASH'
-        : 'APPLY & USE PHOTO';
+        ? 'Apply & Use Flash'
+        : 'Apply & Use Photo';
   }
 
   Widget _buildAspectRatioSelector() {

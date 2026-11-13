@@ -195,7 +195,7 @@ class _ClientLocationScreenState extends State<ClientLocationScreen> {
       totalSteps: 3,
       title: 'Your home base',
       subtitle: 'Enter your ZIP code to find studios near you and calibrate your travel radius.',
-      ctaText: 'CONTINUE',
+      ctaText: 'Continue',
       ctaKey: const Key('client_location_continue_button'),
       isCtaLoading: _isLoading,
       isCtaEnabled: hasValidZip,

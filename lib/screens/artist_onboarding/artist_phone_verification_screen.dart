@@ -281,7 +281,7 @@ class _ArtistPhoneVerificationScreenState extends State<ArtistPhoneVerificationS
       skipText: 'Skip',
       title: 'Verify your phone\nnumber',
       subtitle: 'We\'ve sent a 6-digit verification code\nto your device. Please enter it below.',
-      ctaText: 'VERIFY',
+      ctaText: 'Verify',
       isCtaLoading: _isLoading,
       onCtaPressed: _isLoading ? null : _verifyCode,
       backgroundOverlay: const TattooBackgroundWrapper(child: SizedBox.expand()),

@@ -143,7 +143,7 @@ class BookingReceiptMessageTile extends StatelessWidget {
                 child: AppButtons.secondaryCTA(
                   onPressed: _addToCalendar,
                   icon: Icons.calendar_month,
-                  text: 'ADD TO CALENDAR',
+                  text: 'Add to Calendar',
                   borderColor: AppTheme.goldBorder,
                   foregroundColor: AppTheme.gold,
                 ),

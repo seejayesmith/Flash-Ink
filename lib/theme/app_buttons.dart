@@ -6,6 +6,53 @@ class AppButtons {
   // Core Geometry Tokens
   static const double ctaHeightPrimary = 44.0;
   static const double ctaBorderRadius = 22.0;
+  static const double ctaHorizontalPadding = 16.0;
+
+  static Widget _buildCtaChild({
+    required String text,
+    IconData? icon,
+    required bool isLoading,
+    required Color foregroundColor,
+  }) {
+    if (isLoading) {
+      return SizedBox(
+        height: 18,
+        width: 18,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation<Color>(foregroundColor),
+        ),
+      );
+    }
+
+    final textWidget = Text(
+      text,
+      maxLines: 1,
+      softWrap: false,
+      style: GoogleFonts.plusJakartaSans(
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.8,
+        fontSize: 14,
+        height: 1.2,
+      ),
+    );
+
+    final content = icon != null
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 20),
+              const SizedBox(width: 8),
+              textWidget,
+            ],
+          )
+        : textWidget;
+
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: content,
+    );
+  }
 
   /// A standard primary Call-To-Action wrapper ensuring minimum tap target size,
   /// full width capability, strict pill shape, and non-shifting loading states.
@@ -31,50 +78,19 @@ class AppButtons {
       tapTargetSize: MaterialTapTargetSize.padded,
       shape: const StadiumBorder(),
       elevation: 0,
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.symmetric(horizontal: ctaHorizontalPadding),
     );
-
-    if (isLoading) {
-      return ElevatedButton(
-        key: key,
-        onPressed: null,
-        style: style,
-        child: SizedBox(
-          height: 18,
-          width: 18,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(foregroundColor),
-          ),
-        ),
-      );
-    }
-
-    final textWidget = Text(
-      text,
-      style: GoogleFonts.plusJakartaSans(
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.8,
-        fontSize: 14,
-        height: 1.2,
-      ),
-    );
-
-    if (icon != null) {
-      return ElevatedButton.icon(
-        key: key,
-        onPressed: onPressed,
-        style: style,
-        icon: Icon(icon, size: 20),
-        label: textWidget,
-      );
-    }
 
     return ElevatedButton(
       key: key,
-      onPressed: onPressed,
+      onPressed: isLoading ? null : onPressed,
       style: style,
-      child: textWidget,
+      child: _buildCtaChild(
+        text: text,
+        icon: icon,
+        isLoading: isLoading,
+        foregroundColor: foregroundColor,
+      ),
     );
   }
 
@@ -100,50 +116,19 @@ class AppButtons {
       tapTargetSize: MaterialTapTargetSize.padded,
       shape: const StadiumBorder(),
       elevation: 0,
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.symmetric(horizontal: ctaHorizontalPadding),
     );
-
-    if (isLoading) {
-      return OutlinedButton(
-        key: key,
-        onPressed: null,
-        style: style,
-        child: SizedBox(
-          height: 18,
-          width: 18,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(foregroundColor),
-          ),
-        ),
-      );
-    }
-
-    final textWidget = Text(
-      text,
-      style: GoogleFonts.plusJakartaSans(
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.8,
-        fontSize: 14,
-        height: 1.2,
-      ),
-    );
-
-    if (icon != null) {
-      return OutlinedButton.icon(
-        key: key,
-        onPressed: onPressed,
-        style: style,
-        icon: Icon(icon, size: 20),
-        label: textWidget,
-      );
-    }
 
     return OutlinedButton(
       key: key,
-      onPressed: onPressed,
+      onPressed: isLoading ? null : onPressed,
       style: style,
-      child: textWidget,
+      child: _buildCtaChild(
+        text: text,
+        icon: icon,
+        isLoading: isLoading,
+        foregroundColor: foregroundColor,
+      ),
     );
   }
 
@@ -167,50 +152,19 @@ class AppButtons {
       tapTargetSize: MaterialTapTargetSize.padded,
       shape: const StadiumBorder(),
       elevation: 0,
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.symmetric(horizontal: ctaHorizontalPadding),
     );
-
-    if (isLoading) {
-      return ElevatedButton(
-        key: key,
-        onPressed: null,
-        style: style,
-        child: SizedBox(
-          height: 18,
-          width: 18,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(foregroundColor),
-          ),
-        ),
-      );
-    }
-
-    final textWidget = Text(
-      text,
-      style: GoogleFonts.plusJakartaSans(
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.8,
-        fontSize: 14,
-        height: 1.2,
-      ),
-    );
-
-    if (icon != null) {
-      return ElevatedButton.icon(
-        key: key,
-        onPressed: onPressed,
-        style: style,
-        icon: Icon(icon, size: 20),
-        label: textWidget,
-      );
-    }
 
     return ElevatedButton(
       key: key,
-      onPressed: onPressed,
+      onPressed: isLoading ? null : onPressed,
       style: style,
-      child: textWidget,
+      child: _buildCtaChild(
+        text: text,
+        icon: icon,
+        isLoading: isLoading,
+        foregroundColor: foregroundColor,
+      ),
     );
   }
 }

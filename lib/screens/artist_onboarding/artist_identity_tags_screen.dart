@@ -137,7 +137,7 @@ class _ArtistIdentityTagsScreenState extends State<ArtistIdentityTagsScreen> {
       title: 'Tell them who\nyou are',
       subtitle:
           'Help clients find a space where they feel welcome by tagging your identity, vibe, and accommodations',
-      ctaText: 'DONE',
+      ctaText: 'Done',
       ctaKey: const Key('done_identity_button'),
       onCtaPressed: _proceedToChooseStyle,
       backgroundOverlay: const TattooBackgroundWrapper(child: SizedBox.expand()),

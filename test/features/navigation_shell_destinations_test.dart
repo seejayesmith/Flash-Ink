@@ -128,8 +128,8 @@ void main() {
 
       expect(find.byType(AppointmentDetailModal), findsOneWidget);
       expect(find.text('Total Session Price'), findsOneWidget);
-      expect(find.text('DIRECTIONS'), findsOneWidget);
-      expect(find.text('CONTACT'), findsOneWidget);
+      expect(find.text('Directions'), findsOneWidget);
+      expect(find.text('Contact'), findsOneWidget);
     });
 
     testWidgets('ExploreScreen search filters artists and studios',

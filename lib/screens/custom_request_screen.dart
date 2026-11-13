@@ -435,7 +435,7 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
                     // Submit Button (Inline, no gray bar)
                     AppButtons.primaryCTA(
                       onPressed: _isSubmitting ? null : _submitBrief,
-                      text: 'SUBMIT CUSTOM BRIEF',
+                      text: 'Submit Custom Brief',
                       isLoading: _isSubmitting,
                       backgroundColor: const Color(0xFFEEC200),
                       foregroundColor: const Color(0xFF121414),

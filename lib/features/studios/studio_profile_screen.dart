@@ -1734,7 +1734,7 @@ class _StudioResidentArtistCard extends StatelessWidget {
             child: AppButtons.primaryCTA(
               key: Key('studio_artist_view_profile_${artist.id}'),
               onPressed: onViewProfile,
-              text: 'VIEW PROFILE',
+              text: 'View Profile',
               backgroundColor: AppTheme.gold,
               foregroundColor: AppTheme.onyxBackground,
             ),

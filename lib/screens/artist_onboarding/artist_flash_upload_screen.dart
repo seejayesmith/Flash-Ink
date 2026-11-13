@@ -105,7 +105,7 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
           title: 'CROP & RESIZE FLASH',
           cropShape: CropShape.rectangle,
           subtitle: 'Pinch to zoom • Drag to frame your flash artwork',
-          ctaText: 'APPLY & USE FLASH',
+          ctaText: 'Apply & Use Flash',
         ),
       ),
     );
@@ -493,7 +493,7 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
       skipText: 'Skip',
       title: 'Showcase your\nwork',
       subtitle: 'Upload some custom flash work you plan on selling',
-      ctaText: 'DONE',
+      ctaText: 'Done',
       ctaKey: const Key('done_flash_button'),
       isCtaEnabled: _uploadedItems.isNotEmpty,
       onCtaPressed: _uploadedItems.isNotEmpty ? _onDonePressed : null,
@@ -502,7 +502,7 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
       child: FlowPageLayout(
         title: 'Showcase your\nwork',
         subtitle: 'Upload some custom flash work you plan on selling',
-        ctaText: 'DONE',
+        ctaText: 'Done',
         ctaKey: const Key('done_flash_button'),
         onCtaPressed: _uploadedItems.isNotEmpty ? _onDonePressed : null,
         renderInternalHeaderAndCTA: false,
@@ -850,7 +850,7 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
           AppButtons.primaryCTA(
             key: const Key('done_details_button'),
             onPressed: () => _saveCurrentItem(addAnother: false),
-            text: 'DONE',
+            text: 'Done',
             backgroundColor: const Color(0xFFEEC200),
             foregroundColor: const Color(0xFF121414),
           ),

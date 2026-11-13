@@ -218,7 +218,7 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
         ],
       ),
       centerContent: false,
-      ctaText: 'SEND VERIFICATION CODE',
+      ctaText: 'Send Verification Code',
       onCtaPressed: _submit,
       isCtaLoading: _isLoading,
       secondaryAction: TextButton(

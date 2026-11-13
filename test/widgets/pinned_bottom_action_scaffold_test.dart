@@ -82,7 +82,7 @@ void main() {
         MaterialApp(
           home: PinnedBottomActionScaffold(
             ctaKey: const Key('primary_action'),
-            ctaText: 'VERIFY',
+            ctaText: 'Verify',
             onCtaPressed: () {},
             secondaryAction: const Text('Resend verification code'),
             child: const Text('Body Content'),
@@ -170,7 +170,7 @@ void main() {
           home: MediaQuery(
             data: MediaQueryData(viewInsets: EdgeInsets.zero),
             child: PinnedBottomActionScaffold(
-              ctaText: 'CONTINUE',
+              ctaText: 'Continue',
               child: Text('Content'),
             ),
           ),
@@ -186,7 +186,7 @@ void main() {
           home: MediaQuery(
             data: MediaQueryData(viewInsets: EdgeInsets.only(bottom: 300)),
             child: PinnedBottomActionScaffold(
-              ctaText: 'CONTINUE',
+              ctaText: 'Continue',
               child: Text('Content'),
             ),
           ),
@@ -213,7 +213,7 @@ void main() {
           home: MediaQuery(
             data: const MediaQueryData(viewInsets: EdgeInsets.only(bottom: 300)),
             child: PinnedBottomActionScaffold(
-              ctaText: 'CONTINUE',
+              ctaText: 'Continue',
               child: TextField(
                 focusNode: focusNode,
               ),
@@ -247,7 +247,7 @@ void main() {
           home: MediaQuery(
             data: const MediaQueryData(viewInsets: EdgeInsets.only(bottom: 300)),
             child: PinnedBottomActionScaffold(
-              ctaText: 'CONTINUE',
+              ctaText: 'Continue',
               child: const TextField(),
             ),
           ),
@@ -264,7 +264,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: PinnedBottomActionScaffold(
-            ctaText: 'CONTINUE',
+            ctaText: 'Continue',
             child: SizedBox(
               height: 400,
               child: Column(

@@ -151,7 +151,7 @@ void main() {
             totalSteps: 4,
             title: 'Scrollable Form',
             subtitle: 'This form has multiple inputs exceeding the initial viewport.',
-            ctaText: 'CONTINUE',
+            ctaText: 'Continue',
             ctaKey: const Key('scrollable_cta_button'),
             onCtaPressed: () => ctaTapped = true,
             child: Column(

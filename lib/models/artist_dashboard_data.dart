@@ -323,6 +323,253 @@ class ArtistEarningsData {
   });
 }
 
+enum BookingMode {
+  alwaysOpen,
+  drops,
+}
+
+enum BookDropStatus {
+  scheduled,
+  earlyAccess,
+  open,
+  full,
+  closed,
+}
+
+/// Represents an intentional booking release or drop window.
+class BookDrop {
+  final String id;
+  final String title;
+  final DateTime startDate;
+  final DateTime endDate;
+  final BookDropStatus status;
+  final Set<int> selectedDays; // Month day numbers or timestamps
+  final bool acceptFlash;
+  final bool acceptCustom;
+  final bool acceptTouchUps;
+  final int? requestCap;
+  final int requestCount;
+  final DateTime? opensAt;
+  final int earlyAccessHours;
+  final DateTime? earlyAccessEndsAt;
+
+  const BookDrop({
+    required this.id,
+    required this.title,
+    required this.startDate,
+    required this.endDate,
+    this.status = BookDropStatus.open,
+    this.selectedDays = const {},
+    this.acceptFlash = true,
+    this.acceptCustom = true,
+    this.acceptTouchUps = true,
+    this.requestCap,
+    this.requestCount = 0,
+    this.opensAt,
+    this.earlyAccessHours = 24,
+    this.earlyAccessEndsAt,
+  });
+
+  BookDrop copyWith({
+    String? id,
+    String? title,
+    DateTime? startDate,
+    DateTime? endDate,
+    BookDropStatus? status,
+    Set<int>? selectedDays,
+    bool? acceptFlash,
+    bool? acceptCustom,
+    bool? acceptTouchUps,
+    int? requestCap,
+    int? requestCount,
+    DateTime? opensAt,
+    int? earlyAccessHours,
+    DateTime? earlyAccessEndsAt,
+  }) {
+    return BookDrop(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      startDate: startDate ?? this.startDate,
+      endDate: endDate ?? this.endDate,
+      status: status ?? this.status,
+      selectedDays: selectedDays ?? this.selectedDays,
+      acceptFlash: acceptFlash ?? this.acceptFlash,
+      acceptCustom: acceptCustom ?? this.acceptCustom,
+      acceptTouchUps: acceptTouchUps ?? this.acceptTouchUps,
+      requestCap: requestCap ?? this.requestCap,
+      requestCount: requestCount ?? this.requestCount,
+      opensAt: opensAt ?? this.opensAt,
+      earlyAccessHours: earlyAccessHours ?? this.earlyAccessHours,
+      earlyAccessEndsAt: earlyAccessEndsAt ?? this.earlyAccessEndsAt,
+    );
+  }
+}
+
+/// Represents a 24-hour temporary hold created when an artist proposes slots for a custom request.
+class CustomHold {
+  final String id;
+  final String requestId;
+  final String clientName;
+  final DateTime date;
+  final String timeSlot;
+  final int durationMinutes;
+  final int estimatedPrice;
+  final int deposit;
+  final DateTime createdAt;
+  final DateTime expiresAt;
+
+  const CustomHold({
+    required this.id,
+    required this.requestId,
+    required this.clientName,
+    required this.date,
+    required this.timeSlot,
+    this.durationMinutes = 180,
+    required this.estimatedPrice,
+    required this.deposit,
+    required this.createdAt,
+    required this.expiresAt,
+  });
+
+  bool get isExpired => DateTime.now().isAfter(expiresAt);
+  Duration get remainingTime => isExpired ? Duration.zero : expiresAt.difference(DateTime.now());
+
+  CustomHold copyWith({
+    String? id,
+    String? requestId,
+    String? clientName,
+    DateTime? date,
+    String? timeSlot,
+    int? durationMinutes,
+    int? estimatedPrice,
+    int? deposit,
+    DateTime? createdAt,
+    DateTime? expiresAt,
+  }) {
+    return CustomHold(
+      id: id ?? this.id,
+      requestId: requestId ?? this.requestId,
+      clientName: clientName ?? this.clientName,
+      date: date ?? this.date,
+      timeSlot: timeSlot ?? this.timeSlot,
+      durationMinutes: durationMinutes ?? this.durationMinutes,
+      estimatedPrice: estimatedPrice ?? this.estimatedPrice,
+      deposit: deposit ?? this.deposit,
+      createdAt: createdAt ?? this.createdAt,
+      expiresAt: expiresAt ?? this.expiresAt,
+    );
+  }
+}
+
+enum PresetCategory { pass, askInfo, followUp }
+
+/// Reusable preset message template for custom request interactions.
+class AutoResponsePreset {
+  final String id;
+  final String title;
+  final PresetCategory category;
+  final String messageTemplate;
+  final String? connectedActionTitle;
+
+  const AutoResponsePreset({
+    required this.id,
+    required this.title,
+    required this.category,
+    required this.messageTemplate,
+    this.connectedActionTitle,
+  });
+
+  static const List<AutoResponsePreset> defaultPassPresets = [
+    AutoResponsePreset(
+      id: 'pass_style',
+      title: 'Outside my style',
+      category: PresetCategory.pass,
+      messageTemplate:
+          "Thanks so much for thinking of me! This idea isn't really my style, and you deserve someone who specializes in it.",
+      connectedActionTitle: 'Recommend other Flash artists',
+    ),
+    AutoResponsePreset(
+      id: 'pass_capacity',
+      title: 'Too big for current books',
+      category: PresetCategory.pass,
+      messageTemplate:
+          "I love this idea, but I can't fit a piece this size into my current booking window.",
+      connectedActionTitle: 'Join waitlist for next drop',
+    ),
+    AutoResponsePreset(
+      id: 'pass_booked',
+      title: 'Books filled up',
+      category: PresetCategory.pass,
+      messageTemplate:
+          "My books filled up before I could take this on. I'd love to get you in next time!",
+      connectedActionTitle: 'Join waitlist + available flash',
+    ),
+    AutoResponsePreset(
+      id: 'pass_placement',
+      title: 'Placement not done',
+      category: PresetCategory.pass,
+      messageTemplate:
+          "I don't tattoo this placement, but I'd be happy to discuss a different placement.",
+      connectedActionTitle: 'Resubmit with different placement',
+    ),
+    AutoResponsePreset(
+      id: 'pass_flash_only',
+      title: 'Flash-only right now',
+      category: PresetCategory.pass,
+      messageTemplate:
+          "I'm only accepting flash at the moment. Take a look at my available pieces!",
+      connectedActionTitle: 'Browse available flash',
+    ),
+  ];
+
+  static const List<AutoResponsePreset> defaultAskInfoPresets = [
+    AutoResponsePreset(
+      id: 'ask_size',
+      title: 'Size in inches',
+      category: PresetCategory.askInfo,
+      messageTemplate: '• Approximate size in inches',
+    ),
+    AutoResponsePreset(
+      id: 'ask_placement',
+      title: 'Exact placement',
+      category: PresetCategory.askInfo,
+      messageTemplate: '• Exact placement on your body',
+    ),
+    AutoResponsePreset(
+      id: 'ask_references',
+      title: 'Reference photos',
+      category: PresetCategory.askInfo,
+      messageTemplate: '• 1–2 reference photos of the style/elements you have in mind',
+    ),
+    AutoResponsePreset(
+      id: 'ask_color',
+      title: 'Color vs B&G',
+      category: PresetCategory.askInfo,
+      messageTemplate: '• Whether you are picturing this in color or black & grey',
+    ),
+    AutoResponsePreset(
+      id: 'ask_budget',
+      title: 'Budget range',
+      category: PresetCategory.askInfo,
+      messageTemplate: '• Your target budget range for this piece',
+    ),
+    AutoResponsePreset(
+      id: 'ask_coverup',
+      title: 'Existing tattoos / cover-up',
+      category: PresetCategory.askInfo,
+      messageTemplate: '• Whether this will go over or next to any existing tattoos or scars',
+    ),
+  ];
+}
+
+enum DayCapacityStatus {
+  open,
+  filling,
+  full,
+  blocked,
+  closed,
+}
+
 /// Represents the configuration for an artist's booking schedule ("Books").
 class ArtistBooksSchedule {
   final bool isBooksOpen;
@@ -600,6 +847,218 @@ class ArtistDashboardRepository {
       List.from(WaitlistEntry.mockWaitlistEntries);
   static List<WaitlistEntry> liveWaitlistEntries = [];
 
+  static BookingMode _mockBookingMode = BookingMode.alwaysOpen;
+  static BookingMode _liveBookingMode = BookingMode.alwaysOpen;
+  static BookingMode get bookingMode =>
+      MockDataConfig.isEnabled ? _mockBookingMode : _liveBookingMode;
+  static set bookingMode(BookingMode mode) {
+    if (MockDataConfig.isEnabled) {
+      _mockBookingMode = mode;
+    } else {
+      _liveBookingMode = mode;
+    }
+    notifyPendingRequestsChanged();
+  }
+
+  static bool _mockIsPaused = false;
+  static bool _liveIsPaused = false;
+  static bool get isPaused =>
+      MockDataConfig.isEnabled ? _mockIsPaused : _liveIsPaused;
+  static set isPaused(bool paused) {
+    if (MockDataConfig.isEnabled) {
+      _mockIsPaused = paused;
+    } else {
+      _liveIsPaused = paused;
+    }
+    notifyPendingRequestsChanged();
+  }
+  static void pauseInquiries() => isPaused = true;
+  static void resumeInquiries() => isPaused = false;
+
+  static BookDrop? _mockBookDrop = BookDrop(
+    id: 'drop_dec_2026',
+    title: 'December Booking Drop',
+    startDate: DateTime(2026, 12, 1),
+    endDate: DateTime(2026, 12, 31),
+    status: BookDropStatus.open,
+    selectedDays: const {1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 15, 16, 17, 18, 19},
+    acceptFlash: true,
+    acceptCustom: true,
+    acceptTouchUps: true,
+    requestCap: 25,
+    requestCount: 14,
+    earlyAccessHours: 24,
+  );
+  static BookDrop? _liveBookDrop;
+  static BookDrop? get currentBookDrop =>
+      MockDataConfig.isEnabled ? _mockBookDrop : _liveBookDrop;
+  static set currentBookDrop(BookDrop? drop) {
+    if (MockDataConfig.isEnabled) {
+      _mockBookDrop = drop;
+    } else {
+      _liveBookDrop = drop;
+    }
+    notifyPendingRequestsChanged();
+  }
+
+  static List<CustomHold> _mockCustomHolds = [
+    CustomHold(
+      id: 'hold_dragon_1',
+      requestId: 'req_dragon_sarah',
+      clientName: 'Sarah M.',
+      date: DateTime(2026, 12, 4),
+      timeSlot: '2:00 PM',
+      durationMinutes: 180,
+      estimatedPrice: 450,
+      deposit: 80,
+      createdAt: DateTime.now().subtract(const Duration(hours: 8)),
+      expiresAt: DateTime.now().add(const Duration(hours: 16)),
+    ),
+  ];
+  static List<CustomHold> _liveCustomHolds = [];
+  static List<CustomHold> get customHolds =>
+      MockDataConfig.isEnabled ? _mockCustomHolds : _liveCustomHolds;
+  static set customHolds(List<CustomHold> value) {
+    if (MockDataConfig.isEnabled) {
+      _mockCustomHolds = value;
+    } else {
+      _liveCustomHolds = value;
+    }
+    notifyPendingRequestsChanged();
+  }
+
+  static void addCustomHold(CustomHold hold) {
+    customHolds = [...customHolds, hold];
+  }
+
+  static void releaseCustomHold(String id) {
+    customHolds = customHolds.where((h) => h.id != id).toList();
+  }
+
+  static final Set<String> _blockedDates = {};
+  static String _dateKey(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
+  static bool isDateBlocked(DateTime date) => _blockedDates.contains(_dateKey(date));
+  static void blockDate(DateTime date) {
+    _blockedDates.add(_dateKey(date));
+    notifyPendingRequestsChanged();
+  }
+  static void unblockDate(DateTime date) {
+    _blockedDates.remove(_dateKey(date));
+    notifyPendingRequestsChanged();
+  }
+
+  /// Parses duration strings like "1 hr", "2.5 hrs", "3hrs", "90 mins" into minutes.
+  static int parseDurationMinutes(String duration) {
+    final lower = duration.toLowerCase().trim();
+    final match = RegExp(r'(\d+(?:\.\d+)?)').firstMatch(lower);
+    if (match == null) return booksSchedule.slotDurationMinutes;
+    final val = double.tryParse(match.group(1)!) ?? 2.0;
+    if (lower.contains('min')) {
+      return val.round().clamp(15, 720);
+    }
+    return (val * 60).round().clamp(15, 720);
+  }
+
+  /// Checks whether a time slot currently has an active (non-expired) 24h custom hold.
+  static bool hasActiveHoldForSlot({
+    required DateTime date,
+    required String timeSlot,
+  }) {
+    final targetTime = timeSlot.split('(').first.trim().toUpperCase();
+    return customHolds.any((hold) {
+      if (hold.isExpired) return false;
+      final sameDay = hold.date.year == date.year &&
+          hold.date.month == date.month &&
+          hold.date.day == date.day;
+      if (!sameDay) return false;
+      final holdTime = hold.timeSlot.split('(').first.trim().toUpperCase();
+      return holdTime == targetTime;
+    });
+  }
+
+  /// Computes the remaining factual open minutes on [date], accounting for
+  /// scheduled appointments, active 24h holds, and session buffers.
+  static int getRemainingOpenMinutes(DateTime date) {
+    if (isDateBlocked(date) || isPaused) return 0;
+
+    if (bookingMode == BookingMode.drops) {
+      final drop = currentBookDrop;
+      if (drop == null || drop.status == BookDropStatus.closed) return 0;
+      final dateOnly = DateTime(date.year, date.month, date.day);
+      final startOnly = DateTime(drop.startDate.year, drop.startDate.month, drop.startDate.day);
+      final endOnly = DateTime(drop.endDate.year, drop.endDate.month, drop.endDate.day);
+      if (dateOnly.isBefore(startOnly) || dateOnly.isAfter(endOnly)) return 0;
+      if (!drop.selectedDays.contains(date.day)) return 0;
+    } else {
+      if (!booksSchedule.isWorkingDay(date)) return 0;
+    }
+
+    final apts = getAppointmentsForDate(date);
+    final holds = customHolds.where((h) =>
+        !h.isExpired &&
+        h.date.year == date.year &&
+        h.date.month == date.month &&
+        h.date.day == date.day);
+
+    int busyMinutes = 0;
+    for (final apt in apts) {
+      busyMinutes += parseDurationMinutes(apt.duration) + booksSchedule.bufferDurationMinutes;
+    }
+    for (final hold in holds) {
+      busyMinutes += hold.durationMinutes + booksSchedule.bufferDurationMinutes;
+    }
+
+    final totalDayMinutes = (booksSchedule.endTime.hour * 60 + booksSchedule.endTime.minute) -
+        (booksSchedule.startTime.hour * 60 + booksSchedule.startTime.minute);
+    return (totalDayMinutes - busyMinutes).clamp(0, totalDayMinutes);
+  }
+
+  /// Calculates the visual capacity status for a given calendar date
+  static DayCapacityStatus getDayCapacityStatus(DateTime date) {
+    if (isDateBlocked(date)) {
+      return DayCapacityStatus.blocked;
+    }
+    if (isPaused) {
+      return DayCapacityStatus.closed;
+    }
+
+    if (bookingMode == BookingMode.drops) {
+      final drop = currentBookDrop;
+      if (drop == null || drop.status == BookDropStatus.closed) {
+        return DayCapacityStatus.closed;
+      }
+      final dateOnly = DateTime(date.year, date.month, date.day);
+      final startOnly = DateTime(drop.startDate.year, drop.startDate.month, drop.startDate.day);
+      final endOnly = DateTime(drop.endDate.year, drop.endDate.month, drop.endDate.day);
+      if (dateOnly.isBefore(startOnly) || dateOnly.isAfter(endOnly)) {
+        return DayCapacityStatus.closed;
+      }
+      if (!drop.selectedDays.contains(date.day)) {
+        return DayCapacityStatus.closed;
+      }
+    } else {
+      if (!booksSchedule.isWorkingDay(date)) {
+        return DayCapacityStatus.closed;
+      }
+    }
+
+    final remainingMinutes = getRemainingOpenMinutes(date);
+    final totalDayMinutes = (booksSchedule.endTime.hour * 60 + booksSchedule.endTime.minute) -
+        (booksSchedule.startTime.hour * 60 + booksSchedule.startTime.minute);
+    if (totalDayMinutes <= 0) return DayCapacityStatus.closed;
+
+    final busyMinutes = totalDayMinutes - remainingMinutes;
+    if (remainingMinutes <= 30) {
+      return DayCapacityStatus.full;
+    }
+    if (busyMinutes >= (totalDayMinutes * 0.4).toInt()) {
+      return DayCapacityStatus.filling;
+    }
+    return DayCapacityStatus.open;
+  }
+
   static List<WaitlistEntry> get waitlistEntries =>
       MockDataConfig.isEnabled ? _mockWaitlistEntries : liveWaitlistEntries;
 
@@ -683,6 +1142,17 @@ class ArtistDashboardRepository {
 
   /// Transitions books to completely open to the general public
   static void openBooksPublicly() {
+    if (MockDataConfig.isEnabled) {
+      _mockIsPaused = false;
+      if (_mockBookingMode == BookingMode.drops && _mockBookDrop != null) {
+        _mockBookDrop = _mockBookDrop!.copyWith(status: BookDropStatus.open);
+      }
+    } else {
+      _liveIsPaused = false;
+      if (_liveBookingMode == BookingMode.drops && _liveBookDrop != null) {
+        _liveBookDrop = _liveBookDrop!.copyWith(status: BookDropStatus.open);
+      }
+    }
     booksSchedule = booksSchedule.copyWith(
       isBooksOpen: true,
       isEarlyAccessOnly: false,
@@ -699,6 +1169,17 @@ class ArtistDashboardRepository {
 
   /// Closes books
   static void closeBooks() {
+    if (MockDataConfig.isEnabled) {
+      _mockIsPaused = false;
+      if (_mockBookingMode == BookingMode.drops && _mockBookDrop != null) {
+        _mockBookDrop = _mockBookDrop!.copyWith(status: BookDropStatus.closed);
+      }
+    } else {
+      _liveIsPaused = false;
+      if (_liveBookingMode == BookingMode.drops && _liveBookDrop != null) {
+        _liveBookDrop = _liveBookDrop!.copyWith(status: BookDropStatus.closed);
+      }
+    }
     booksSchedule = booksSchedule.copyWith(
       isBooksOpen: false,
       isEarlyAccessOnly: false,
@@ -1038,6 +1519,41 @@ class ArtistDashboardRepository {
       acceptTouchUps: true,
       locationNote: '',
     );
+    _mockBookingMode = BookingMode.alwaysOpen;
+    _liveBookingMode = BookingMode.alwaysOpen;
+    _mockIsPaused = false;
+    _liveIsPaused = false;
+    _blockedDates.clear();
+    _mockBookDrop = BookDrop(
+      id: 'drop_dec_2026',
+      title: 'December Booking Drop',
+      startDate: DateTime(2026, 12, 1),
+      endDate: DateTime(2026, 12, 31),
+      status: BookDropStatus.open,
+      selectedDays: const {1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 15, 16, 17, 18, 19},
+      acceptFlash: true,
+      acceptCustom: true,
+      acceptTouchUps: true,
+      requestCap: 25,
+      requestCount: 14,
+      earlyAccessHours: 24,
+    );
+    _liveBookDrop = null;
+    _mockCustomHolds = [
+      CustomHold(
+        id: 'hold_dragon_1',
+        requestId: 'req_dragon_sarah',
+        clientName: 'Sarah M.',
+        date: DateTime(2026, 12, 4),
+        timeSlot: '2:00 PM',
+        durationMinutes: 180,
+        estimatedPrice: 450,
+        deposit: 80,
+        createdAt: DateTime.now().subtract(const Duration(hours: 8)),
+        expiresAt: DateTime.now().add(const Duration(hours: 16)),
+      ),
+    ];
+    _liveCustomHolds = [];
     BookingSyncService.resetSyncState();
     notifyPendingRequestsChanged();
   }
