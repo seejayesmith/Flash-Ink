@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 /// Deposit-Gated Direct Messaging Service.
 ///
@@ -78,5 +81,77 @@ class ChatService {
       'text': trimmed,
       'createdAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  /// Uploads an image or file attachment for [threadId] to Firebase Storage
+  /// under `chat_attachments/{threadId}/{timestamp}_{sanitizedName}` and
+  /// returns its download URL.
+  static Future<String> uploadChatAttachment({
+    required String threadId,
+    required Uint8List bytes,
+    required String fileName,
+    String? contentType,
+    String? senderId,
+    FirebaseStorage? storage,
+  }) async {
+    var effectiveSenderId = senderId;
+    if (effectiveSenderId == null || effectiveSenderId.isEmpty) {
+      try {
+        effectiveSenderId = FirebaseAuth.instance.currentUser?.uid;
+      } catch (_) {}
+    }
+
+    final resolvedStorage = storage ?? FirebaseStorage.instance;
+    final sanitizedName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    final storagePath =
+        'chat_attachments/$threadId/${DateTime.now().millisecondsSinceEpoch}_$sanitizedName';
+    final ref = resolvedStorage.ref().child(storagePath);
+    final metadata = SettableMetadata(
+      contentType: contentType ?? inferMimeType(fileName),
+      customMetadata: (effectiveSenderId != null && effectiveSenderId.isNotEmpty)
+          ? {'senderId': effectiveSenderId}
+          : null,
+    );
+    await ref.putData(bytes, metadata);
+    return ref.getDownloadURL();
+  }
+
+  /// Uploads a custom request reference image for [userId] to Firebase Storage
+  /// under `custom_requests/{userId}/{timestamp}_{sanitizedName}` and returns
+  /// its download URL.
+  static Future<String> uploadCustomRequestImage({
+    required String userId,
+    required Uint8List bytes,
+    required String fileName,
+    String? contentType,
+    FirebaseStorage? storage,
+  }) async {
+    final resolvedStorage = storage ?? FirebaseStorage.instance;
+    final sanitizedName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    final storagePath =
+        'custom_requests/$userId/${DateTime.now().millisecondsSinceEpoch}_$sanitizedName';
+    final ref = resolvedStorage.ref().child(storagePath);
+    final metadata = SettableMetadata(
+      contentType: contentType ?? inferMimeType(fileName),
+    );
+    await ref.putData(bytes, metadata);
+    return ref.getDownloadURL();
+  }
+
+  /// Infers a MIME type from [fileName] for Firebase Storage metadata and rules.
+  static String inferMimeType(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    if (lower.endsWith('.heic')) return 'image/heic';
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.txt')) return 'text/plain';
+    if (lower.endsWith('.doc')) return 'application/msword';
+    if (lower.endsWith('.docx')) {
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    }
+    return 'application/octet-stream';
   }
 }

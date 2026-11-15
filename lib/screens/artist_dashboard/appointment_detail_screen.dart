@@ -3,9 +3,12 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../models/booking.dart';
 import '../../theme/app_buttons.dart';
+import '../../theme/app_radius.dart';
+import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/pinned_bottom_action_scaffold.dart';
+import '../../widgets/user_avatar.dart';
 
 /// Full-screen view presenting comprehensive appointment details,
 /// including interactive Reschedule and Cancellation flows.
@@ -42,8 +45,9 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
     final List<DateTime> days = [];
     DateTime cursor = _appointment.scheduledDate ?? DateTime.now().add(const Duration(days: 1));
     int guard = 0;
-    while (days.length < 6 && guard < 28) {
-      if (ArtistDashboardRepository.booksSchedule.isWorkingDay(cursor)) {
+    while (days.length < 6 && guard < 45) {
+      if (ArtistDashboardRepository.booksSchedule.isWorkingDay(cursor) &&
+          !ArtistDashboardRepository.isClosedByWeeklyCap(cursor)) {
         days.add(DateTime(cursor.year, cursor.month, cursor.day));
       }
       cursor = cursor.add(const Duration(days: 1));
@@ -70,14 +74,14 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF1A1C1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
+            return AdaptiveGlassContainer.bottomSheet(
+              glassEnabled: false,
+              androidSurfaceColor: const Color(0xFF1A1C1E),
+              topRadius: AppRadius.radiusSheet,
               padding: EdgeInsets.only(
                 left: 20,
                 right: 20,
@@ -219,12 +223,13 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
   Future<void> _openCancelConfirmationSheet() async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF1A1C1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return Padding(
+        return AdaptiveGlassContainer.bottomSheet(
+          glassEnabled: false,
+          androidSurfaceColor: const Color(0xFF1A1C1E),
+          topRadius: AppRadius.radiusSheet,
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -431,20 +436,12 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
               ),
               child: Row(
                 children: [
-                  CircleAvatar(
+                  UserAvatar(
+                    imageUrl: _appointment.clientAvatar,
+                    displayName: _appointment.clientName,
                     radius: 24,
-                    backgroundColor: const Color(0xFF262929),
-                    child: Center(
-                      child: Text(
-                        _appointment.clientName.isNotEmpty ? _appointment.clientName[0] : 'C',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFFEEC200),
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                    fallbackInitial: 'C',
+                    initialFontSize: 20,
                   ),
                   const SizedBox(width: 14),
                   Expanded(

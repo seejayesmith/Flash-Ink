@@ -2,6 +2,12 @@ import * as crypto from 'crypto';
 import * as admin from 'firebase-admin';
 import { defineSecret } from 'firebase-functions/params';
 import { onCall, HttpsError, onRequest } from 'firebase-functions/v2/https';
+import {
+  onDocumentCreated,
+  onDocumentUpdated,
+  onDocumentWritten,
+} from 'firebase-functions/v2/firestore';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import Stripe from 'stripe';
 
 admin.initializeApp();
@@ -305,6 +311,26 @@ export const stripeConnectWebhook = onRequest(
           participants: [clientId, artistId],
           status: 'active',
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      // Enqueue a booking confirmation notification for the artist
+      const notifId = `notif_deposit_${bookingId}`;
+      const notifRef = db.collection('notifications').doc(notifId);
+      batch.set(
+        notifRef,
+        {
+          id: notifId,
+          senderId: clientId,
+          recipientId: artistId,
+          category: 'booking_confirmed',
+          type: 'booking_confirmed',
+          title: 'Deposit Confirmed',
+          body: 'A collector confirmed their flash deposit.',
+          message: 'A collector confirmed their flash deposit.',
+          appointmentId: bookingId,
+          createdAt: new Date().toISOString(),
         },
         { merge: true }
       );
@@ -621,3 +647,691 @@ export const verifyRecoveryOtp = onCall(async (request) => {
       );
   }
 });
+
+const isNotificationCategoryEnabled = (
+  category: string,
+  prefs?: Record<string, unknown>
+): boolean => {
+  if (!prefs) return true;
+  switch (category) {
+    case 'flash_drop':
+      return prefs.flashDropAlerts !== false;
+    case 'custom_request':
+    case 'booking_request':
+      return prefs.bookingAlerts !== false;
+    case 'client_reminder':
+      return prefs.bookingReminders !== false;
+    case 'artist_reminder':
+      return prefs.reminderAlerts !== false;
+    case 'reminder':
+      return prefs.bookingReminders !== false && prefs.reminderAlerts !== false;
+    case 'artist_message':
+      return prefs.artistMessages !== false;
+    case 'client_message':
+      return prefs.clientMessages !== false;
+    case 'direct_message':
+      return prefs.artistMessages !== false && prefs.clientMessages !== false;
+    default:
+      return true;
+  }
+};
+
+/**
+ * 6. Firestore Trigger: Dispatch Push Notifications via FCM
+ *
+ * Fires whenever a document is created in `notifications/{notificationId}`,
+ * checks the recipient's `notificationPreferences`, sends a multicast FCM push
+ * across all registered `fcmTokens`, and prunes invalid/expired tokens.
+ */
+export const dispatchPushNotification = onDocumentCreated(
+  'notifications/{notificationId}',
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+
+    const payload = snap.data() as Record<string, unknown>;
+    const recipientId =
+      typeof payload.recipientId === 'string' ? payload.recipientId.trim() : '';
+    if (!recipientId) return;
+
+    const senderId =
+      typeof payload.senderId === 'string' ? payload.senderId.trim() : '';
+    const title =
+      typeof payload.title === 'string' && payload.title.trim().length > 0
+        ? payload.title.trim()
+        : 'Flash.Ink';
+    const body =
+      typeof payload.body === 'string' && payload.body.trim().length > 0
+        ? payload.body.trim()
+        : typeof payload.message === 'string'
+          ? payload.message.trim()
+          : '';
+    const category =
+      typeof payload.category === 'string' ? payload.category.trim() : 'general';
+    const appointmentId =
+      typeof payload.appointmentId === 'string'
+        ? payload.appointmentId.trim()
+        : '';
+    const threadId =
+      typeof payload.threadId === 'string' ? payload.threadId.trim() : '';
+    const artistId =
+      typeof payload.artistId === 'string' ? payload.artistId.trim() : '';
+
+    const userRef = db.collection('users').doc(recipientId);
+    const userSnap = await userRef.get();
+    const userData = userSnap.data() as Record<string, unknown> | undefined;
+
+    const prefs =
+      userData?.notificationPreferences &&
+      typeof userData.notificationPreferences === 'object'
+        ? (userData.notificationPreferences as Record<string, unknown>)
+        : undefined;
+
+    if (!isNotificationCategoryEnabled(category, prefs)) {
+      await snap.ref.set(
+        { deliveryStatus: 'skipped_preference' },
+        { merge: true }
+      );
+      return;
+    }
+
+    const rawTokens = Array.isArray(userData?.fcmTokens)
+      ? userData.fcmTokens
+      : [];
+    const tokens = rawTokens
+      .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+      .map((t) => t.trim());
+
+    if (tokens.length === 0) {
+      await snap.ref.set({ deliveryStatus: 'no_tokens' }, { merge: true });
+      return;
+    }
+
+    const response = await admin.messaging().sendEachForMulticast({
+      tokens,
+      notification: { title, body },
+      data: {
+        notificationId: event.params.notificationId,
+        category,
+        senderId,
+        ...(appointmentId ? { appointmentId } : {}),
+        ...(threadId ? { threadId } : {}),
+        ...(artistId ? { artistId } : {}),
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'flash_ink_high_importance_channel',
+        },
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: 'default',
+            badge: 1,
+          },
+        },
+      },
+    });
+
+    const invalidTokens: string[] = [];
+    response.responses.forEach((res, idx) => {
+      if (!res.success && res.error) {
+        const code = res.error.code;
+        if (
+          code === 'messaging/registration-token-not-registered' ||
+          code === 'messaging/invalid-registration-token'
+        ) {
+          invalidTokens.push(tokens[idx]);
+        }
+      }
+    });
+
+    if (invalidTokens.length > 0) {
+      await userRef.update({
+        fcmTokens: admin.firestore.FieldValue.arrayRemove(...invalidTokens),
+      });
+    }
+
+    await snap.ref.set(
+      {
+        deliveryStatus: 'sent',
+        successCount: response.successCount,
+        failureCount: response.failureCount,
+        deliveredAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+);
+
+/**
+ * 7. Firestore Trigger: Direct Message Push Producer
+ *
+ * Fires when a new message is written under `chats/{threadId}/messages/{messageId}`
+ * and creates a `notifications` document for the other participant(s).
+ */
+export const onChatMessageCreated = onDocumentCreated(
+  'chats/{threadId}/messages/{messageId}',
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+
+    const msgData = snap.data() as Record<string, unknown>;
+    const senderId =
+      typeof msgData.senderId === 'string' ? msgData.senderId.trim() : '';
+    if (!senderId) return;
+
+    const senderName =
+      typeof msgData.senderName === 'string' ? msgData.senderName.trim() : '';
+    const text = typeof msgData.text === 'string' ? msgData.text.trim() : '';
+    const msgType = typeof msgData.type === 'string' ? msgData.type.trim() : 'text';
+    const attachmentName =
+      typeof msgData.attachmentName === 'string'
+        ? msgData.attachmentName.trim()
+        : '';
+
+    const threadId = event.params.threadId;
+    const threadSnap = await db.collection('chats').doc(threadId).get();
+    if (!threadSnap.exists) return;
+
+    const threadData = (threadSnap.data() || {}) as Record<string, unknown>;
+    const artistId =
+      typeof threadData.artistId === 'string' ? threadData.artistId.trim() : '';
+    const clientId =
+      typeof threadData.clientId === 'string' ? threadData.clientId.trim() : '';
+    const artistName =
+      typeof threadData.artistName === 'string'
+        ? threadData.artistName.trim()
+        : '';
+    const clientName =
+      typeof threadData.clientName === 'string'
+        ? threadData.clientName.trim()
+        : '';
+    const bookingId =
+      typeof threadData.bookingId === 'string'
+        ? threadData.bookingId.trim()
+        : '';
+
+    const rawParticipants = Array.isArray(threadData.participants)
+      ? threadData.participants
+      : [];
+    const recipientIds = new Set<string>();
+
+    for (const p of rawParticipants) {
+      if (typeof p === 'string' && p.trim().length > 0 && p.trim() !== senderId) {
+        recipientIds.add(p.trim());
+      }
+    }
+
+    if (recipientIds.size === 0) {
+      const fallbackRecipient = senderId === artistId ? clientId : artistId;
+      if (fallbackRecipient && fallbackRecipient !== senderId) {
+        recipientIds.add(fallbackRecipient);
+      }
+    }
+
+    if (recipientIds.size === 0) return;
+
+    const nowIso = new Date().toISOString();
+    const batch = db.batch();
+
+    for (const recipientId of recipientIds) {
+      const category =
+        artistId && recipientId === artistId
+          ? 'client_message'
+          : 'artist_message';
+      const displaySender =
+        senderName ||
+        (senderId === artistId ? artistName : clientName) ||
+        'Flash.Ink';
+      const attachmentFallback =
+        msgType === 'image'
+          ? 'Sent an image.'
+          : msgType === 'file'
+            ? attachmentName
+              ? `Sent a file: ${attachmentName}`
+              : 'Sent a file.'
+            : 'Sent a new message.';
+      const body = text || attachmentFallback;
+      const notifId = `notif_msg_${event.params.messageId}_${recipientId}`;
+
+      batch.set(
+        db.collection('notifications').doc(notifId),
+        {
+          id: notifId,
+          senderId,
+          recipientId,
+          category,
+          type: category,
+          title: `New message from ${displaySender}`,
+          body,
+          message: body,
+          threadId,
+          ...(bookingId ? { appointmentId: bookingId } : {}),
+          createdAt: nowIso,
+        },
+        { merge: true }
+      );
+    }
+
+    await batch.commit();
+  }
+);
+
+/**
+ * 8. Firestore Trigger: Flash Drop Follower & Waitlist Alerts
+ *
+ * Fires when an artist document updates, detects newly added unclaimed flash pieces,
+ * and creates `flash_drop` notifications for followers and active waitlist contacts.
+ */
+export const onArtistFlashDrop = onDocumentUpdated(
+  'artists/{artistId}',
+  async (event) => {
+    const change = event.data;
+    if (!change) return;
+
+    const beforeData = (change.before.data() || {}) as Record<string, unknown>;
+    const afterData = (change.after.data() || {}) as Record<string, unknown>;
+
+    const beforeFlash = Array.isArray(beforeData.flashArtworks)
+      ? beforeData.flashArtworks
+      : [];
+    const afterFlash = Array.isArray(afterData.flashArtworks)
+      ? afterData.flashArtworks
+      : [];
+
+    const beforeIds = new Set<string>();
+    for (const item of beforeFlash) {
+      if (item && typeof item === 'object') {
+        const id = (item as Record<string, unknown>).id;
+        if (typeof id === 'string' && id.trim().length > 0) {
+          beforeIds.add(id.trim());
+        }
+      }
+    }
+
+    const newItems: Array<{ id: string; title: string }> = [];
+    for (const item of afterFlash) {
+      if (item && typeof item === 'object') {
+        const record = item as Record<string, unknown>;
+        const id = typeof record.id === 'string' ? record.id.trim() : '';
+        const isClaimed = record.isClaimed === true;
+        if (id && !beforeIds.has(id) && !isClaimed) {
+          const title =
+            typeof record.title === 'string' && record.title.trim().length > 0
+              ? record.title.trim()
+              : 'New Flash Piece';
+          newItems.push({ id, title });
+        }
+      }
+    }
+
+    if (newItems.length === 0) return;
+
+    const artistId = event.params.artistId;
+    const recipientIds = new Set<string>();
+
+    const followersSnap = await db
+      .collection('users')
+      .where('followedArtistIds', 'array-contains', artistId)
+      .get();
+    for (const doc of followersSnap.docs) {
+      if (doc.id && doc.id !== artistId) {
+        recipientIds.add(doc.id);
+      }
+    }
+
+    const waitlistEntries = Array.isArray(afterData.waitlistEntries)
+      ? afterData.waitlistEntries
+      : [];
+    for (const entry of waitlistEntries) {
+      if (entry && typeof entry === 'object') {
+        const record = entry as Record<string, unknown>;
+        const flashUserId =
+          typeof record.flashUserId === 'string'
+            ? record.flashUserId.trim()
+            : '';
+        const status =
+          typeof record.status === 'string'
+            ? record.status.trim().toLowerCase()
+            : 'waiting';
+        if (
+          flashUserId &&
+          flashUserId !== artistId &&
+          status !== 'booked' &&
+          status !== 'archived'
+        ) {
+          recipientIds.add(flashUserId);
+        }
+      }
+    }
+
+    recipientIds.delete(artistId);
+    if (recipientIds.size === 0) return;
+
+    const artistName =
+      typeof afterData.name === 'string' && afterData.name.trim().length > 0
+        ? afterData.name.trim()
+        : 'An artist you follow';
+    const firstNew = newItems[0];
+    const body =
+      newItems.length > 1
+        ? `${firstNew.title} and ${newItems.length - 1} more new flash pieces are available to claim.`
+        : `${firstNew.title} is now available to claim.`;
+    const nowIso = new Date().toISOString();
+
+    const recipients = Array.from(recipientIds);
+    const chunkSize = 450;
+    for (let i = 0; i < recipients.length; i += chunkSize) {
+      const chunk = recipients.slice(i, i + chunkSize);
+      const batch = db.batch();
+      for (const recipientId of chunk) {
+        const notifId = `notif_flash_${artistId}_${firstNew.id}_${recipientId}`;
+        batch.set(
+          db.collection('notifications').doc(notifId),
+          {
+            id: notifId,
+            senderId: artistId,
+            recipientId,
+            artistId,
+            category: 'flash_drop',
+            type: 'flash_drop',
+            title: `New Flash Drop from ${artistName}`,
+            body,
+            message: body,
+            createdAt: nowIso,
+          },
+          { merge: true }
+        );
+      }
+      await batch.commit();
+    }
+  }
+);
+
+/**
+ * 9. Scheduled Function: Automated 24h & 2h Appointment Reminders
+ *
+ * Runs every 30 minutes to scan confirmed upcoming appointments and enqueue
+ * idempotent 24-hour and 2-hour reminder notifications for client & artist.
+ */
+export const dispatchAppointmentReminders = onSchedule(
+  'every 30 minutes',
+  async () => {
+    const snap = await db
+      .collection('appointments')
+      .where('status', '==', 'confirmed')
+      .get();
+
+    if (snap.empty) return;
+
+    const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+
+    const pendingWrites: Array<{
+      ref: admin.firestore.DocumentReference;
+      data: Record<string, unknown>;
+      merge: boolean;
+    }> = [];
+
+    for (const doc of snap.docs) {
+      const data = doc.data() as Record<string, unknown>;
+      const scheduledStr =
+        typeof data.scheduledDate === 'string' ? data.scheduledDate.trim() : '';
+      if (!scheduledStr) continue;
+
+      const scheduledMs = Date.parse(scheduledStr);
+      if (Number.isNaN(scheduledMs)) continue;
+
+      const hoursUntil = (scheduledMs - nowMs) / (1000 * 60 * 60);
+      if (hoursUntil <= 0 || hoursUntil > 24) continue;
+
+      const clientId =
+        typeof data.clientId === 'string' ? data.clientId.trim() : '';
+      const artistId =
+        typeof data.artistId === 'string' ? data.artistId.trim() : '';
+      const clientName =
+        typeof data.clientName === 'string' && data.clientName.trim().length > 0
+          ? data.clientName.trim()
+          : 'your client';
+      const serviceType =
+        typeof data.serviceType === 'string' && data.serviceType.trim().length > 0
+          ? data.serviceType.trim()
+          : 'tattoo session';
+      const timeLabel =
+        typeof data.time === 'string' && data.time.trim().length > 0
+          ? ` at ${data.time.trim()}`
+          : '';
+      const dateLabel =
+        typeof data.date === 'string' && data.date.trim().length > 0
+          ? ` on ${data.date.trim()}`
+          : '';
+
+      const aptId = doc.id;
+
+      if (hoursUntil > 2 && hoursUntil <= 24 && data.reminder24hSent !== true) {
+        if (clientId) {
+          const notifId = `notif_rem24_client_${aptId}`;
+          const clientBody = `Your ${serviceType} session is coming up${dateLabel}${timeLabel}.`;
+          pendingWrites.push({
+            ref: db.collection('notifications').doc(notifId),
+            data: {
+              id: notifId,
+              senderId: artistId || clientId,
+              recipientId: clientId,
+              category: 'client_reminder',
+              type: 'client_reminder',
+              title: 'Upcoming Session Tomorrow',
+              body: clientBody,
+              message: clientBody,
+              appointmentId: aptId,
+              createdAt: nowIso,
+            },
+            merge: true,
+          });
+        }
+        if (artistId) {
+          const notifId = `notif_rem24_artist_${aptId}`;
+          const artistBody = `${serviceType} with ${clientName} is scheduled${dateLabel}${timeLabel}.`;
+          pendingWrites.push({
+            ref: db.collection('notifications').doc(notifId),
+            data: {
+              id: notifId,
+              senderId: clientId || artistId,
+              recipientId: artistId,
+              category: 'artist_reminder',
+              type: 'artist_reminder',
+              title: 'Upcoming Session Tomorrow',
+              body: artistBody,
+              message: artistBody,
+              appointmentId: aptId,
+              createdAt: nowIso,
+            },
+            merge: true,
+          });
+        }
+        pendingWrites.push({
+          ref: doc.ref,
+          data: { reminder24hSent: true },
+          merge: true,
+        });
+      } else if (
+        hoursUntil > 0 &&
+        hoursUntil <= 2 &&
+        data.reminder2hSent !== true
+      ) {
+        if (clientId) {
+          const notifId = `notif_rem2_client_${aptId}`;
+          const clientBody = `Your ${serviceType} session begins soon${timeLabel}.`;
+          pendingWrites.push({
+            ref: db.collection('notifications').doc(notifId),
+            data: {
+              id: notifId,
+              senderId: artistId || clientId,
+              recipientId: clientId,
+              category: 'client_reminder',
+              type: 'client_reminder',
+              title: 'Session Starting in 2 Hours',
+              body: clientBody,
+              message: clientBody,
+              appointmentId: aptId,
+              createdAt: nowIso,
+            },
+            merge: true,
+          });
+        }
+        if (artistId) {
+          const notifId = `notif_rem2_artist_${aptId}`;
+          const artistBody = `${serviceType} with ${clientName} begins soon${timeLabel}.`;
+          pendingWrites.push({
+            ref: db.collection('notifications').doc(notifId),
+            data: {
+              id: notifId,
+              senderId: clientId || artistId,
+              recipientId: artistId,
+              category: 'artist_reminder',
+              type: 'artist_reminder',
+              title: 'Session Starting in 2 Hours',
+              body: artistBody,
+              message: artistBody,
+              appointmentId: aptId,
+              createdAt: nowIso,
+            },
+            merge: true,
+          });
+        }
+        pendingWrites.push({
+          ref: doc.ref,
+          data: { reminder2hSent: true },
+          merge: true,
+        });
+      }
+    }
+
+    const chunkSize = 450;
+    for (let i = 0; i < pendingWrites.length; i += chunkSize) {
+      const chunk = pendingWrites.slice(i, i + chunkSize);
+      const batch = db.batch();
+      for (const write of chunk) {
+        batch.set(write.ref, write.data, { merge: write.merge });
+      }
+      await batch.commit();
+    }
+  }
+);
+
+interface AnonymizedSlotEntry {
+  date: string;
+  time: string;
+}
+
+const EXCLUDED_APPOINTMENT_STATUSES = new Set([
+  'cancelled',
+  'canceled',
+  'declined',
+  'passed',
+]);
+
+/**
+ * Extracts `YYYY-MM-DD` directly from an ISO-8601 timestamp string or Firestore
+ * Timestamp without timezone day-shift side effects.
+ */
+function extractDateKey(raw: unknown): string | null {
+  if (typeof raw === 'string') {
+    const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : null;
+  }
+  if (raw && typeof (raw as admin.firestore.Timestamp).toDate === 'function') {
+    const dt = (raw as admin.firestore.Timestamp).toDate();
+    return dt.toISOString().slice(0, 10);
+  }
+  return null;
+}
+
+/**
+ * Recomputes anonymized `bookedSlots` (`[{date, time}]`) for an artist from
+ * `/appointments` so public booking clients can enforce slot occupancy,
+ * empty-day lead time, and Sun–Sat weekly caps without reading private docs.
+ */
+async function recomputeArtistBookedSlots(artistId: string): Promise<void> {
+  const cleanArtistId = artistId.trim();
+  if (!cleanArtistId) return;
+
+  // Keep the trailing 7 days so appointments earlier in the current Sun–Sat week
+  // remain counted against maxWorkingDaysPerWeek.
+  const cutoffDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const cutoffKey = cutoffDate.toISOString().slice(0, 10);
+
+  const snap = await db
+    .collection('appointments')
+    .where('artistId', '==', cleanArtistId)
+    .get();
+
+  const deduped = new Map<string, AnonymizedSlotEntry>();
+  for (const doc of snap.docs) {
+    const data = doc.data();
+    const status = String(data.status || 'confirmed').trim().toLowerCase();
+    if (EXCLUDED_APPOINTMENT_STATUSES.has(status)) continue;
+
+    const dateKey = extractDateKey(data.scheduledDate);
+    if (!dateKey || dateKey < cutoffKey) continue;
+
+    const rawTime = String(data.time || '').split('(')[0].trim();
+    if (!rawTime) continue;
+
+    const mapKey = `${dateKey}__${rawTime.toUpperCase()}`;
+    if (!deduped.has(mapKey)) {
+      deduped.set(mapKey, { date: dateKey, time: rawTime });
+    }
+  }
+
+  const bookedSlots = Array.from(deduped.values()).sort((a, b) =>
+    a.date === b.date
+      ? a.time.localeCompare(b.time)
+      : a.date.localeCompare(b.date)
+  );
+  const nowIso = new Date().toISOString();
+
+  await Promise.all([
+    db.collection('artist_schedules').doc(cleanArtistId).set(
+      {
+        artistId: cleanArtistId,
+        bookedSlots,
+        updatedAt: nowIso,
+      },
+      { merge: true }
+    ),
+    db.collection('artists').doc(cleanArtistId).set(
+      {
+        booksSchedule: { bookedSlots },
+        updatedAt: nowIso,
+      },
+      { merge: true }
+    ),
+  ]);
+}
+
+/**
+ * 9. Firestore Trigger: Sync Anonymized Booked Slots on Appointment Write
+ *
+ * Keeps `artist_schedules/{artistId}.bookedSlots` up to date on create,
+ * reschedule, cancel, or deletion without exposing private `/appointments` PII.
+ */
+export const syncArtistBookedSlotsOnAppointment = onDocumentWritten(
+  'appointments/{appointmentId}',
+  async (event) => {
+    const beforeArtist = String(event.data?.before?.data()?.artistId || '').trim();
+    const afterArtist = String(event.data?.after?.data()?.artistId || '').trim();
+    const targetArtists = new Set<string>(
+      [beforeArtist, afterArtist].filter((id) => id.length > 0)
+    );
+    if (targetArtists.size === 0) return;
+
+    await Promise.all(
+      Array.from(targetArtists).map((artistId) =>
+        recomputeArtistBookedSlots(artistId)
+      )
+    );
+  }
+);

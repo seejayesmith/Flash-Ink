@@ -25,6 +25,48 @@ import '../widgets/skip_pill_button.dart';
 import '../widgets/fade_page_route.dart';
 import '../widgets/username_input_formatter.dart';
 import 'aesthetics_selection_screen.dart';
+import 'client_backup_contact_screen.dart';
+
+ClientBackupContactMode? _resolveBackupContactMode(AuthService authService) {
+  final user = authService.currentUser;
+  if (user == null || user is DevMockUser) return null;
+
+  try {
+    if (user.isAnonymous) return null;
+  } catch (_) {
+    return null;
+  }
+
+  if (AuthService.isOAuthUser(user)) return null;
+
+  List<String> providerIds = const [];
+  try {
+    providerIds = user.providerData
+        .map((info) => info.providerId)
+        .where((id) => id.isNotEmpty)
+        .toList();
+  } catch (_) {
+    return null;
+  }
+  if (providerIds.isEmpty) return null;
+
+  String email = '';
+  String phone = '';
+  try {
+    email = user.email?.trim() ?? '';
+  } catch (_) {}
+  try {
+    phone = user.phoneNumber?.trim() ?? '';
+  } catch (_) {}
+
+  if (providerIds.contains('phone') && email.isEmpty) {
+    return ClientBackupContactMode.email;
+  }
+  if (providerIds.contains('password') && phone.isEmpty) {
+    return ClientBackupContactMode.phone;
+  }
+  return null;
+}
 
 class ProfileSetupScreen extends StatefulWidget {
   final AuthService? authService;
@@ -191,13 +233,19 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       }
 
       if (mounted) {
+        final backupMode = _resolveBackupContactMode(_authService);
         Navigator.pushReplacement(
           context,
           FadePageRoute(
-            builder: (_) => AestheticsSelectionScreen(
-              isGuest: false,
-              authService: _authService,
-            ),
+            builder: (_) => backupMode != null
+                ? ClientBackupContactScreen(
+                    mode: backupMode,
+                    authService: _authService,
+                  )
+                : AestheticsSelectionScreen(
+                    isGuest: false,
+                    authService: _authService,
+                  ),
           ),
         );
       }

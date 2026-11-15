@@ -5,8 +5,8 @@ import '../../models/artist_dashboard_data.dart';
 import '../../models/waitlist_entry.dart';
 import '../../theme/app_radius.dart';
 import '../../widgets/adaptive_glass_container.dart';
-import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
+import '../../widgets/user_avatar.dart';
 
 /// Modal bottom sheet providing the artist with a real-time outreach checklist
 /// for non-app friends & family, and confirming in-app delivery for registered Flash users.
@@ -337,16 +337,12 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
         children: [
           Row(
             children: [
-              CircleAvatar(
+              UserAvatar(
+                imageUrl: entry.avatarUrl,
+                displayName: entry.clientName,
                 radius: 18,
                 backgroundColor: const Color(0xFF2E3333),
-                child: Text(
-                  entry.clientName.isNotEmpty ? entry.clientName[0] : '?',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFFEEC200),
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                fallbackInitial: '?',
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -481,25 +477,13 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
       ),
       child: Row(
         children: [
-          CircleAvatar(
+          UserAvatar(
+            imageUrl: entry.avatarUrl,
+            displayName: entry.clientName,
             radius: 17,
             backgroundColor: const Color(0xFF2E3333),
-            child: ClipOval(
-              child: entry.avatarUrl != null
-                  ? FlashImage(
-                      urlOrPath: entry.avatarUrl!,
-                      width: 34,
-                      height: 34,
-                      fit: BoxFit.cover,
-                    )
-                  : Text(
-                      entry.clientName[0],
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFF38BDF8),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-            ),
+            foregroundColor: const Color(0xFF38BDF8),
+            fallbackInitial: '?',
           ),
           const SizedBox(width: 10),
           Expanded(

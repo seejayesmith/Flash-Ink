@@ -10,11 +10,13 @@ import '../../config/dev_config.dart';
 import '../../providers/app_providers.dart';
 import '../../repositories/artist_repository.dart';
 import '../../services/auth_service.dart';
+import '../../services/notification_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/flash_switch.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
+import '../../widgets/inline_email_verification_tile.dart';
 import '../../widgets/inline_phone_verification_tile.dart';
 import '../../widgets/photo_source_bottom_sheet.dart';
 import 'artist_edit_profile_screen.dart';
@@ -89,6 +91,8 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
   late String _bio;
   late String _location;
   String _email = 'artist@flash.ink';
+  bool _emailVerified = false;
+  String? _pendingBackupEmail;
   String _phoneNumber = '+1 (555) 345-6789';
   bool _phoneVerified = true;
   String? _photoUrl;
@@ -97,6 +101,26 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
   bool _bookingAlerts = true;
   bool _reminderAlerts = true;
   bool _clientMessages = true;
+
+  Future<void> _updateNotificationPreference(String key, bool value) async {
+    final user = _authService.currentUser;
+    if (user == null || user.uid.isEmpty) return;
+    FirebaseFirestore? injectedFirestore = widget.firestore;
+    if (injectedFirestore == null && mounted) {
+      try {
+        injectedFirestore = ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(firebaseFirestoreProvider);
+      } catch (_) {}
+    }
+    await NotificationService.updatePreference(
+      user.uid,
+      key: key,
+      value: value,
+      firestore: injectedFirestore,
+    );
+  }
 
   @override
   void initState() {
@@ -216,11 +240,35 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
               _displayName = user.displayName!;
             }
           } catch (_) {}
+          String? authEmail;
           try {
-            if (user.email != null && user.email!.isNotEmpty) {
-              _email = user.email!;
+            authEmail = user.email;
+          } catch (_) {}
+          bool authEmailVerified = false;
+          try {
+            authEmailVerified = user.emailVerified;
+          } catch (_) {}
+          bool isPhoneAuth = false;
+          try {
+            final pn = user.phoneNumber;
+            if (pn != null && pn.isNotEmpty) {
+              isPhoneAuth = true;
             }
           } catch (_) {}
+          if (!isPhoneAuth) {
+            try {
+              isPhoneAuth = user.providerData.any(
+                (info) => info.providerId == 'phone',
+              );
+            } catch (_) {}
+          }
+          if (authEmail != null && authEmail.isNotEmpty) {
+            _email = authEmail;
+            _emailVerified = authEmailVerified;
+          } else if (isPhoneAuth) {
+            _email = '';
+            _emailVerified = false;
+          }
           try {
             if (user.photoURL != null && user.photoURL!.isNotEmpty) {
               _photoUrl = user.photoURL;
@@ -293,6 +341,16 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
             if (privateData['phoneNumber'] != null && (privateData['phoneNumber'] as String).isNotEmpty) {
               _phoneNumber = privateData['phoneNumber'] as String;
             }
+            if (privateData['emailVerified'] is bool) {
+              _emailVerified = privateData['emailVerified'] as bool;
+            }
+            if (privateData['pendingBackupEmail'] is String &&
+                (privateData['pendingBackupEmail'] as String).isNotEmpty) {
+              _pendingBackupEmail = privateData['pendingBackupEmail'] as String;
+            } else if (privateData.containsKey('pendingBackupEmail') &&
+                privateData['pendingBackupEmail'] == null) {
+              _pendingBackupEmail = null;
+            }
           });
         }
 
@@ -316,8 +374,29 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
             if (uData['email'] != null && (uData['email'] as String).isNotEmpty && (_email.isEmpty || _email == 'artist@flash.ink')) {
               _email = uData['email'] as String;
             }
+            if (uData['emailVerified'] is bool) {
+              _emailVerified = uData['emailVerified'] as bool;
+            }
+            if (uData['pendingBackupEmail'] is String &&
+                (uData['pendingBackupEmail'] as String).isNotEmpty) {
+              _pendingBackupEmail = uData['pendingBackupEmail'] as String;
+            } else if (uData.containsKey('pendingBackupEmail') &&
+                uData['pendingBackupEmail'] == null &&
+                _pendingBackupEmail == null) {
+              _pendingBackupEmail = null;
+            }
             if (uData['phoneNumber'] != null && (uData['phoneNumber'] as String).isNotEmpty && (_phoneNumber.isEmpty || _phoneNumber == '+1 (555) 345-6789')) {
               _phoneNumber = uData['phoneNumber'] as String;
+            }
+            if (uData['notificationPreferences'] is Map) {
+              final prefs = NotificationPreferences.fromMap(
+                Map<String, dynamic>.from(
+                  uData['notificationPreferences'] as Map,
+                ),
+              );
+              _bookingAlerts = prefs.bookingAlerts;
+              _reminderAlerts = prefs.reminderAlerts;
+              _clientMessages = prefs.clientMessages;
             }
           });
         }
@@ -729,11 +808,25 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
                 onTap: _showEditProfileDialog,
               ),
               const Divider(color: AppTheme.darkBorder, height: 1),
-              _buildSettingsTile(
-                icon: Icons.email_outlined,
-                title: 'Email Address',
-                subtitle: _email,
-                trailing: const Icon(Icons.lock_outline, color: Color(0xFF6B7280), size: 16),
+              InlineEmailVerificationTile(
+                email: _email,
+                pendingEmail: _pendingBackupEmail,
+                emailVerified: _emailVerified,
+                authService: _authService,
+                firestore: _resolveFirestore(),
+                isArtist: true,
+                onVerificationLinkSent: (pendingEmail) {
+                  setState(() {
+                    _pendingBackupEmail = pendingEmail;
+                  });
+                },
+                onEmailVerified: (newEmail) {
+                  setState(() {
+                    _email = newEmail;
+                    _emailVerified = true;
+                    _pendingBackupEmail = null;
+                  });
+                },
               ),
               const Divider(color: AppTheme.darkBorder, height: 1),
               InlinePhoneVerificationTile(
@@ -762,7 +855,10 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
                 title: 'New Booking Requests',
                 subtitle: 'Notify immediately when clients request or claim flash',
                 value: _bookingAlerts,
-                onChanged: (val) => setState(() => _bookingAlerts = val),
+                onChanged: (val) {
+                  setState(() => _bookingAlerts = val);
+                  _updateNotificationPreference('bookingAlerts', val);
+                },
               ),
               const Divider(color: AppTheme.darkBorder, height: 1),
               _buildSwitchTile(
@@ -770,7 +866,10 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
                 title: 'Appointment Reminders',
                 subtitle: '24-hour and 2-hour session reminders with clients',
                 value: _reminderAlerts,
-                onChanged: (val) => setState(() => _reminderAlerts = val),
+                onChanged: (val) {
+                  setState(() => _reminderAlerts = val);
+                  _updateNotificationPreference('reminderAlerts', val);
+                },
               ),
               const Divider(color: AppTheme.darkBorder, height: 1),
               _buildSwitchTile(
@@ -778,7 +877,10 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
                 title: 'Client Messages',
                 subtitle: 'Alerts when clients send you inquiries or replies',
                 value: _clientMessages,
-                onChanged: (val) => setState(() => _clientMessages = val),
+                onChanged: (val) {
+                  setState(() => _clientMessages = val);
+                  _updateNotificationPreference('clientMessages', val);
+                },
               ),
             ]),
 

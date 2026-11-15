@@ -7,7 +7,6 @@ import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
 import 'adaptive_glass_container.dart';
 import 'fade_page_route.dart';
-import 'keyboard_collapse_button.dart';
 import 'social_auth_buttons.dart';
 
 /// Contextual trigger type for guest auth gating prompts.
@@ -216,27 +215,16 @@ class _GuestAuthPromptBottomSheetState extends State<GuestAuthPromptBottomSheet>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Top drag pill & keyboard collapse button
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 44,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF4D5252),
-                          borderRadius: BorderRadius.circular(AppRadius.dragHandle),
-                        ),
-                      ),
+                // Top drag pill
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4D5252),
+                      borderRadius: BorderRadius.circular(AppRadius.dragHandle),
                     ),
-                    const Align(
-                      alignment: Alignment.centerRight,
-                      child: KeyboardCollapseButton(
-                        padding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
                 AppGaps.gapLg,
 

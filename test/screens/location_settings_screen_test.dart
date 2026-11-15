@@ -8,6 +8,7 @@ import 'package:flash_ink/core/utils/distance_calculator.dart';
 import 'package:flash_ink/providers/app_providers.dart';
 import 'package:flash_ink/screens/location_settings_screen.dart';
 import 'package:flash_ink/services/location_service.dart';
+import 'package:flash_ink/widgets/flash_switch.dart';
 
 class FakeLocationPlatformDelegate implements LocationPlatformDelegate {
   bool serviceEnabled;
@@ -86,7 +87,7 @@ void main() {
   }
 
   group('LocationSettingsScreen Tests', () {
-    testWidgets('Renders app bar, title, back button, and privacy points', (tester) async {
+    testWidgets('Renders app bar, title, back button, and privacy points without redundant permission containers', (tester) async {
       final fake = FakeLocationPlatformDelegate(
         permission: LocationPermission.whileInUse,
       );
@@ -98,14 +99,20 @@ void main() {
       expect(find.text('Location Permissions'), findsOneWidget);
       expect(find.byKey(const Key('location_settings_back_button')), findsOneWidget);
 
-      // Verify privacy sections
+      // Verify redundant permission containers are removed
+      expect(find.text('Device Location Access'), findsNothing);
+      expect(find.text('SYSTEM PERMISSION'), findsNothing);
+      expect(find.byKey(const Key('location_permission_badge')), findsNothing);
+
+      // Verify remaining sections
+      expect(find.text('IN-APP PREFERENCES'), findsOneWidget);
       expect(find.text('HOW WE PROTECT YOUR PRIVACY'), findsOneWidget);
       expect(find.text('On-Demand Access Only'), findsOneWidget);
       expect(find.text('Zero Background Tracking'), findsOneWidget);
       expect(find.text('Strict Privacy'), findsOneWidget);
     });
 
-    testWidgets('Displays PERMISSION DENIED badge and request button when denied', (tester) async {
+    testWidgets('Toggle is off when denied and requests permission when tapped', (tester) async {
       final fake = FakeLocationPlatformDelegate(
         permission: LocationPermission.denied,
       );
@@ -113,12 +120,11 @@ void main() {
       await tester.pumpWidget(buildTestWidget(delegate: fake));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('location_permission_badge')), findsOneWidget);
-      expect(find.text('PERMISSION DENIED'), findsOneWidget);
-      expect(find.byKey(const Key('request_location_permission_button')), findsOneWidget);
-      expect(find.text('Allow Location Access'), findsOneWidget);
+      final switchFinder = find.byKey(const Key('use_precise_location_switch'));
+      expect(switchFinder, findsOneWidget);
+      expect(tester.widget<FlashSwitch>(switchFinder).value, isFalse);
 
-      // Tapping request permission button calls delegate
+      // Tapping switch requests permission and resolves location when granted
       fake.permission = LocationPermission.whileInUse;
       fake.mockLocationResult = const UserLocationResult(
         latitude: 45.5152,
@@ -127,15 +133,15 @@ void main() {
         state: 'OR',
       );
 
-      await tester.tap(find.byKey(const Key('request_location_permission_button')));
+      await tester.tap(switchFinder);
       await tester.pumpAndSettle();
 
       expect(fake.requestPermissionCount, 1);
-      expect(find.text('ALLOWED WHILE IN USE'), findsOneWidget);
+      expect(tester.widget<FlashSwitch>(switchFinder).value, isTrue);
       expect(find.text('Portland, OR'), findsWidgets);
     });
 
-    testWidgets('Displays PERMANENTLY DENIED badge and Open Device Settings button when deniedForever', (tester) async {
+    testWidgets('Toggle is off when deniedForever and opens app settings when tapped', (tester) async {
       final fake = FakeLocationPlatformDelegate(
         permission: LocationPermission.deniedForever,
       );
@@ -143,17 +149,17 @@ void main() {
       await tester.pumpWidget(buildTestWidget(delegate: fake));
       await tester.pumpAndSettle();
 
-      expect(find.text('PERMANENTLY DENIED'), findsOneWidget);
-      expect(find.byKey(const Key('open_device_settings_button')), findsOneWidget);
-      expect(find.text('Open Device Settings'), findsOneWidget);
+      final switchFinder = find.byKey(const Key('use_precise_location_switch'));
+      expect(switchFinder, findsOneWidget);
+      expect(tester.widget<FlashSwitch>(switchFinder).value, isFalse);
 
-      await tester.tap(find.byKey(const Key('open_device_settings_button')));
+      await tester.tap(switchFinder);
       await tester.pumpAndSettle();
 
       expect(fake.openAppSettingsCount, 1);
     });
 
-    testWidgets('Displays SERVICES DISABLED badge and Open Location Settings button when service is disabled', (tester) async {
+    testWidgets('Toggle is off when service is disabled and opens location settings when tapped', (tester) async {
       final fake = FakeLocationPlatformDelegate(
         serviceEnabled: false,
         permission: LocationPermission.whileInUse,
@@ -162,35 +168,17 @@ void main() {
       await tester.pumpWidget(buildTestWidget(delegate: fake));
       await tester.pumpAndSettle();
 
-      expect(find.text('SERVICES DISABLED'), findsOneWidget);
-      expect(find.byKey(const Key('open_location_settings_button')), findsOneWidget);
-      expect(find.text('Open Location Settings'), findsOneWidget);
+      final switchFinder = find.byKey(const Key('use_precise_location_switch'));
+      expect(switchFinder, findsOneWidget);
+      expect(tester.widget<FlashSwitch>(switchFinder).value, isFalse);
 
-      await tester.tap(find.byKey(const Key('open_location_settings_button')));
+      await tester.tap(switchFinder);
       await tester.pumpAndSettle();
 
       expect(fake.openLocationSettingsCount, 1);
     });
 
-    testWidgets('Displays ALLOWED WHILE IN USE when permission granted and opens device settings from header button', (tester) async {
-      final fake = FakeLocationPlatformDelegate(
-        permission: LocationPermission.whileInUse,
-      );
-
-      await tester.pumpWidget(buildTestWidget(delegate: fake));
-      await tester.pumpAndSettle();
-
-      expect(find.text('ALLOWED WHILE IN USE'), findsOneWidget);
-      expect(find.text('Granted: While using the app'), findsOneWidget);
-      expect(find.byKey(const Key('open_device_settings_button')), findsOneWidget);
-
-      await tester.tap(find.byKey(const Key('open_device_settings_button')));
-      await tester.pumpAndSettle();
-
-      expect(fake.openAppSettingsCount, 1);
-    });
-
-    testWidgets('Toggling use live GPS preference switch updates Riverpod state', (tester) async {
+    testWidgets('Toggle is on by default when granted and toggling updates Riverpod state', (tester) async {
       final fake = FakeLocationPlatformDelegate(
         permission: LocationPermission.whileInUse,
       );
@@ -210,18 +198,22 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      final switchFinder = find.byKey(const Key('use_precise_location_switch'));
+      expect(tester.widget<FlashSwitch>(switchFinder).value, isTrue);
       expect(capturedRef.read(useLiveLocationPreferenceProvider), isTrue);
 
       // Toggle switch off
-      await tester.tap(find.byKey(const Key('use_precise_location_switch')));
+      await tester.tap(switchFinder);
       await tester.pumpAndSettle();
 
+      expect(tester.widget<FlashSwitch>(switchFinder).value, isFalse);
       expect(capturedRef.read(useLiveLocationPreferenceProvider), isFalse);
 
       // Toggle switch back on
-      await tester.tap(find.byKey(const Key('use_precise_location_switch')));
+      await tester.tap(switchFinder);
       await tester.pumpAndSettle();
 
+      expect(tester.widget<FlashSwitch>(switchFinder).value, isTrue);
       expect(capturedRef.read(useLiveLocationPreferenceProvider), isTrue);
     });
 

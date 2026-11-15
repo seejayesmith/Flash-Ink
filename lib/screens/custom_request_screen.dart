@@ -2,10 +2,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import '../core/mock/mock_data_config.dart';
 import '../models/artist.dart';
 import '../models/artist_dashboard_data.dart';
 import '../services/booking_sync_service.dart';
+import '../services/chat_service.dart';
 import '../theme/app_buttons.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/flash_snack_bar.dart';
@@ -53,8 +55,29 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
   String _selectedSize = 'Medium (4"-7")';
 
   bool _requestSilentAppointment = false;
-  int _referencePhotoCount = 1;
+  final List<({Uint8List bytes, String name})> _referenceImages = [];
+  final _imagePicker = ImagePicker();
   bool _isSubmitting = false;
+
+  Future<void> _pickReferenceImage() async {
+    if (_referenceImages.length >= 3) return;
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 2048,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _referenceImages.add((bytes: bytes, name: picked.name));
+      });
+    } catch (e) {
+      if (!mounted) return;
+      FlashSnackBar.showError(context, 'Could not pick reference image.');
+    }
+  }
 
   @override
   void initState() {
@@ -120,7 +143,7 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
     final category = widget.artist.tags.isNotEmpty
         ? widget.artist.tags.first
         : 'Custom Design';
-    final sketchImg = widget.artist.flashArtworks.isNotEmpty
+    var sketchImg = widget.artist.flashArtworks.isNotEmpty
         ? widget.artist.flashArtworks.first.imageUrl
         : 'assets/images/flash_traditional_panther.jpg';
 
@@ -137,20 +160,46 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
     } catch (_) {
       clientId = BookingSyncService.resolveCurrentUid();
     }
+
+    final uploadedReferenceUrls = <String>[];
+    if (_referenceImages.isNotEmpty) {
+      try {
+        for (int i = 0; i < _referenceImages.length; i++) {
+          final uploadedUrl = await ChatService.uploadCustomRequestImage(
+            userId: clientId,
+            bytes: _referenceImages[i].bytes,
+            fileName: _referenceImages[i].name,
+          );
+          uploadedReferenceUrls.add(uploadedUrl);
+          if (i == 0) {
+            sketchImg = uploadedUrl;
+          }
+        }
+      } catch (_) {
+        // Keep fallback sketchImg if Storage is unavailable in offline/mock mode.
+      }
+      if (!mounted) return;
+    }
     final artistId = widget.artist.id.trim().isNotEmpty
         ? widget.artist.id.trim()
         : 'artist_unknown';
+    final clientAvatar = await BookingSyncService.resolveCurrentUserPhotoUrl(
+      uid: clientId,
+    );
+    if (!mounted) return;
 
     final newRequest = BookingRequest(
       id: reqId,
       clientId: clientId,
       artistId: artistId,
       clientName: clientName,
+      clientAvatar: clientAvatar.isNotEmpty ? clientAvatar : null,
       timeAgo: 'Just now',
       conceptDescription: _conceptController.text.trim(),
       placement: _selectedPlacement,
       category: category,
       sketchImageUrl: sketchImg,
+      referenceImageUrls: uploadedReferenceUrls,
       estimatedPrice: estimatedPrice,
       deposit: requiredDeposit,
       size: _selectedSize,
@@ -314,15 +363,13 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
                           Expanded(
                             child: GestureDetector(
                               onTap: () {
-                                setState(() {
-                                  if (i < _referencePhotoCount) {
-                                    if (_referencePhotoCount > 1) {
-                                      _referencePhotoCount--;
-                                    }
-                                  } else {
-                                    _referencePhotoCount = i + 1;
-                                  }
-                                });
+                                if (i < _referenceImages.length) {
+                                  setState(() {
+                                    _referenceImages.removeAt(i);
+                                  });
+                                } else {
+                                  _pickReferenceImage();
+                                }
                               },
                               child: Container(
                                 height: 90,
@@ -330,33 +377,40 @@ class _CustomRequestScreenState extends State<CustomRequestScreen> {
                                   color: const Color(0xFF1B1E1E),
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: i < _referencePhotoCount
+                                    color: i < _referenceImages.length
                                         ? const Color(0xFFEEC200).withAlpha(160)
                                         : const Color(0xFF2E3333),
                                     style: BorderStyle.solid,
                                   ),
                                 ),
-                                child: i < _referencePhotoCount
-                                    ? Stack(
-                                        alignment: Alignment.center,
-                                        children: [
-                                          Icon(
-                                            Icons.image_outlined,
-                                            color: const Color(0xFFEEC200).withAlpha(180),
-                                            size: 32,
-                                          ),
-                                          Positioned(
-                                            bottom: 6,
-                                            child: Text(
-                                              'Photo ${i + 1}',
-                                              style: GoogleFonts.plusJakartaSans(
-                                                color: const Color(0xFFEEC200),
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w600,
+                                child: i < _referenceImages.length
+                                    ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(11),
+                                        child: Stack(
+                                          fit: StackFit.expand,
+                                          children: [
+                                            Image.memory(
+                                              _referenceImages[i].bytes,
+                                              fit: BoxFit.cover,
+                                            ),
+                                            Positioned(
+                                              top: 4,
+                                              right: 4,
+                                              child: Container(
+                                                padding: const EdgeInsets.all(2),
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.black54,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(
+                                                  Icons.close,
+                                                  size: 14,
+                                                  color: Colors.white,
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       )
                                     : Center(
                                         child: Column(

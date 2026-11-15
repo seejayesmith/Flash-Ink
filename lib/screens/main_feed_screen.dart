@@ -8,6 +8,8 @@ import '../features/messages/presentation/screens/messages_screen.dart';
 import '../models/nav_destination_item.dart';
 import '../providers/app_providers.dart';
 import '../services/auth_service.dart';
+import '../services/booking_sync_service.dart';
+import '../services/notification_service.dart';
 import '../widgets/scaffold_with_nav_bar.dart';
 import 'browse_artists_screen.dart';
 
@@ -55,12 +57,48 @@ class _MainFeedContent extends ConsumerStatefulWidget {
 
 class _MainFeedContentState extends ConsumerState<_MainFeedContent> {
   late int _activeTabIndex;
+  String? _lastHydratedUid;
 
   @override
   void initState() {
     super.initState();
     _activeTabIndex = widget.initialIndex;
     MessageThread.unreadUpdateNotifier.addListener(_onUnreadUpdate);
+    NotificationService.lastTappedPayload.addListener(_onNotificationTapped);
+    if (NotificationService.lastTappedPayload.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _onNotificationTapped());
+    }
+  }
+
+  void _syncClientDataIfNeeded(String? activeUid, bool useMock) {
+    if (useMock || activeUid == null || activeUid.trim().isEmpty) return;
+    if (_lastHydratedUid == activeUid) return;
+    _lastHydratedUid = activeUid;
+    BookingSyncService.hydrateClientDataFromCloud(activeUid);
+  }
+
+  void _onNotificationTapped() {
+    if (!mounted) return;
+    final payload = NotificationService.lastTappedPayload.value;
+    if (payload == null) return;
+    NotificationService.lastTappedPayload.value = null;
+
+    final category = (payload['category'] ?? payload['type'] ?? '').toString();
+    if (category == 'direct_message' ||
+        category == 'artist_message' ||
+        category == 'client_message' ||
+        payload.containsKey('threadId')) {
+      _navigateToTab(3); // Messages tab
+    } else if (category == 'flash_drop') {
+      _navigateToTab(1); // Explore tab
+    } else if (category == 'booking_confirmed' ||
+        category == 'rescheduled' ||
+        category == 'cancelled' ||
+        category == 'reminder' ||
+        category == 'client_reminder' ||
+        payload.containsKey('appointmentId')) {
+      _navigateToTab(2); // Appointments tab
+    }
   }
 
   void _onUnreadUpdate() {
@@ -76,6 +114,7 @@ class _MainFeedContentState extends ConsumerState<_MainFeedContent> {
 
   @override
   void dispose() {
+    NotificationService.lastTappedPayload.removeListener(_onNotificationTapped);
     MessageThread.unreadUpdateNotifier.removeListener(_onUnreadUpdate);
     super.dispose();
   }
@@ -89,7 +128,8 @@ class _MainFeedContentState extends ConsumerState<_MainFeedContent> {
   @override
   Widget build(BuildContext context) {
     final useMock = ref.watch(mockModeProvider);
-    ref.watch(activeUidProvider);
+    final activeUid = ref.watch(activeUidProvider);
+    _syncClientDataIfNeeded(activeUid, useMock);
 
     final activeThreads = useMock
         ? MessageThread.mockThreads

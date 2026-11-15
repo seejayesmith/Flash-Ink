@@ -462,6 +462,10 @@ void main() {
 
       await tester.tap(find.byKey(const Key('confirm_proposal_button')));
       await tester.pumpAndSettle();
+      ScaffoldMessenger.of(
+        tester.element(find.byType(BookingRequestDetailScreen)),
+      ).clearSnackBars();
+      await tester.pumpAndSettle();
 
       // Accept the custom request
       await tester.tap(find.byKey(const Key('accept_request_button')));

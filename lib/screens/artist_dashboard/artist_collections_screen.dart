@@ -17,6 +17,7 @@ import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/artist_top_bar.dart';
+import '../../widgets/user_avatar.dart';
 import 'artist_account_screen.dart';
 import 'artist_upload_flash_screen.dart';
 import '../../features/artist/presentation/widgets/flash_piece_card.dart';
@@ -143,6 +144,7 @@ class _ArtistCollectionsScreenState extends State<ArtistCollectionsScreen> {
   }
 
   Future<void> _navigateToMessages() async {
+    FocusManager.instance.primaryFocus?.unfocus();
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -524,31 +526,12 @@ class _ArtistCollectionsScreenState extends State<ArtistCollectionsScreen> {
         ? _effectiveArtist.avatarUrl
         : (authPhoto ?? '');
 
-    final avatarChild = CircleAvatar(
+    final avatarChild = UserAvatar(
+      imageUrl: avatarUrl,
+      displayName: _effectiveArtist.name,
       radius: 18,
-      backgroundColor: const Color(0xFF262929),
-      child: ClipOval(
-        child: FlashImage(
-          urlOrPath: avatarUrl,
-          width: 36,
-          height: 36,
-          fit: BoxFit.cover,
-          errorWidget: Container(
-            color: const Color(0xFF262929),
-            alignment: Alignment.center,
-            child: Text(
-              _effectiveArtist.name.isNotEmpty
-                  ? _effectiveArtist.name[0]
-                  : 'A',
-              style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFFEEC200),
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-          ),
-        ),
-      ),
+      fallbackInitial: 'A',
+      initialFontSize: 16,
     );
 
     return ArtistTopBar(

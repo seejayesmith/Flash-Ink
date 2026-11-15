@@ -16,6 +16,7 @@ import 'package:flash_ink/screens/artist_dashboard/artist_earnings_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_waitlist_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
 import 'package:flash_ink/services/booking_sync_service.dart';
+import 'package:flash_ink/widgets/flash_image.dart';
 
 class _LiveTestUser extends Fake implements User {
   @override
@@ -327,6 +328,171 @@ void main() {
       expect(find.text('Fine Line'), findsOneWidget);
       expect(find.text('Private Studio'), findsWidgets);
       expect(find.text('Books Open'), findsOneWidget);
+    });
+
+    testWidgets('ArtistDashboardScreen Up Next hero card displays booked piece network URL instead of mock tiger image', (tester) async {
+      const bookedPieceUrl =
+          'https://firebasestorage.googleapis.com/v0/b/flash-ink-app/o/booked_dragon.jpg';
+      ArtistDashboardRepository.addCalendarAppointment(
+        DashboardAppointment(
+          id: 'cal_booked_1',
+          clientId: 'client_maya_1',
+          artistId: 'artist_nova_1',
+          clientName: 'Maya Lin',
+          serviceType: 'Flash: Crimson Dragon',
+          duration: '2.5 hrs',
+          time: '2:00 PM',
+          scheduledDate: DateTime.now(),
+          date: 'Today',
+          placement: 'Forearm',
+          depositPaid: 100,
+          fullPrice: 350,
+          artworkImageUrl: bookedPieceUrl,
+          visitType: 'Flash Tattoo',
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistDashboardScreen(
+            authService: liveAuth,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('hero_next_appointment_card')), findsOneWidget);
+      expect(find.text('Maya Lin'), findsWidgets);
+
+      final heroImageFinder = find.byKey(const Key('hero_next_appointment_image'));
+      expect(heroImageFinder, findsOneWidget);
+      final flashImage = tester.widget<FlashImage>(heroImageFinder);
+      expect(flashImage.urlOrPath, bookedPieceUrl);
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Image &&
+              w.image is AssetImage &&
+              (w.image as AssetImage).assetName == 'assets/images/flash_tiger_tattoo.jpg',
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('ArtistDashboardScreen Up Next hero card recovers flash piece image from artist portfolio when artworkImageUrl is empty', (tester) async {
+      const portfolioPieceUrl =
+          'https://firebasestorage.googleapis.com/v0/b/flash-ink-app/o/lunar_moth.jpg';
+      const liveArtist = Artist(
+        id: 'artist_nova_1',
+        name: 'Nova Ink',
+        avatarUrl: '',
+        location: 'Seattle, WA',
+        studioType: 'Eclipse Tattoo',
+        rating: 5.0,
+        availablePieces: 1,
+        minDeposit: 80,
+        flashArtworks: [
+          FlashArtwork(
+            id: 'flash_moth_1',
+            artistId: 'artist_nova_1',
+            title: 'Lunar Moth',
+            imageUrl: portfolioPieceUrl,
+            price: 280,
+            deposit: 80,
+          ),
+        ],
+      );
+
+      ArtistDashboardRepository.addCalendarAppointment(
+        DashboardAppointment(
+          id: 'cal_booked_2',
+          clientId: 'client_zoe',
+          artistId: 'artist_nova_1',
+          clientName: 'Zoe Kravitz',
+          serviceType: 'Flash: Lunar Moth',
+          duration: '2 hrs',
+          time: '4:00 PM',
+          scheduledDate: DateTime.now(),
+          date: 'Today',
+          placement: 'Shoulder',
+          depositPaid: 80,
+          fullPrice: 280,
+          artworkImageUrl: '',
+          visitType: 'Flash Tattoo',
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistDashboardScreen(
+            artist: liveArtist,
+            authService: liveAuth,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final heroImageFinder = find.byKey(const Key('hero_next_appointment_image'));
+      expect(heroImageFinder, findsOneWidget);
+      final flashImage = tester.widget<FlashImage>(heroImageFinder);
+      expect(flashImage.urlOrPath, portfolioPieceUrl);
+    });
+
+    testWidgets('ArtistDashboardScreen Up Next hero card renders clean placeholder without mock tiger image when appointment has no artwork', (tester) async {
+      ArtistDashboardRepository.addCalendarAppointment(
+        DashboardAppointment(
+          id: 'cal_consult_1',
+          clientId: 'client_sam',
+          artistId: 'artist_nova_1',
+          clientName: 'Sam Rivera',
+          serviceType: 'Consultation',
+          duration: '1 hr',
+          time: '11:00 AM',
+          scheduledDate: DateTime.now(),
+          date: 'Today',
+          placement: 'Back',
+          depositPaid: 50,
+          fullPrice: 50,
+          artworkImageUrl: '',
+          isConsultation: true,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistDashboardScreen(
+            authService: liveAuth,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('hero_next_appointment_card')), findsOneWidget);
+      expect(find.byKey(const Key('hero_next_appointment_image')), findsNothing);
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Image &&
+              w.image is AssetImage &&
+              (w.image as AssetImage).assetName == 'assets/images/flash_tiger_tattoo.jpg',
+        ),
+        findsNothing,
+      );
+    });
+
+    test('DashboardAppointment.fromMap reads artworkImageUrl and falls back to flashImageUrl', () {
+      final fromArtwork = DashboardAppointment.fromMap({
+        'clientName': 'A',
+        'artworkImageUrl': 'https://example.com/a.jpg',
+      }, 'doc_1');
+      expect(fromArtwork.artworkImageUrl, 'https://example.com/a.jpg');
+
+      final fromFlash = DashboardAppointment.fromMap({
+        'clientName': 'B',
+        'flashImageUrl': 'https://example.com/b.jpg',
+      }, 'doc_2');
+      expect(fromFlash.artworkImageUrl, 'https://example.com/b.jpg');
     });
   });
 }

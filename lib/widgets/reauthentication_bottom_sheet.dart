@@ -5,18 +5,19 @@ import '../theme/app_buttons.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_theme.dart';
 import 'adaptive_glass_container.dart';
-import 'keyboard_collapse_button.dart';
 
 /// Modal bottom sheet that prompts users to re-authenticate when attempting
 /// sensitive actions (such as account deletion) when Firebase throws `requires-recent-login`.
 class ReauthenticationBottomSheet extends StatefulWidget {
   final AuthService authService;
   final VoidCallback? onSuccess;
+  final Future<void> Function()? onReauthenticated;
 
   const ReauthenticationBottomSheet({
     super.key,
     required this.authService,
     this.onSuccess,
+    this.onReauthenticated,
   });
 
   /// Presents the bottom sheet with keyboard awareness.
@@ -24,6 +25,7 @@ class ReauthenticationBottomSheet extends StatefulWidget {
     required BuildContext context,
     required AuthService authService,
     VoidCallback? onSuccess,
+    Future<void> Function()? onReauthenticated,
   }) {
     return showModalBottomSheet<bool>(
       context: context,
@@ -32,6 +34,7 @@ class ReauthenticationBottomSheet extends StatefulWidget {
       builder: (context) => ReauthenticationBottomSheet(
         authService: authService,
         onSuccess: onSuccess,
+        onReauthenticated: onReauthenticated,
       ),
     );
   }
@@ -60,6 +63,8 @@ class _ReauthenticationBottomSheetState extends State<ReauthenticationBottomShee
     super.dispose();
   }
 
+  bool get _isCustomAction => widget.onReauthenticated != null;
+
   List<String> get _providers => widget.authService.currentUserProviders;
   bool get _isGoogle => _providers.contains('google.com');
   bool get _isApple => _providers.contains('apple.com');
@@ -70,7 +75,11 @@ class _ReauthenticationBottomSheetState extends State<ReauthenticationBottomShee
 
   Future<void> _handleReauthSuccess() async {
     try {
-      await widget.authService.deleteAccount();
+      if (widget.onReauthenticated != null) {
+        await widget.onReauthenticated!();
+      } else {
+        await widget.authService.deleteAccount();
+      }
       if (mounted) {
         widget.onSuccess?.call();
         Navigator.of(context).pop(true);
@@ -280,7 +289,9 @@ class _ReauthenticationBottomSheetState extends State<ReauthenticationBottomShee
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Confirm your identity to delete your account',
+                          _isCustomAction
+                              ? 'Confirm your identity to update your credentials'
+                              : 'Confirm your identity to delete your account',
                           style: GoogleFonts.plusJakartaSans(
                             color: const Color(0xFF8C9191),
                             fontSize: 13,
@@ -289,7 +300,6 @@ class _ReauthenticationBottomSheetState extends State<ReauthenticationBottomShee
                       ],
                     ),
                   ),
-                  const KeyboardCollapseButton(),
                 ],
               ),
               const SizedBox(height: 20),
@@ -313,7 +323,9 @@ class _ReauthenticationBottomSheetState extends State<ReauthenticationBottomShee
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'For security, Firebase requires recent authentication before permanently deleting your account and all associated data.',
+                        _isCustomAction
+                            ? 'For security, Firebase requires recent authentication before updating your email or security credentials.'
+                            : 'For security, Firebase requires recent authentication before permanently deleting your account and all associated data.',
                         style: GoogleFonts.plusJakartaSans(
                           color: const Color(0xFFB0B6B6),
                           fontSize: 12,
@@ -378,7 +390,7 @@ class _ReauthenticationBottomSheetState extends State<ReauthenticationBottomShee
                       ? null
                       : () => Navigator.of(context).pop(false),
                   child: Text(
-                    'Cancel Deletion',
+                    _isCustomAction ? 'Cancel' : 'Cancel Deletion',
                     style: GoogleFonts.plusJakartaSans(
                       color: const Color(0xFF8C9191),
                       fontWeight: FontWeight.w600,
@@ -455,12 +467,20 @@ class _ReauthenticationBottomSheetState extends State<ReauthenticationBottomShee
           onSubmitted: (_) => _submitPassword(),
         ),
         const SizedBox(height: 16),
-        AppButtons.destructiveCTA(
-          key: const Key('reauth_confirm_button'),
-          onPressed: _isSubmitting ? null : _submitPassword,
-          text: 'Verify & Delete Account',
-          isLoading: _isSubmitting,
-        ),
+        if (_isCustomAction)
+          AppButtons.primaryCTA(
+            key: const Key('reauth_confirm_button'),
+            onPressed: _isSubmitting ? null : _submitPassword,
+            text: 'Verify & Continue',
+            isLoading: _isSubmitting,
+          )
+        else
+          AppButtons.destructiveCTA(
+            key: const Key('reauth_confirm_button'),
+            onPressed: _isSubmitting ? null : _submitPassword,
+            text: 'Verify & Delete Account',
+            isLoading: _isSubmitting,
+          ),
       ],
     );
   }
@@ -538,12 +558,20 @@ class _ReauthenticationBottomSheetState extends State<ReauthenticationBottomShee
             onSubmitted: (_) => _submitPhoneCode(),
           ),
           const SizedBox(height: 12),
-          AppButtons.destructiveCTA(
-            key: const Key('reauth_confirm_button'),
-            onPressed: _isSubmitting ? null : _submitPhoneCode,
-            text: 'Verify & Delete Account',
-            isLoading: _isSubmitting,
-          ),
+          if (_isCustomAction)
+            AppButtons.primaryCTA(
+              key: const Key('reauth_confirm_button'),
+              onPressed: _isSubmitting ? null : _submitPhoneCode,
+              text: 'Verify & Continue',
+              isLoading: _isSubmitting,
+            )
+          else
+            AppButtons.destructiveCTA(
+              key: const Key('reauth_confirm_button'),
+              onPressed: _isSubmitting ? null : _submitPhoneCode,
+              text: 'Verify & Delete Account',
+              isLoading: _isSubmitting,
+            ),
           const SizedBox(height: 8),
           Center(
             child: TextButton(
@@ -578,18 +606,36 @@ class _ReauthenticationBottomSheetState extends State<ReauthenticationBottomShee
           ),
           const SizedBox(height: 12),
         ],
-        AppButtons.destructiveCTA(
-          key: const Key('reauth_google_button'),
-          onPressed: _isSubmitting ? null : _submitGoogle,
-          icon: Icons.g_mobiledata,
-          text: 'Verify with Google & Delete',
-          isLoading: _isSubmitting,
-        ),
+        if (_isCustomAction)
+          AppButtons.primaryCTA(
+            key: const Key('reauth_google_button'),
+            onPressed: _isSubmitting ? null : _submitGoogle,
+            icon: Icons.g_mobiledata,
+            text: 'Verify with Google',
+            isLoading: _isSubmitting,
+          )
+        else
+          AppButtons.destructiveCTA(
+            key: const Key('reauth_google_button'),
+            onPressed: _isSubmitting ? null : _submitGoogle,
+            icon: Icons.g_mobiledata,
+            text: 'Verify with Google & Delete',
+            isLoading: _isSubmitting,
+          ),
       ],
     );
   }
 
   Widget _buildAppleButton() {
+    if (_isCustomAction) {
+      return AppButtons.primaryCTA(
+        key: const Key('reauth_apple_button'),
+        onPressed: _isSubmitting ? null : _submitApple,
+        icon: Icons.apple,
+        text: 'Verify with Apple',
+        isLoading: _isSubmitting,
+      );
+    }
     return AppButtons.destructiveCTA(
       key: const Key('reauth_apple_button'),
       onPressed: _isSubmitting ? null : _submitApple,

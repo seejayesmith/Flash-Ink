@@ -9,15 +9,18 @@ import '../models/user.dart';
 import '../providers/app_providers.dart';
 import '../services/auth_service.dart';
 import '../services/location_service.dart';
+import '../services/notification_service.dart';
 import '../theme/app_buttons.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 import '../widgets/adaptive_glass_container.dart';
 import '../widgets/artist_card.dart';
+import '../widgets/flash_image.dart';
 import '../widgets/flash_snack_bar.dart';
 import '../widgets/flash_switch.dart';
 import '../widgets/flash_tab_header.dart';
+import '../widgets/user_avatar.dart';
 import 'artist_profile_screen.dart';
 import 'client_account_screen.dart';
 import '../widgets/guest_auth_prompt_bottom_sheet.dart';
@@ -279,6 +282,15 @@ class _BrowseArtistsContentState extends ConsumerState<_BrowseArtistsContent> {
       _favoriteOverrides[targetArtist.id] = nextFavorited;
     });
 
+    final uid = _authService.currentUser?.uid;
+    if (uid != null && uid.isNotEmpty) {
+      NotificationService.syncFollowedArtist(
+        uid,
+        artistId: targetArtist.id,
+        isFollowed: nextFavorited,
+      );
+    }
+
     FlashSnackBar.showInfo(
       context,
       nextFavorited
@@ -498,18 +510,18 @@ class _BrowseArtistsContentState extends ConsumerState<_BrowseArtistsContent> {
                 ],
               ),
               child: ClipOval(
-                child: avatarUrl != null && avatarUrl.isNotEmpty
-                    ? Image.network(
-                        avatarUrl,
+                child: UserAvatar.isValidUrl(avatarUrl)
+                    ? FlashImage(
+                        urlOrPath: avatarUrl!,
+                        width: 40,
+                        height: 40,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return const Center(
-                            child: Icon(
-                              Icons.person,
-                              size: 22,
-                            ),
-                          );
-                        },
+                        errorWidget: const Center(
+                          child: Icon(
+                            Icons.person,
+                            size: 22,
+                          ),
+                        ),
                       )
                     : const Center(
                         child: Icon(

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/mock/mock_data_config.dart';
 import '../../../../models/artist_dashboard_data.dart';
 import '../../../../models/waitlist_entry.dart';
+import '../../../../services/booking_sync_service.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
@@ -30,6 +33,7 @@ class MessagesScreen extends StatefulWidget {
 
 class _MessagesScreenState extends State<MessagesScreen> {
   final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode();
   String _query = '';
 
   List<MessageThread> get _threads =>
@@ -39,6 +43,21 @@ class _MessagesScreenState extends State<MessagesScreen> {
   void initState() {
     super.initState();
     MessageThread.unreadUpdateNotifier.addListener(_onUnreadUpdate);
+    if (widget.mockThreads == null && !MockDataConfig.isEnabled) {
+      final uid = BookingSyncService.resolveCurrentUid('');
+      if (uid.isNotEmpty) {
+        BookingSyncService.hydrateClientDataFromCloud(uid);
+      }
+    }
+  }
+
+  void _dismissKeyboard() {
+    _searchFocusNode.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (mounted) {
+      FocusScope.of(context).unfocus();
+    }
+    SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
   }
 
   void _onUnreadUpdate() {
@@ -53,8 +72,18 @@ class _MessagesScreenState extends State<MessagesScreen> {
   }
 
   @override
+  void deactivate() {
+    _searchFocusNode.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
+    SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     MessageThread.unreadUpdateNotifier.removeListener(_onUnreadUpdate);
+    _searchFocusNode.unfocus();
+    _searchFocusNode.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -79,18 +108,23 @@ class _MessagesScreenState extends State<MessagesScreen> {
     final shouldShowBackButton =
         widget.showBackButton ?? Navigator.canPop(context);
 
-    return Scaffold(
-      backgroundColor: AppTheme.onyxBackground,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            FlashTabHeader(
-              leading: shouldShowBackButton
-                  ? IconButton(
-                      key: const Key('messages_back_button'),
-                      onPressed: () => Navigator.maybePop(context),
-                      icon: const Icon(
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) => _dismissKeyboard(),
+      child: Scaffold(
+        backgroundColor: AppTheme.onyxBackground,
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              FlashTabHeader(
+                leading: shouldShowBackButton
+                    ? IconButton(
+                        key: const Key('messages_back_button'),
+                        onPressed: () {
+                          _dismissKeyboard();
+                          Navigator.maybePop(context);
+                        },
+                        icon: const Icon(
                         Icons.arrow_back_ios_new,
                         color: AppTheme.textPrimary,
                         size: 20,
@@ -143,6 +177,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
                 ),
                 child: TextField(
                   controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  onTapOutside: (_) => _dismissKeyboard(),
                   textAlignVertical: TextAlignVertical.center,
                   onChanged: (val) {
                     setState(() {
@@ -188,33 +224,39 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
             // Threads List
             Expanded(
-              child: filtered.isEmpty
-                  ? ClientEmptyState(
-                      icon: _query.trim().isEmpty
-                          ? Icons.chat_bubble_outline_rounded
-                          : Icons.search_off_rounded,
-                      title: _query.trim().isEmpty
-                          ? 'No Conversations Yet'
-                          : 'No Conversations Found',
-                      subtitle: _query.trim().isEmpty
-                          ? 'When you book an appointment or message an artist, your conversations will appear here.'
-                          : 'No messages match "$_query". Try a different search.',
-                    )
-                  : ListView.builder(
-                      padding: EdgeInsets.fromLTRB(
-                        AppSpacing.screenGutter,
-                        0,
-                        AppSpacing.screenGutter,
-                        AppSpacing.spaceXxl + AppTheme.navBarHeight + bottomInset,
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _dismissKeyboard,
+                child: filtered.isEmpty
+                    ? ClientEmptyState(
+                        icon: _query.trim().isEmpty
+                            ? Icons.chat_bubble_outline_rounded
+                            : Icons.search_off_rounded,
+                        title: _query.trim().isEmpty
+                            ? 'No Conversations Yet'
+                            : 'No Conversations Found',
+                        subtitle: _query.trim().isEmpty
+                            ? 'When you book an appointment or message an artist, your conversations will appear here.'
+                            : 'No messages match "$_query". Try a different search.',
+                      )
+                    : ListView.builder(
+                        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: EdgeInsets.fromLTRB(
+                          AppSpacing.screenGutter,
+                          0,
+                          AppSpacing.screenGutter,
+                          AppSpacing.spaceXxl + AppTheme.navBarHeight + bottomInset,
+                        ),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          return MessageThreadTile(thread: filtered[index]);
+                        },
                       ),
-                      itemCount: filtered.length,
-                      itemBuilder: (context, index) {
-                        return MessageThreadTile(thread: filtered[index]);
-                      },
-                    ),
+              ),
             ),
           ],
         ),
+      ),
       ),
     );
   }

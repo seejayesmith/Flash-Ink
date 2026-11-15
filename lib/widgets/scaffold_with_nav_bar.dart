@@ -66,6 +66,7 @@ class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
   int get _effectiveIndex => widget.currentIndex ?? _internalIndex;
 
   void _handleDestinationTap(int index) {
+    FocusManager.instance.primaryFocus?.unfocus();
     if (widget.currentIndex == null) {
       setState(() {
         _internalIndex = index;

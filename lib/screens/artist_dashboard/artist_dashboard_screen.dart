@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/mock/mock_data_config.dart';
 import '../../core/widgets/flash_bottom_nav_bar.dart';
@@ -12,9 +13,11 @@ import '../../models/artist_dashboard_data.dart';
 import '../../repositories/artist_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/booking_sync_service.dart';
+import '../../services/notification_service.dart';
 import '../../widgets/artist_top_bar.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
+import '../../widgets/user_avatar.dart';
 import 'appointment_detail_screen.dart';
 import 'artist_account_screen.dart';
 import 'artist_books_screen.dart';
@@ -56,7 +59,35 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   void initState() {
     super.initState();
     ArtistDashboardRepository.pendingRequestsNotifier.addListener(_onRepositoryUpdated);
+    NotificationService.lastTappedPayload.addListener(_onNotificationTapped);
+    if (NotificationService.lastTappedPayload.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _onNotificationTapped());
+    }
     _loadLiveArtistProfile();
+  }
+
+  void _onNotificationTapped() {
+    if (!mounted) return;
+    final payload = NotificationService.lastTappedPayload.value;
+    if (payload == null) return;
+    NotificationService.lastTappedPayload.value = null;
+
+    final category = (payload['category'] ?? payload['type'] ?? '').toString();
+    if (category == 'client_message' ||
+        category == 'direct_message' ||
+        category == 'artist_message' ||
+        payload.containsKey('threadId')) {
+      _navigateToMessagesScreen();
+    } else if (category == 'reminder' ||
+        category == 'artist_reminder' ||
+        category == 'rescheduled' ||
+        category == 'cancelled') {
+      setState(() => _selectedTabIndex = 1); // Calendar tab
+    } else if (category == 'custom_request' ||
+        category == 'booking_request' ||
+        category == 'booking_confirmed') {
+      setState(() => _selectedTabIndex = 0); // Dashboard / Bookings tab
+    }
   }
 
   Future<void> _loadLiveArtistProfile() async {
@@ -135,6 +166,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
 
   @override
   void dispose() {
+    NotificationService.lastTappedPayload.removeListener(_onNotificationTapped);
     ArtistDashboardRepository.pendingRequestsNotifier.removeListener(_onRepositoryUpdated);
     super.dispose();
   }
@@ -214,33 +246,22 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   }
 
   Widget _buildAvatarWidget({double radius = 18}) {
-    return CircleAvatar(
+    return UserAvatar(
+      imageUrl: _avatarUrl,
+      displayName: _artistDisplayName,
       radius: radius,
-      backgroundColor: const Color(0xFF262929),
-      child: ClipOval(
-        child: FlashImage(
-          urlOrPath: _avatarUrl,
-          width: radius * 2,
-          height: radius * 2,
-          fit: BoxFit.cover,
-          errorWidget: Container(
-            color: const Color(0xFF262929),
-            alignment: Alignment.center,
-            child: Text(
-              _artistDisplayName.isNotEmpty ? _artistDisplayName[0] : 'O',
-              style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFFEEC200),
-                fontWeight: FontWeight.bold,
-                fontSize: radius * 0.9,
-              ),
-            ),
-          ),
-        ),
-      ),
+      fallbackInitial: 'O',
+      initialFontSize: radius * 0.9,
     );
   }
 
+  void _dismissKeyboard() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+  }
+
   Future<void> _navigateToAccountScreen() async {
+    _dismissKeyboard();
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -259,6 +280,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   }
 
   Future<void> _navigateToMessagesScreen() async {
+    _dismissKeyboard();
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -268,6 +290,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
         ),
       ),
     );
+    _dismissKeyboard();
   }
 
   Widget _buildCollectionsTab() {
@@ -301,7 +324,10 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
               bottom: MediaQuery.paddingOf(context).bottom + AppTheme.navBarBottomMargin,
               child: FlashBottomNavBar(
                 currentIndex: _selectedTabIndex,
-                onTap: (index) => setState(() => _selectedTabIndex = index),
+                onTap: (index) {
+                  _dismissKeyboard();
+                  setState(() => _selectedTabIndex = index);
+                },
                 role: 'artist',
               ),
             ),
@@ -492,6 +518,53 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   }
 
 
+  String _resolveNextAppointmentArtworkUrl(DashboardAppointment nextApt) {
+    final direct = nextApt.artworkImageUrl.trim();
+    if (direct.isNotEmpty && !direct.startsWith('local://')) {
+      return direct;
+    }
+    final flashTitle = nextApt.serviceType.startsWith('Flash: ')
+        ? nextApt.serviceType.substring('Flash: '.length).trim().toLowerCase()
+        : '';
+    if (flashTitle.isNotEmpty && _resolvedArtist != null) {
+      for (final piece in _resolvedArtist!.flashArtworks) {
+        final url = piece.imageUrl.trim();
+        if (piece.title.trim().toLowerCase() == flashTitle &&
+            url.isNotEmpty &&
+            !url.startsWith('local://')) {
+          return url;
+        }
+      }
+    }
+    return '';
+  }
+
+  Widget _buildHeroArtworkPlaceholder() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF252929),
+            Color(0xFF171A1A),
+          ],
+        ),
+      ),
+      child: const Align(
+        alignment: Alignment.topRight,
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Icon(
+            Icons.draw_outlined,
+            color: Color(0xFF3E4444),
+            size: 36,
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Large hero Next Appointment card with tattoo artwork background (or styled empty state in live mode)
   Widget _buildHeroNextAppointmentCard() {
     final nextApt = _activeNextAppointment;
@@ -613,6 +686,12 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
       );
     }
 
+    final resolvedArtworkUrl = _resolveNextAppointmentArtworkUrl(nextApt);
+    final detailAppointment =
+        resolvedArtworkUrl.isNotEmpty && nextApt.artworkImageUrl.trim().isEmpty
+            ? nextApt.copyWith(artworkImageUrl: resolvedArtworkUrl)
+            : nextApt;
+
     return GestureDetector(
       key: const Key('hero_next_appointment_card'),
       onTap: () {
@@ -620,100 +699,103 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
           context,
           MaterialPageRoute(
             builder: (_) => AppointmentDetailScreen(
-              appointment: nextApt,
+              appointment: detailAppointment,
             ),
           ),
         );
       },
-      child: Container(
-        width: double.infinity,
-        height: 240,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          image: DecorationImage(
-            image: nextApt.artworkImageUrl.isNotEmpty &&
-                    nextApt.artworkImageUrl.startsWith('assets/')
-                ? AssetImage(nextApt.artworkImageUrl) as ImageProvider
-                : const AssetImage('assets/images/flash_tiger_tattoo.jpg'),
-            fit: BoxFit.cover,
-            alignment: Alignment.center,
-          ),
-        ),
-        child: Stack(
-          children: [
-            // Gradient scrim overlay for contrast & readability
-            Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                gradient: const LinearGradient(
-                  begin: Alignment.bottomLeft,
-                  end: Alignment.topRight,
-                  colors: [
-                    Color(0xF0121414),
-                    Color(0xB3121414),
-                    Color(0x33121414),
-                  ],
-                  stops: [0.0, 0.55, 1.0],
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: SizedBox(
+          width: double.infinity,
+          height: 240,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fill(
+                child: resolvedArtworkUrl.isNotEmpty
+                    ? FlashImage(
+                        key: const Key('hero_next_appointment_image'),
+                        urlOrPath: resolvedArtworkUrl,
+                        fit: BoxFit.cover,
+                        placeholder: _buildHeroArtworkPlaceholder(),
+                        errorWidget: _buildHeroArtworkPlaceholder(),
+                      )
+                    : _buildHeroArtworkPlaceholder(),
+              ),
+              // Gradient scrim overlay for contrast & readability
+              Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomLeft,
+                    end: Alignment.topRight,
+                    colors: [
+                      Color(0xF0121414),
+                      Color(0xB3121414),
+                      Color(0x33121414),
+                    ],
+                    stops: [0.0, 0.55, 1.0],
+                  ),
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(
-                    'Next Appointment',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFEEC200),
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.access_time,
-                        color: Colors.white,
-                        size: 14,
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Next Appointment',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFFEEC200),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
                       ),
-                      const SizedBox(width: 5),
-                      Text(
-                        nextApt.time,
-                        style: GoogleFonts.plusJakartaSans(
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.access_time,
                           color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                          size: 14,
                         ),
+                        const SizedBox(width: 5),
+                        Text(
+                          nextApt.time,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      nextApt.clientName,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    nextApt.clientName,
-                    style: GoogleFonts.plusJakartaSans(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.3,
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${nextApt.serviceType} • ${nextApt.duration}',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFD4D8D8),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                    const SizedBox(height: 2),
+                    Text(
+                      '${nextApt.serviceType} • ${nextApt.duration}',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFFD4D8D8),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1383,143 +1465,153 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   }
 
   Widget _buildMessagesPlaceholder({bool showTopBar = true}) {
-    final liveThreads = MessageThread.liveThreads;
     final useMock = MockDataConfig.isEnabled;
 
-    return SafeArea(
-      bottom: false,
-      child: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(
-          20,
-          12,
-          20,
-          MediaQuery.paddingOf(context).bottom + 80,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (showTopBar) ...[
-              _buildTopActionBar(
-                logoKey: const Key('messages_tattoo_machine_logo'),
-                avatarKey: const Key('messages_artist_avatar_button'),
-              ),
-              const SizedBox(height: 20),
-            ],
-            Text(
-              'Client Messages',
-              style: GoogleFonts.plusJakartaSans(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-              ),
+    return ValueListenableBuilder<int>(
+      valueListenable: MessageThread.unreadUpdateNotifier,
+      builder: (context, _, _) {
+        final liveThreads = MessageThread.liveThreads;
+
+        return SafeArea(
+          bottom: false,
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              20,
+              12,
+              20,
+              MediaQuery.paddingOf(context).bottom + 80,
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Real-time consultations and booking inquiries.',
-              style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFF8C9191),
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 24),
-            if (useMock) ...[
-              _buildMessageItem(
-                name: 'Sarah Jenkins',
-                preview: 'Super excited for the tiger session today!',
-                time: '9:15 AM',
-                unread: true,
-              ),
-              _buildMessageItem(
-                name: 'Sally McField',
-                preview: 'Will bring the reference sketches at 12:30.',
-                time: 'Yesterday',
-                unread: false,
-              ),
-              _buildMessageItem(
-                name: 'Jennie Banks',
-                preview: 'Sent the deposit confirmation, see you at 6:30!',
-                time: '2d ago',
-                unread: false,
-              ),
-            ] else if (liveThreads.isEmpty) ...[
-              Container(
-                key: const Key('no_client_messages_empty_state'),
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF191C1C),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(0xFF282C2C),
-                    width: 1.0,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (showTopBar) ...[
+                  _buildTopActionBar(
+                    logoKey: const Key('messages_tattoo_machine_logo'),
+                    avatarKey: const Key('messages_artist_avatar_button'),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+                Text(
+                  'Client Messages',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                child: Column(
-                  children: [
-                    const Icon(
-                      Icons.chat_bubble_outline_rounded,
-                      color: Color(0xFF8C9191),
-                      size: 32,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'No client conversations yet',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Confirmed bookings and approved custom requests will open direct message threads here.',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFF8C9191),
-                        fontSize: 13,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 8),
+                Text(
+                  'Real-time consultations and booking inquiries.',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFF8C9191),
+                    fontSize: 14,
+                  ),
                 ),
-              ),
-            ] else ...[
-              for (final thread in liveThreads)
-                GestureDetector(
-                  key: Key('artist_message_thread_${thread.id}'),
-                  onTap: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ChatConversationScreen(
-                          thread: thread,
-                          isArtistView: true,
+                const SizedBox(height: 24),
+                if (useMock) ...[
+                  _buildMessageItem(
+                    name: 'Sarah Jenkins',
+                    preview: 'Super excited for the tiger session today!',
+                    time: '9:15 AM',
+                    unread: true,
+                  ),
+                  _buildMessageItem(
+                    name: 'Sally McField',
+                    preview: 'Will bring the reference sketches at 12:30.',
+                    time: 'Yesterday',
+                    unread: false,
+                  ),
+                  _buildMessageItem(
+                    name: 'Jennie Banks',
+                    preview: 'Sent the deposit confirmation, see you at 6:30!',
+                    time: '2d ago',
+                    unread: false,
+                  ),
+                ] else if (liveThreads.isEmpty) ...[
+                  Container(
+                    key: const Key('no_client_messages_empty_state'),
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF191C1C),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: const Color(0xFF282C2C),
+                        width: 1.0,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.chat_bubble_outline_rounded,
+                          color: Color(0xFF8C9191),
+                          size: 32,
                         ),
-                      ),
-                    );
-                    if (mounted) {
-                      setState(() {});
-                    }
-                  },
-                  child: _buildMessageItem(
-                    name: (thread.clientName != null && thread.clientName!.isNotEmpty)
-                        ? thread.clientName!
-                        : (thread.flashTitleContext ?? 'Client Inquiry'),
-                    preview: thread.lastMessage,
-                    time: _formatRelativeThreadTime(thread.lastMessageTime),
-                    unread: thread.unreadCount > 0,
+                        const SizedBox(height: 12),
+                        Text(
+                          'No client conversations yet',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Confirmed bookings and approved custom requests will open direct message threads here.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF8C9191),
+                            fontSize: 13,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-            ],
-          ],
-        ),
-      ),
+                ] else ...[
+                  for (final thread in liveThreads)
+                    GestureDetector(
+                      key: Key('artist_message_thread_${thread.id}'),
+                      onTap: () async {
+                        _dismissKeyboard();
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChatConversationScreen(
+                              thread: thread,
+                              isArtistView: true,
+                            ),
+                          ),
+                        );
+                        _dismissKeyboard();
+                        if (mounted) {
+                          setState(() {});
+                        }
+                      },
+                      child: _buildMessageItem(
+                        name: (thread.clientName != null && thread.clientName!.isNotEmpty)
+                            ? thread.clientName!
+                            : (thread.flashTitleContext ?? 'Client Inquiry'),
+                        avatarUrl: thread.clientAvatar,
+                        preview: thread.lastMessage,
+                        time: _formatRelativeThreadTime(thread.lastMessageTime),
+                        unread: thread.unreadCount > 0,
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildMessageItem({
     required String name,
+    String? avatarUrl,
     required String preview,
     required String time,
     required bool unread,
@@ -1536,18 +1628,11 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            backgroundColor: const Color(0xFF262929),
-            child: Center(
-              child: Text(
-                name.isNotEmpty ? name[0] : '',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFEEC200),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
+          UserAvatar(
+            imageUrl: avatarUrl,
+            displayName: name,
+            radius: 20,
+            fallbackInitial: 'C',
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1599,6 +1684,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
       artist: _resolvedArtist,
       authService: _authService,
       isEmbeddedInTab: true,
+      onNavigateToCalendar: () => setState(() => _selectedTabIndex = 1),
     );
   }
 

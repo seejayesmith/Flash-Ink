@@ -18,7 +18,6 @@ import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/flash_switch.dart';
-import '../../widgets/keyboard_collapse_button.dart';
 import '../../services/booking_sync_service.dart';
 import '../../services/stripe_service.dart';
 
@@ -33,11 +32,13 @@ import '../../services/stripe_service.dart';
 class FlashBookingScreen extends StatefulWidget {
   final FlashArtwork flash;
   final Artist? artist;
+  final FirebaseFirestore? firestore;
 
   const FlashBookingScreen({
     super.key,
     required this.flash,
     this.artist,
+    this.firestore,
   });
 
   @override
@@ -46,6 +47,10 @@ class FlashBookingScreen extends StatefulWidget {
 
 class _FlashBookingScreenState extends State<FlashBookingScreen> {
   int _currentStep = 0; // 0: Schedule, 1: Details, 2: Payment, 3: Confirmed
+
+  ArtistBooksSchedule? _remoteArtistSchedule;
+  ArtistBooksSchedule get _effectiveSchedule =>
+      _remoteArtistSchedule ?? ArtistDashboardRepository.booksSchedule;
 
   // Step 1 State: Date & Time
   late DateTime _currentMonth;
@@ -86,6 +91,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
   static const List<String> _weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
   bool _isUserPhoneVerified = false;
+  String _clientAvatarUrl = '';
 
   @override
   void initState() {
@@ -126,21 +132,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     final now = DateTime.now();
     _currentMonth = DateTime(now.year, now.month, 1);
     _selectedDate = now.add(const Duration(days: 2));
-    int workingDayGuard = 0;
-    while (!ArtistDashboardRepository.booksSchedule.isWorkingDay(_selectedDate) &&
-        workingDayGuard < 14) {
-      _selectedDate = _selectedDate.add(const Duration(days: 1));
-      workingDayGuard++;
-    }
-    if (_selectedDate.month != _currentMonth.month) {
-      _currentMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
-    }
-
-    final initialSlots = ArtistDashboardRepository.booksSchedule.generateTimeSlots();
-    if (initialSlots.isNotEmpty &&
-        !initialSlots.any((s) => s.time == _selectedTimeSlot)) {
-      _selectedTimeSlot = initialSlots.first.time;
-    }
+    _syncDefaultSelectionForSchedule(now: now);
 
     _selectedPlacement = widget.flash.location.split('/').first.trim();
     if (!_placementOptions.contains(_selectedPlacement)) {
@@ -150,8 +142,84 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     final codeNum = (10000 + (_selectedDate.millisecondsSinceEpoch % 89999)).toString();
     _confirmationCode = 'INK-$codeNum';
 
+    _loadRemoteArtistSchedule();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ScaffoldMessenger.maybeOf(context)?.clearSnackBars();
+    });
+  }
+
+  void _syncDefaultSelectionForSchedule({DateTime? now}) {
+    final effectiveNow = now ?? DateTime.now();
+    final schedule = _effectiveSchedule;
+    final artistId = widget.artist?.id;
+
+    DateTime candidate = DateTime(
+      effectiveNow.year,
+      effectiveNow.month,
+      effectiveNow.day + 2,
+    );
+    int guard = 0;
+    while (!ArtistDashboardRepository.isDateBookable(
+          date: candidate,
+          schedule: schedule,
+          artistId: artistId,
+          now: effectiveNow,
+        ) &&
+        guard < 60) {
+      candidate = DateTime(candidate.year, candidate.month, candidate.day + 1);
+      guard++;
+    }
+    if (ArtistDashboardRepository.isDateBookable(
+      date: candidate,
+      schedule: schedule,
+      artistId: artistId,
+      now: effectiveNow,
+    )) {
+      _selectedDate = candidate;
+    }
+    _currentMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
+
+    final initialSlots = schedule.generateTimeSlots();
+    if (initialSlots.isNotEmpty) {
+      final currentStillOpen = initialSlots.any((s) =>
+          s.time == _selectedTimeSlot &&
+          ArtistDashboardRepository.isSlotBookable(
+            date: _selectedDate,
+            timeSlot: s.time,
+            schedule: schedule,
+            artistId: artistId,
+            now: effectiveNow,
+          ));
+      if (!currentStillOpen) {
+        final firstAvailable = initialSlots.firstWhere(
+          (s) => ArtistDashboardRepository.isSlotBookable(
+            date: _selectedDate,
+            timeSlot: s.time,
+            schedule: schedule,
+            artistId: artistId,
+            now: effectiveNow,
+          ),
+          orElse: () => initialSlots.first,
+        );
+        _selectedTimeSlot = firstAvailable.time;
+      }
+    }
+  }
+
+  Future<void> _loadRemoteArtistSchedule() async {
+    final artistId = widget.artist?.id.trim() ?? '';
+    if (artistId.isEmpty) return;
+    if (MockDataConfig.isEnabled && widget.firestore == null) return;
+
+    final fetched = await BookingSyncService.fetchArtistScheduleFromCloud(
+      artistId,
+      firestore: widget.firestore,
+    );
+    if (!mounted || fetched == null) return;
+    setState(() {
+      _remoteArtistSchedule = fetched;
+      _syncDefaultSelectionForSchedule();
     });
   }
 
@@ -168,26 +236,31 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
+        final authPhoto = user.photoURL?.trim() ?? '';
+        if (authPhoto.isNotEmpty && !authPhoto.startsWith('local://')) {
+          _clientAvatarUrl = authPhoto;
+        }
         String? uPhone;
         try {
           uPhone = user.phoneNumber;
         } catch (_) {}
-        if (uPhone != null && uPhone.trim().isNotEmpty) {
-          if (mounted) {
-            setState(() {
-              _isUserPhoneVerified = true;
-              _phoneController.text = uPhone!.trim();
-            });
-          }
-          return;
+        if (uPhone != null && uPhone.trim().isNotEmpty && mounted) {
+          setState(() {
+            _isUserPhoneVerified = true;
+            _phoneController.text = uPhone!.trim();
+          });
         }
         final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
         if (doc.exists && doc.data() != null && mounted) {
           final data = doc.data()!;
+          final docPhoto = BookingSyncService.extractPhotoUrl(data);
+          if (docPhoto.isNotEmpty) {
+            _clientAvatarUrl = docPhoto;
+          }
           final isVerified = data['phoneVerified'] == true &&
               data['phoneNumber'] != null &&
               (data['phoneNumber'] as String).trim().isNotEmpty;
-          if (isVerified) {
+          if (isVerified && !_isUserPhoneVerified) {
             setState(() {
               _isUserPhoneVerified = true;
               _phoneController.text = data['phoneNumber'] as String;
@@ -204,8 +277,8 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return AdaptiveGlassContainer(
-          borderRadius: 24,
+        return AdaptiveGlassContainer.bottomSheet(
+          topRadius: AppRadius.radiusSheet,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -352,6 +425,11 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
               ? widget.flash.artistId.trim()
               : 'artist_unknown');
 
+      final clientAvatar = _clientAvatarUrl.isNotEmpty
+          ? _clientAvatarUrl
+          : await BookingSyncService.resolveCurrentUserPhotoUrl(uid: clientId);
+      if (!mounted) return;
+
       // 1. Instantiate domain FlashBooking record and persist to /bookings/{bookingId}
       final booking = FlashBooking(
         id: _confirmationCode,
@@ -381,10 +459,12 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         depositAmount: booking.depositAmount,
         totalAmount: booking.totalAmount,
         flashTitle: widget.flash.title,
+        flashImageUrl: widget.flash.imageUrl,
         selectedDate: booking.selectedDate.toIso8601String(),
         selectedTimeSlot: booking.selectedTimeSlot,
         placement: booking.placement,
         clientName: booking.clientName,
+        clientAvatar: clientAvatar,
         clientEmail: booking.clientEmail,
         clientPhone: booking.clientPhone,
         clientNotes: booking.clientNotes,
@@ -398,6 +478,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         clientId: clientId,
         artistId: artistId,
         clientName: booking.clientName,
+        clientAvatar: clientAvatar,
         serviceType: 'Flash: ${widget.flash.title}',
         duration: widget.flash.estimatedTime,
         time: booking.selectedTimeSlot,
@@ -445,6 +526,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         artistId: artistId,
         clientId: clientId,
         clientName: booking.clientName,
+        clientAvatar: clientAvatar,
         artistName: _artistName,
         artistAvatar: widget.artist?.avatarUrl ?? '',
         studioName: widget.artist?.studioType ?? 'Studio',
@@ -474,6 +556,8 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         clientId: clientId,
         artistId: artistId,
         clientName: booking.clientName,
+        clientAvatar: clientAvatar,
+        artistAvatar: widget.artist?.avatarUrl,
       );
       ArtistDashboardRepository.notifyPendingRequestsChanged();
 
@@ -866,18 +950,43 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
 
                     final cellDate = DateTime(_currentMonth.year, _currentMonth.month, dayNum);
                     final isPast = cellDate.isBefore(today);
-                    final isWorkingDay = ArtistDashboardRepository.booksSchedule.isWorkingDay(cellDate);
-                    final isDisabled = isPast || !isWorkingDay;
+                    final isBookableDate = !isPast &&
+                        ArtistDashboardRepository.isDateBookable(
+                          date: cellDate,
+                          schedule: _effectiveSchedule,
+                          artistId: widget.artist?.id,
+                        );
+                    final isDisabled = !isBookableDate;
                     final isSelected = cellDate.year == _selectedDate.year &&
                         cellDate.month == _selectedDate.month &&
                         cellDate.day == _selectedDate.day;
 
                     return GestureDetector(
+                      key: Key('flash_booking_day_$dayNum'),
                       onTap: isDisabled
                           ? null
                           : () {
                               setState(() {
                                 _selectedDate = cellDate;
+                                final slots = _effectiveSchedule.generateTimeSlots();
+                                if (slots.isNotEmpty &&
+                                    !ArtistDashboardRepository.isSlotBookable(
+                                      date: cellDate,
+                                      timeSlot: _selectedTimeSlot,
+                                      schedule: _effectiveSchedule,
+                                      artistId: widget.artist?.id,
+                                    )) {
+                                  final firstOpen = slots.firstWhere(
+                                    (s) => ArtistDashboardRepository.isSlotBookable(
+                                      date: cellDate,
+                                      timeSlot: s.time,
+                                      schedule: _effectiveSchedule,
+                                      artistId: widget.artist?.id,
+                                    ),
+                                    orElse: () => slots.first,
+                                  );
+                                  _selectedTimeSlot = firstOpen.time;
+                                }
                               });
                             },
                       child: Container(
@@ -921,8 +1030,19 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
   }
 
   Widget _buildTimeSlotsGrid() {
-    final slots = ArtistDashboardRepository.booksSchedule.generateTimeSlots();
+    final schedule = _effectiveSchedule;
+    final slots = schedule.generateTimeSlots();
+    if (slots.isEmpty) {
+      return Text(
+        'No available time slots configured.',
+        style: GoogleFonts.plusJakartaSans(
+          color: const Color(0xFF8C9191),
+          fontSize: 13,
+        ),
+      );
+    }
 
+    final now = DateTime.now();
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -930,17 +1050,35 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         final isBooked = ArtistDashboardRepository.isTimeSlotBooked(
           date: _selectedDate,
           timeSlot: slot.time,
+          schedule: schedule,
           artistId: widget.artist?.id,
         );
-        final isSelected = !isBooked && _selectedTimeSlot == slot.time;
+        final isHeld = !isBooked &&
+            ArtistDashboardRepository.hasActiveHoldForSlot(
+              date: _selectedDate,
+              timeSlot: slot.time,
+              schedule: schedule,
+              now: now,
+            );
+        final isAvailable = ArtistDashboardRepository.isSlotBookable(
+          date: _selectedDate,
+          timeSlot: slot.time,
+          schedule: schedule,
+          artistId: widget.artist?.id,
+          now: now,
+        );
+        final isDisabled = isBooked || isHeld || !isAvailable;
+        final isSelected = !isDisabled && _selectedTimeSlot == slot.time;
+
+        final chipLabel = isBooked
+            ? '${slot.time} (Booked)'
+            : (isHeld ? '${slot.time} (Held)' : slot.time);
 
         return ChoiceChip(
-          label: Text(
-            isBooked ? '${slot.time} (Booked)' : slot.time,
-          ),
+          label: Text(chipLabel),
           selected: isSelected,
           showCheckmark: false,
-          onSelected: isBooked
+          onSelected: isDisabled
               ? null
               : (selected) {
                   if (selected) {
@@ -950,20 +1088,20 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
                   }
                 },
           selectedColor: const Color(0xFFEEC200),
-          backgroundColor: isBooked ? const Color(0xFF141616) : const Color(0xFF1E2020),
+          backgroundColor: isDisabled ? const Color(0xFF141616) : const Color(0xFF1E2020),
           disabledColor: const Color(0xFF141616),
           labelStyle: GoogleFonts.plusJakartaSans(
-            color: isBooked
+            color: isDisabled
                 ? const Color(0xFF555A5A)
                 : (isSelected ? const Color(0xFF121414) : const Color(0xFFF9FAFA)),
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-            decoration: isBooked ? TextDecoration.lineThrough : null,
+            decoration: isDisabled ? TextDecoration.lineThrough : null,
           ),
           side: BorderSide(
             color: isSelected
                 ? const Color(0xFFEEC200)
-                : (isBooked ? const Color(0xFF222525) : const Color(0xFF333737)),
+                : (isDisabled ? const Color(0xFF222525) : const Color(0xFF333737)),
             width: 1,
           ),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -1933,26 +2071,16 @@ class _PlacementSelectionBottomSheetState
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const KeyboardCollapseButton(
-                        size: 22,
-                        padding: EdgeInsets.zero,
-                      ),
-                      const SizedBox(width: 12),
-                      IconButton(
-                        key: const Key('close_placement_sheet'),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          color: Color(0xFF919696),
-                          size: 22,
-                        ),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
+                  IconButton(
+                    key: const Key('close_placement_sheet'),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: Color(0xFF919696),
+                      size: 22,
+                    ),
+                    onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
               ),

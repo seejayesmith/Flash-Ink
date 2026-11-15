@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../../../../core/mock/mock_data_config.dart';
 import '../../../../core/mock/mock_fixtures.dart';
 
-enum ChatMessageType { text, receipt }
+enum ChatMessageType { text, receipt, image, file }
 
 /// Individual chat message item.
 class ChatMessage {
@@ -17,6 +17,10 @@ class ChatMessage {
   final double? receiptAmount;
   final DateTime? appointmentDate;
   final String? flashImageUrl;
+  final String? attachmentUrl;
+  final String? attachmentName;
+  final String? attachmentMimeType;
+  final int? attachmentSizeBytes;
 
   const ChatMessage({
     required this.id,
@@ -29,7 +33,23 @@ class ChatMessage {
     this.receiptAmount,
     this.appointmentDate,
     this.flashImageUrl,
+    this.attachmentUrl,
+    this.attachmentName,
+    this.attachmentMimeType,
+    this.attachmentSizeBytes,
   });
+
+  /// Summary text used for inbox thread previews when [text] is empty on attachments.
+  String get previewText {
+    final trimmed = text.trim();
+    if (trimmed.isNotEmpty) return trimmed;
+    return switch (type) {
+      ChatMessageType.image => '📷 ${attachmentName ?? 'Photo'}',
+      ChatMessageType.file => '📎 ${attachmentName ?? 'Attachment'}',
+      ChatMessageType.receipt => 'Booking Receipt',
+      ChatMessageType.text => text,
+    };
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -43,12 +63,21 @@ class ChatMessage {
       if (receiptAmount != null) 'receiptAmount': receiptAmount,
       if (appointmentDate != null) 'appointmentDate': appointmentDate!.toIso8601String(),
       if (flashImageUrl != null) 'flashImageUrl': flashImageUrl,
+      if (attachmentUrl != null) 'attachmentUrl': attachmentUrl,
+      if (attachmentName != null) 'attachmentName': attachmentName,
+      if (attachmentMimeType != null) 'attachmentMimeType': attachmentMimeType,
+      if (attachmentSizeBytes != null) 'attachmentSizeBytes': attachmentSizeBytes,
     };
   }
 
   factory ChatMessage.fromMap(Map<String, dynamic> map, [String? docId]) {
     final rawType = map['type']?.toString() ?? 'text';
-    final parsedType = rawType == 'receipt' ? ChatMessageType.receipt : ChatMessageType.text;
+    final parsedType = switch (rawType) {
+      'receipt' => ChatMessageType.receipt,
+      'image' => ChatMessageType.image,
+      'file' => ChatMessageType.file,
+      _ => ChatMessageType.text,
+    };
     return ChatMessage(
       id: (docId != null && docId.isNotEmpty)
           ? docId
@@ -66,6 +95,10 @@ class ChatMessage {
           ? DateTime.tryParse(map['appointmentDate'] as String)
           : null,
       flashImageUrl: map['flashImageUrl']?.toString(),
+      attachmentUrl: map['attachmentUrl']?.toString(),
+      attachmentName: map['attachmentName']?.toString(),
+      attachmentMimeType: map['attachmentMimeType']?.toString(),
+      attachmentSizeBytes: (map['attachmentSizeBytes'] as num?)?.toInt(),
     );
   }
 }
@@ -76,6 +109,7 @@ class MessageThread {
   final String artistId;
   final String? clientId;
   final String? clientName;
+  final String clientAvatar;
   final String artistName;
   final String artistAvatar;
   final String studioName;
@@ -93,6 +127,7 @@ class MessageThread {
     required this.artistId,
     this.clientId,
     this.clientName,
+    this.clientAvatar = '',
     required this.artistName,
     required this.artistAvatar,
     required this.studioName,
@@ -109,6 +144,7 @@ class MessageThread {
     String? artistId,
     String? clientId,
     String? clientName,
+    String? clientAvatar,
     String? artistName,
     String? artistAvatar,
     String? studioName,
@@ -124,6 +160,7 @@ class MessageThread {
       artistId: artistId ?? this.artistId,
       clientId: clientId ?? this.clientId,
       clientName: clientName ?? this.clientName,
+      clientAvatar: clientAvatar ?? this.clientAvatar,
       artistName: artistName ?? this.artistName,
       artistAvatar: artistAvatar ?? this.artistAvatar,
       studioName: studioName ?? this.studioName,
@@ -142,6 +179,7 @@ class MessageThread {
       'artistId': artistId,
       if (clientId != null) 'clientId': clientId,
       if (clientName != null) 'clientName': clientName,
+      if (clientAvatar.isNotEmpty) 'clientAvatar': clientAvatar,
       'artistName': artistName,
       'artistAvatar': artistAvatar,
       'studioName': studioName,
@@ -169,8 +207,17 @@ class MessageThread {
       artistId: map['artistId']?.toString() ?? '',
       clientId: map['clientId']?.toString(),
       clientName: map['clientName']?.toString(),
+      clientAvatar: (map['clientAvatar'] ??
+              map['clientPhotoUrl'] ??
+              map['clientPhotoURL'] ??
+              '')
+          .toString(),
       artistName: map['artistName']?.toString() ?? 'Artist',
-      artistAvatar: map['artistAvatar']?.toString() ?? '',
+      artistAvatar: (map['artistAvatar'] ??
+              map['artistPhotoUrl'] ??
+              map['artistPhotoURL'] ??
+              '')
+          .toString(),
       studioName: map['studioName']?.toString() ?? '',
       lastMessage: map['lastMessage']?.toString() ?? '',
       lastMessageTime: map['lastMessageTime'] is String

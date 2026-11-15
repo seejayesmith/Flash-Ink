@@ -5,10 +5,12 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 
+import 'core/utils/device_corner_radius.dart';
 import 'theme/app_theme.dart';
 
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,9 +44,19 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // Initialize push & local notifications
+  try {
+    await NotificationService.initialize();
+  } catch (_) {}
+
   // Cap image cache to prevent Jetsam memory terminations on iOS devices
   PaintingBinding.instance.imageCache.maximumSizeBytes = 80 << 20; // 80 MB limit
   PaintingBinding.instance.imageCache.maximumSize = 60; // 60 image limit
+
+  // Pre-fetch native display corner radii after the first window layout.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    DeviceCornerRadius.warmUp();
+  });
 
   runApp(const ProviderScope(child: MyApp()));
 }

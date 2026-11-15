@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/utils/maps_directions_launcher.dart';
 import '../../../../theme/app_buttons.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
@@ -222,15 +223,20 @@ class AppointmentDetailModal extends StatelessWidget {
               children: [
                 Expanded(
                   child: AppButtons.secondaryCTA(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      final unlocked = appointment.isExactLocationUnlocked();
-                      FlashSnackBar.showInfo(
+                    onPressed: () async {
+                      if (!appointment.isExactLocationUnlocked()) {
+                        Navigator.pop(context);
+                        FlashSnackBar.showInfo(
+                          context,
+                          'Exact studio address unlocks 24 hours before your confirmed session.',
+                          duration: const Duration(seconds: 2),
+                        );
+                        return;
+                      }
+                      await MapsDirectionsLauncher.openDirections(
                         context,
-                        unlocked
-                            ? 'Opening maps to ${appointment.studioAddress}...'
-                            : 'Exact studio address unlocks 24 hours before your confirmed session.',
-                        duration: const Duration(seconds: 2),
+                        address: appointment.studioAddress,
+                        studioName: appointment.studioName,
                       );
                     },
                     icon: Icons.directions,

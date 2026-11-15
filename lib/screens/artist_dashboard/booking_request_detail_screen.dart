@@ -3,9 +3,12 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../models/booking.dart';
 import '../../theme/app_buttons.dart';
+import '../../theme/app_radius.dart';
+import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/pinned_bottom_action_scaffold.dart';
+import '../../widgets/user_avatar.dart';
 
 /// Full-screen view presenting comprehensive booking request details and actions.
 class BookingRequestDetailScreen extends StatefulWidget {
@@ -35,8 +38,9 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
     DateTime candidate = widget.request.preferredDate ??
         DateTime.now().add(const Duration(days: 3));
     int guard = 0;
-    while (!ArtistDashboardRepository.booksSchedule.isWorkingDay(candidate) &&
-        guard < 14) {
+    while ((!ArtistDashboardRepository.booksSchedule.isWorkingDay(candidate) ||
+            ArtistDashboardRepository.isClosedByWeeklyCap(candidate)) &&
+        guard < 30) {
       candidate = candidate.add(const Duration(days: 1));
       guard++;
     }
@@ -71,8 +75,9 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
     final List<DateTime> result = [];
     DateTime cursor = DateTime.now().add(const Duration(days: 1));
     int attempts = 0;
-    while (result.length < count && attempts < 30) {
-      if (ArtistDashboardRepository.booksSchedule.isWorkingDay(cursor)) {
+    while (result.length < count && attempts < 45) {
+      if (ArtistDashboardRepository.booksSchedule.isWorkingDay(cursor) &&
+          !ArtistDashboardRepository.isClosedByWeeklyCap(cursor)) {
         result.add(DateTime(cursor.year, cursor.month, cursor.day));
       }
       cursor = cursor.add(const Duration(days: 1));
@@ -106,10 +111,7 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF171A1A),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (modalContext) {
         return StatefulBuilder(
           builder: (ctx, setModalState) {
@@ -120,13 +122,17 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
               constraints: BoxConstraints(
                 maxHeight: MediaQuery.sizeOf(ctx).height * 0.85,
               ),
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  20,
-                  20,
-                  MediaQuery.viewInsetsOf(ctx).bottom + 24,
-                ),
+              child: AdaptiveGlassContainer.bottomSheet(
+                glassEnabled: false,
+                androidSurfaceColor: const Color(0xFF171A1A),
+                topRadius: AppRadius.radiusSheet,
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    20,
+                    20,
+                    MediaQuery.viewInsetsOf(ctx).bottom + 24,
+                  ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -370,7 +376,10 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                                 createdAt: DateTime.now(),
                                 expiresAt: DateTime.now().add(const Duration(hours: 24)),
                               );
-                              ArtistDashboardRepository.addCustomHold(hold);
+                              ArtistDashboardRepository.addCustomHold(
+                                hold,
+                                artistId: widget.request.artistId,
+                              );
 
                               setState(() {
                                 _selectedDate = tempDate;
@@ -391,6 +400,7 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                     ),
                   ],
                 ),
+                ),
               ),
             );
           },
@@ -406,10 +416,7 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF171A1A),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (modalContext) {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
@@ -422,13 +429,17 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
               constraints: BoxConstraints(
                 maxHeight: MediaQuery.sizeOf(ctx).height * 0.85,
               ),
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  20,
-                  20,
-                  MediaQuery.viewInsetsOf(ctx).bottom + 24,
-                ),
+              child: AdaptiveGlassContainer.bottomSheet(
+                glassEnabled: false,
+                androidSurfaceColor: const Color(0xFF171A1A),
+                topRadius: AppRadius.radiusSheet,
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    20,
+                    20,
+                    MediaQuery.viewInsetsOf(ctx).bottom + 24,
+                  ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -545,6 +556,7 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                     ),
                   ],
                 ),
+                ),
               ),
             );
           },
@@ -560,10 +572,7 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF171A1A),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (modalContext) {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
@@ -573,13 +582,17 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
               constraints: BoxConstraints(
                 maxHeight: MediaQuery.sizeOf(ctx).height * 0.85,
               ),
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  20,
-                  20,
-                  MediaQuery.viewInsetsOf(ctx).bottom + 24,
-                ),
+              child: AdaptiveGlassContainer.bottomSheet(
+                glassEnabled: false,
+                androidSurfaceColor: const Color(0xFF171A1A),
+                topRadius: AppRadius.radiusSheet,
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    20,
+                    20,
+                    MediaQuery.viewInsetsOf(ctx).bottom + 24,
+                  ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -708,6 +721,7 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                     ),
                   ],
                 ),
+                ),
               ),
             );
           },
@@ -772,17 +786,12 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
               ),
               child: Row(
                 children: [
-                  CircleAvatar(
+                  UserAvatar(
+                    imageUrl: request.clientAvatar,
+                    displayName: request.clientName,
                     radius: 26,
-                    backgroundColor: const Color(0xFF262929),
-                    child: Text(
-                      request.clientName.isNotEmpty ? request.clientName[0] : 'C',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFFEEC200),
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    fallbackInitial: 'C',
+                    initialFontSize: 22,
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -857,6 +866,41 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                             child: const Icon(Icons.image_not_supported, color: Color(0xFF8C9191)),
                           ),
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (request.referenceImageUrls.length > 1) ...[
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final extraUrl in request.referenceImageUrls.skip(1)) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: SizedBox(
+                                  width: 72,
+                                  height: 72,
+                                  child: FlashImage(
+                                    urlOrPath: extraUrl,
+                                    fit: BoxFit.cover,
+                                    errorWidget: Container(
+                                      color: const Color(0xFF262929),
+                                      alignment: Alignment.center,
+                                      child: const Icon(
+                                        Icons.image_not_supported,
+                                        color: Color(0xFF8C9191),
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     const SizedBox(height: 16),

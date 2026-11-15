@@ -6,7 +6,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../core/utils/distance_calculator.dart';
 import '../providers/app_providers.dart';
 import '../services/location_service.dart';
-import '../theme/app_buttons.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 import '../widgets/adaptive_glass_container.dart';
@@ -133,8 +132,11 @@ class _LocationSettingsScreenState extends ConsumerState<LocationSettingsScreen>
       if (result == LocationPermission.whileInUse ||
           result == LocationPermission.always) {
         await _fetchCurrentLocation();
-      } else if (result == LocationPermission.deniedForever) {
+      } else {
         if (mounted) {
+          ref.read(useLiveLocationPreferenceProvider.notifier).setEnabled(false);
+        }
+        if (result == LocationPermission.deniedForever && mounted) {
           FlashSnackBar.showInfo(
             context,
             'Location access is blocked in device settings.',
@@ -227,292 +229,9 @@ class _LocationSettingsScreenState extends ConsumerState<LocationSettingsScreen>
     );
   }
 
-  Widget _buildHeroStatusCard() {
-    final (statusLabel, statusColor, statusIcon) = switch ((
-      _isLocationServiceEnabled,
-      _permission,
-    )) {
-      (false, _) => (
-          'SERVICES DISABLED',
-          const Color(0xFFF59E0B),
-          Icons.location_off_rounded
-        ),
-      (true, LocationPermission.whileInUse) => (
-          'ALLOWED WHILE IN USE',
-          const Color(0xFF22C55E),
-          Icons.check_circle_rounded
-        ),
-      (true, LocationPermission.always) => (
-          'ALWAYS ALLOWED',
-          const Color(0xFF22C55E),
-          Icons.check_circle_rounded
-        ),
-      (true, LocationPermission.deniedForever) => (
-          'PERMANENTLY DENIED',
-          const Color(0xFFEF4444),
-          Icons.block_rounded
-        ),
-      _ => (
-          'PERMISSION DENIED',
-          const Color(0xFF9CA3AF),
-          Icons.info_outline_rounded
-        ),
-    };
-
-    return AdaptiveGlassContainer(
-      useGradient: false,
-      borderRadius: 16.0,
-      padding: const EdgeInsets.all(AppSpacing.spaceLg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: statusColor.withAlpha(35),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: statusColor.withAlpha(90), width: 1.2),
-                ),
-                child: Icon(statusIcon, color: statusColor, size: 24),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Device Location Access',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      key: const Key('location_permission_badge'),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: statusColor.withAlpha(30),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: statusColor.withAlpha(80), width: 0.8),
-                      ),
-                      child: Text(
-                        statusLabel,
-                        style: GoogleFonts.plusJakartaSans(
-                          color: statusColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Flash.Ink uses your location to discover nearby resident and guest tattoo artists, display studio locations on the interactive map, and calculate accurate travel distances to flash drops.',
-            style: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFF919696),
-              fontSize: 13,
-              height: 1.45,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSystemPermissionControl() {
-    if (!_isLocationServiceEnabled) {
-      return _buildSettingsContainer([
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.location_off_rounded, color: Color(0xFFF59E0B), size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Device Location Services Off',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Location services are switched off system-wide on your device. Turn them on to allow Flash.Ink to discover nearby tattoo studios.',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF919696),
-                  fontSize: 12.5,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 14),
-              AppButtons.primaryCTA(
-                key: const Key('open_location_settings_button'),
-                onPressed: _openLocationSettings,
-                icon: Icons.settings,
-                text: 'Open Location Settings',
-                backgroundColor: AppTheme.gold,
-                foregroundColor: Colors.black,
-              ),
-            ],
-          ),
-        ),
-      ]);
-    }
-
-    if (_permission == LocationPermission.deniedForever) {
-      return _buildSettingsContainer([
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Location Permission Blocked',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Location access was permanently denied. To enable it, open your device settings and allow Location access for Flash.Ink.',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF919696),
-                  fontSize: 12.5,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 14),
-              AppButtons.primaryCTA(
-                key: const Key('open_device_settings_button'),
-                onPressed: _openAppSettings,
-                icon: Icons.open_in_new_rounded,
-                text: 'Open Device Settings',
-                backgroundColor: AppTheme.gold,
-                foregroundColor: Colors.black,
-              ),
-            ],
-          ),
-        ),
-      ]);
-    }
-
-    if (!_isGranted) {
-      return _buildSettingsContainer([
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.near_me_outlined, color: AppTheme.gold, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Enable Location Permission',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Grant Flash.Ink permission to locate nearby resident artists and studios without manually entering your ZIP code each time.',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF919696),
-                  fontSize: 12.5,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 14),
-              AppButtons.primaryCTA(
-                key: const Key('request_location_permission_button'),
-                onPressed: _isLoading ? null : _requestPermission,
-                icon: Icons.location_on,
-                text: 'Allow Location Access',
-                isLoading: _isLoading,
-                backgroundColor: AppTheme.gold,
-                foregroundColor: Colors.black,
-              ),
-            ],
-          ),
-        ),
-      ]);
-    }
-
-    // Granted State
-    return _buildSettingsContainer([
-      ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        leading: const Icon(Icons.verified_user_outlined, color: Color(0xFF22C55E)),
-        title: Text(
-          'System Permission',
-          style: GoogleFonts.plusJakartaSans(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-            fontSize: 15,
-          ),
-        ),
-        subtitle: Text(
-          _permission == LocationPermission.always
-              ? 'Granted: Always in background'
-              : 'Granted: While using the app',
-          style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFF22C55E),
-            fontSize: 13,
-          ),
-        ),
-        trailing: TextButton.icon(
-          key: const Key('open_device_settings_button'),
-          onPressed: _openAppSettings,
-          icon: const Icon(Icons.open_in_new_rounded, size: 15, color: AppTheme.gold),
-          label: Text(
-            'Settings',
-            style: GoogleFonts.plusJakartaSans(
-              color: AppTheme.gold,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-      ),
-    ]);
-  }
-
   Widget _buildPreferencesSection() {
     final useLive = ref.watch(useLiveLocationPreferenceProvider);
+    final isToggleActive = useLive && _isGranted && _isLocationServiceEnabled;
 
     return _buildSettingsContainer([
       Padding(
@@ -547,13 +266,27 @@ class _LocationSettingsScreenState extends ConsumerState<LocationSettingsScreen>
             const SizedBox(width: 8),
             FlashSwitch(
               key: const Key('use_precise_location_switch'),
-              value: useLive,
-              onChanged: (val) {
-                ref.read(useLiveLocationPreferenceProvider.notifier).setEnabled(val);
-                if (val && !_isGranted) {
-                  _requestPermission();
-                }
-              },
+              value: isToggleActive,
+              onChanged: _isLoading
+                  ? null
+                  : (val) async {
+                      if (!val) {
+                        ref.read(useLiveLocationPreferenceProvider.notifier).setEnabled(false);
+                        return;
+                      }
+                      if (!_isLocationServiceEnabled) {
+                        await _openLocationSettings();
+                        return;
+                      }
+                      if (_permission == LocationPermission.deniedForever) {
+                        await _openAppSettings();
+                        return;
+                      }
+                      ref.read(useLiveLocationPreferenceProvider.notifier).setEnabled(true);
+                      if (!_isGranted) {
+                        await _requestPermission();
+                      }
+                    },
             ),
           ],
         ),
@@ -706,12 +439,6 @@ class _LocationSettingsScreenState extends ConsumerState<LocationSettingsScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildHeroStatusCard(),
-                  const SizedBox(height: 24),
-                  _buildSectionHeader('SYSTEM PERMISSION'),
-                  const SizedBox(height: 10),
-                  _buildSystemPermissionControl(),
-                  const SizedBox(height: 24),
                   _buildSectionHeader('IN-APP PREFERENCES'),
                   const SizedBox(height: 10),
                   _buildPreferencesSection(),

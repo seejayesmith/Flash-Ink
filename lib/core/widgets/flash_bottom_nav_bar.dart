@@ -94,6 +94,22 @@ class FlashBottomNavBar extends StatelessWidget {
     return NavDestinationItem.forRole(role ?? 'client');
   }
 
+  /// Measures the rendered single-line width of [label] using the active
+  /// label style and ambient [TextScaler] so the active pill can expand
+  /// symmetrically around longer destination names.
+  double _measureLabelWidth(BuildContext context, String label) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: AppTheme.navLabelActive,
+      ),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    return painter.width;
+  }
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<int>(
@@ -150,6 +166,28 @@ class FlashBottomNavBar extends StatelessWidget {
                             final hasValidSelection =
                                 currentIndex >= 0 && currentIndex < itemCount;
 
+                            double pillLeft = 0.0;
+                            double pillWidth = 0.0;
+                            if (hasValidSelection && slotWidth > 0) {
+                              final labelWidth = _measureLabelWidth(
+                                context,
+                                navItems[currentIndex].label,
+                              );
+                              final minWidth =
+                                  (slotWidth - 2.0).clamp(0.0, double.infinity);
+                              // Ensure at least 14px of horizontal pill padding per side.
+                              final contentWidth = labelWidth + 28.0;
+                              final maxBarWidth =
+                                  (totalWidth - 2.0).clamp(0.0, double.infinity);
+                              pillWidth =
+                                  contentWidth.clamp(minWidth, maxBarWidth);
+                              final centerX = (currentIndex + 0.5) * slotWidth;
+                              final maxLeft = (totalWidth - pillWidth - 1.0)
+                                  .clamp(1.0, double.infinity);
+                              pillLeft =
+                                  (centerX - pillWidth / 2.0).clamp(1.0, maxLeft);
+                            }
+
                             return Stack(
                               children: [
                                 // Gliding liquid glass indicator pill
@@ -157,10 +195,10 @@ class FlashBottomNavBar extends StatelessWidget {
                                   AnimatedPositioned(
                                     duration: AppTheme.navAnimationDuration,
                                     curve: AppTheme.navAnimationCurve,
-                                    left: currentIndex * slotWidth + 1.0,
+                                    left: pillLeft,
                                     top: 4.0,
                                     bottom: 4.0,
-                                    width: (slotWidth - 2.0).clamp(0.0, double.infinity),
+                                    width: pillWidth,
                                     child: Container(
                                       decoration: BoxDecoration(
                                         color: AppTheme.navActivePillBackground,

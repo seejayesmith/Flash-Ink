@@ -12,6 +12,7 @@ class DashboardAppointment {
   final String? clientId;
   final String? artistId;
   final String clientName;
+  final String? clientAvatar;
   final String serviceType;
   final String duration;
   final String time;
@@ -31,6 +32,7 @@ class DashboardAppointment {
     this.clientId,
     this.artistId,
     required this.clientName,
+    this.clientAvatar,
     required this.serviceType,
     required this.duration,
     required this.time,
@@ -51,6 +53,7 @@ class DashboardAppointment {
     String? clientId,
     String? artistId,
     String? clientName,
+    String? clientAvatar,
     String? serviceType,
     String? duration,
     String? time,
@@ -70,6 +73,7 @@ class DashboardAppointment {
       clientId: clientId ?? this.clientId,
       artistId: artistId ?? this.artistId,
       clientName: clientName ?? this.clientName,
+      clientAvatar: clientAvatar ?? this.clientAvatar,
       serviceType: serviceType ?? this.serviceType,
       duration: duration ?? this.duration,
       time: time ?? this.time,
@@ -126,6 +130,7 @@ class DashboardAppointment {
       'clientId': clientId,
       'artistId': artistId,
       'clientName': clientName,
+      if (clientAvatar != null && clientAvatar!.isNotEmpty) 'clientAvatar': clientAvatar,
       'serviceType': serviceType,
       'duration': duration,
       'time': time,
@@ -153,6 +158,10 @@ class DashboardAppointment {
       clientId: map['clientId']?.toString(),
       artistId: map['artistId']?.toString(),
       clientName: map['clientName']?.toString() ?? 'Client',
+      clientAvatar: (map['clientAvatar'] ??
+              map['clientPhotoUrl'] ??
+              map['clientPhotoURL'])
+          ?.toString(),
       serviceType: map['serviceType']?.toString() ?? 'Tattoo Session',
       duration: map['duration']?.toString() ?? '2 hrs',
       time: map['time']?.toString() ?? '1:00 PM',
@@ -162,7 +171,13 @@ class DashboardAppointment {
       notes: map['notes']?.toString() ?? '',
       depositPaid: (map['depositPaid'] as num?)?.toInt() ?? 50,
       fullPrice: (map['fullPrice'] as num?)?.toInt() ?? 250,
-      artworkImageUrl: map['artworkImageUrl']?.toString() ?? '',
+      artworkImageUrl: (map['artworkImageUrl'] ??
+              map['flashImageUrl'] ??
+              map['imageUrl'] ??
+              map['sketchImageUrl'] ??
+              '')
+          .toString()
+          .trim(),
       isConsultation: isConsult,
       visitType: map['visitType']?.toString(),
       dotColor: isConsult ? const Color(0xFF919696) : const Color(0xFF22C55E),
@@ -176,11 +191,13 @@ class BookingRequest {
   final String? clientId;
   final String? artistId;
   final String clientName;
+  final String? clientAvatar;
   final String timeAgo;
   final String conceptDescription;
   final String placement;
   final String category;
   final String sketchImageUrl;
+  final List<String> referenceImageUrls;
   final int estimatedPrice;
   final int deposit;
   final String size;
@@ -194,11 +211,13 @@ class BookingRequest {
     this.clientId,
     this.artistId,
     required this.clientName,
+    this.clientAvatar,
     required this.timeAgo,
     required this.conceptDescription,
     this.placement = 'Outer Thigh',
     this.category = 'Neo-traditional',
     required this.sketchImageUrl,
+    this.referenceImageUrls = const [],
     this.estimatedPrice = 300,
     this.deposit = 80,
     this.size = 'Medium (4"-7")',
@@ -213,11 +232,13 @@ class BookingRequest {
     String? clientId,
     String? artistId,
     String? clientName,
+    String? clientAvatar,
     String? timeAgo,
     String? conceptDescription,
     String? placement,
     String? category,
     String? sketchImageUrl,
+    List<String>? referenceImageUrls,
     int? estimatedPrice,
     int? deposit,
     String? size,
@@ -231,11 +252,13 @@ class BookingRequest {
       clientId: clientId ?? this.clientId,
       artistId: artistId ?? this.artistId,
       clientName: clientName ?? this.clientName,
+      clientAvatar: clientAvatar ?? this.clientAvatar,
       timeAgo: timeAgo ?? this.timeAgo,
       conceptDescription: conceptDescription ?? this.conceptDescription,
       placement: placement ?? this.placement,
       category: category ?? this.category,
       sketchImageUrl: sketchImageUrl ?? this.sketchImageUrl,
+      referenceImageUrls: referenceImageUrls ?? this.referenceImageUrls,
       estimatedPrice: estimatedPrice ?? this.estimatedPrice,
       deposit: deposit ?? this.deposit,
       size: size ?? this.size,
@@ -252,11 +275,13 @@ class BookingRequest {
       'clientId': clientId,
       'artistId': artistId,
       'clientName': clientName,
+      if (clientAvatar != null && clientAvatar!.isNotEmpty) 'clientAvatar': clientAvatar,
       'timeAgo': timeAgo,
       'conceptDescription': conceptDescription,
       'placement': placement,
       'category': category,
       'sketchImageUrl': sketchImageUrl,
+      'referenceImageUrls': referenceImageUrls,
       'estimatedPrice': estimatedPrice,
       'deposit': deposit,
       'size': size,
@@ -271,6 +296,10 @@ class BookingRequest {
     final parsedDate = map['preferredDate'] is String
         ? DateTime.tryParse(map['preferredDate'] as String)
         : null;
+    final rawRefs = map['referenceImageUrls'];
+    final parsedRefs = rawRefs is List
+        ? rawRefs.map((e) => e.toString()).where((s) => s.isNotEmpty).toList()
+        : <String>[];
     return BookingRequest(
       id: (docId != null && docId.isNotEmpty)
           ? docId
@@ -278,11 +307,16 @@ class BookingRequest {
       clientId: map['clientId']?.toString(),
       artistId: map['artistId']?.toString(),
       clientName: map['clientName']?.toString() ?? 'Client',
+      clientAvatar: (map['clientAvatar'] ??
+              map['clientPhotoUrl'] ??
+              map['clientPhotoURL'])
+          ?.toString(),
       timeAgo: map['timeAgo']?.toString() ?? 'Recently',
       conceptDescription: map['conceptDescription']?.toString() ?? '',
       placement: map['placement']?.toString() ?? 'Forearm',
       category: map['category']?.toString() ?? 'Custom Design',
       sketchImageUrl: map['sketchImageUrl']?.toString() ?? '',
+      referenceImageUrls: parsedRefs,
       estimatedPrice: (map['estimatedPrice'] as num?)?.toInt() ?? 300,
       deposit: (map['deposit'] as num?)?.toInt() ?? 80,
       size: map['size']?.toString() ?? 'Medium (4"-7")',
@@ -571,6 +605,39 @@ enum DayCapacityStatus {
 }
 
 /// Represents the configuration for an artist's booking schedule ("Books").
+/// Compact anonymized slot entry stored on `artist_schedules` so clients
+/// can enforce booked/held capacity without reading private `/appointments`.
+class ScheduleSlotEntry {
+  final String dateKey;
+  final String timeSlot;
+  final DateTime? expiresAt;
+
+  const ScheduleSlotEntry({
+    required this.dateKey,
+    required this.timeSlot,
+    this.expiresAt,
+  });
+
+  bool isActiveAt(DateTime now) =>
+      expiresAt == null || now.isBefore(expiresAt!);
+
+  Map<String, dynamic> toMap() => {
+        'date': dateKey,
+        'time': timeSlot,
+        if (expiresAt != null) 'expiresAt': expiresAt!.toIso8601String(),
+      };
+
+  factory ScheduleSlotEntry.fromMap(Map<String, dynamic> map) {
+    return ScheduleSlotEntry(
+      dateKey: (map['date'] ?? '').toString(),
+      timeSlot: (map['time'] ?? '').toString(),
+      expiresAt: map['expiresAt'] != null
+          ? DateTime.tryParse(map['expiresAt'].toString())
+          : null,
+    );
+  }
+}
+
 class ArtistBooksSchedule {
   final bool isBooksOpen;
   final bool isEarlyAccessOnly;
@@ -579,6 +646,12 @@ class ArtistBooksSchedule {
   final DateTime bookingWindowStart;
   final DateTime bookingWindowEnd;
   final Set<int> workingDays; // 1 = Mon, 7 = Sun (DateTime weekday constants)
+  final Set<String> blockedDates; // YYYY-MM-DD explicit day-off overrides
+  final Set<String> openOverrideDates; // YYYY-MM-DD forced-open overrides
+  final int minLeadTimeHours; // 0, 24, 48, 72, 168 (applies to empty days only)
+  final int? maxWorkingDaysPerWeek; // Sun-Sat distinct occupied day cap
+  final List<ScheduleSlotEntry> bookedSlots; // Server-maintained occupancy
+  final List<ScheduleSlotEntry> heldSlots; // Unexpired 24h artist holds
   final TimeOfDay startTime;
   final TimeOfDay endTime;
   final int slotDurationMinutes; // e.g. 60, 120, 180
@@ -597,6 +670,12 @@ class ArtistBooksSchedule {
     required this.bookingWindowStart,
     required this.bookingWindowEnd,
     this.workingDays = const {2, 3, 4, 5, 6}, // Tue - Sat
+    this.blockedDates = const {},
+    this.openOverrideDates = const {},
+    this.minLeadTimeHours = 0,
+    this.maxWorkingDaysPerWeek,
+    this.bookedSlots = const [],
+    this.heldSlots = const [],
     this.startTime = const TimeOfDay(hour: 11, minute: 0),
     this.endTime = const TimeOfDay(hour: 19, minute: 0),
     this.slotDurationMinutes = 120,
@@ -608,9 +687,57 @@ class ArtistBooksSchedule {
     this.locationNote = 'OddMaree Studio • Portland, OR',
   });
 
-  /// Returns true if the artist's books are open and the given date falls on a configured working weekday.
+  /// Formats [dt] into a canonical `YYYY-MM-DD` local calendar date key.
+  static String dateKey(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
+  /// Normalizes display slot labels such as `"1:30 PM (3.0 hrs)"` to `"1:30 PM"`.
+  static String normalizeTimeLabel(String timeSlot) =>
+      timeSlot.split('(').first.trim().toUpperCase();
+
+  /// Returns local midnight of the Sunday starting the Sun–Sat week containing [date].
+  static DateTime weekStartSunday(DateTime date) {
+    final normalized = DateTime(date.year, date.month, date.day);
+    return DateTime(
+      normalized.year,
+      normalized.month,
+      normalized.day - (normalized.weekday % 7),
+    );
+  }
+
+  /// Parses [timeSlot] on [date] into a local [DateTime], or `null` if invalid.
+  static DateTime? parseSlotDateTime(DateTime date, String timeSlot) {
+    final cleaned = normalizeTimeLabel(timeSlot);
+    final match12 = RegExp(r'^(\d{1,2}):(\d{2})\s*(AM|PM)$').firstMatch(cleaned);
+    if (match12 != null) {
+      var hour = int.tryParse(match12.group(1)!) ?? 0;
+      final minute = int.tryParse(match12.group(2)!) ?? 0;
+      final meridiem = match12.group(3)!;
+      if (meridiem == 'PM' && hour != 12) hour += 12;
+      if (meridiem == 'AM' && hour == 12) hour = 0;
+      return DateTime(date.year, date.month, date.day, hour, minute);
+    }
+    final match24 = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(cleaned);
+    if (match24 != null) {
+      final hour = int.tryParse(match24.group(1)!) ?? 0;
+      final minute = int.tryParse(match24.group(2)!) ?? 0;
+      return DateTime(date.year, date.month, date.day, hour, minute);
+    }
+    return null;
+  }
+
+  bool isDateBlocked(DateTime date) => blockedDates.contains(dateKey(date));
+
+  bool isDateForceOpened(DateTime date) =>
+      openOverrideDates.contains(dateKey(date));
+
+  /// Returns true if books are open and [date] is either force-opened or an
+  /// unblocked configured working weekday.
   bool isWorkingDay(DateTime date) {
     if (!isBooksOpen) return false;
+    final key = dateKey(date);
+    if (blockedDates.contains(key)) return false;
+    if (openOverrideDates.contains(key)) return true;
     return workingDays.contains(date.weekday);
   }
 
@@ -685,10 +812,18 @@ class ArtistBooksSchedule {
     bool? isBooksOpen,
     bool? isEarlyAccessOnly,
     DateTime? earlyAccessEndsAt,
+    bool clearEarlyAccessEndsAt = false,
     int? earlyAccessHours,
     DateTime? bookingWindowStart,
     DateTime? bookingWindowEnd,
     Set<int>? workingDays,
+    Set<String>? blockedDates,
+    Set<String>? openOverrideDates,
+    int? minLeadTimeHours,
+    int? maxWorkingDaysPerWeek,
+    bool clearMaxWorkingDaysPerWeek = false,
+    List<ScheduleSlotEntry>? bookedSlots,
+    List<ScheduleSlotEntry>? heldSlots,
     TimeOfDay? startTime,
     TimeOfDay? endTime,
     int? slotDurationMinutes,
@@ -702,11 +837,21 @@ class ArtistBooksSchedule {
     return ArtistBooksSchedule(
       isBooksOpen: isBooksOpen ?? this.isBooksOpen,
       isEarlyAccessOnly: isEarlyAccessOnly ?? this.isEarlyAccessOnly,
-      earlyAccessEndsAt: earlyAccessEndsAt ?? this.earlyAccessEndsAt,
+      earlyAccessEndsAt: clearEarlyAccessEndsAt
+          ? null
+          : (earlyAccessEndsAt ?? this.earlyAccessEndsAt),
       earlyAccessHours: earlyAccessHours ?? this.earlyAccessHours,
       bookingWindowStart: bookingWindowStart ?? this.bookingWindowStart,
       bookingWindowEnd: bookingWindowEnd ?? this.bookingWindowEnd,
       workingDays: workingDays ?? this.workingDays,
+      blockedDates: blockedDates ?? this.blockedDates,
+      openOverrideDates: openOverrideDates ?? this.openOverrideDates,
+      minLeadTimeHours: minLeadTimeHours ?? this.minLeadTimeHours,
+      maxWorkingDaysPerWeek: clearMaxWorkingDaysPerWeek
+          ? null
+          : (maxWorkingDaysPerWeek ?? this.maxWorkingDaysPerWeek),
+      bookedSlots: bookedSlots ?? this.bookedSlots,
+      heldSlots: heldSlots ?? this.heldSlots,
       startTime: startTime ?? this.startTime,
       endTime: endTime ?? this.endTime,
       slotDurationMinutes: slotDurationMinutes ?? this.slotDurationMinutes,
@@ -727,7 +872,13 @@ class ArtistBooksSchedule {
       'earlyAccessHours': earlyAccessHours,
       'bookingWindowStart': bookingWindowStart.toIso8601String(),
       'bookingWindowEnd': bookingWindowEnd.toIso8601String(),
-      'workingDays': workingDays.toList(),
+      'workingDays': workingDays.toList()..sort(),
+      'blockedDates': blockedDates.toList()..sort(),
+      'openOverrideDates': openOverrideDates.toList()..sort(),
+      'minLeadTimeHours': minLeadTimeHours,
+      'maxWorkingDaysPerWeek': maxWorkingDaysPerWeek,
+      'heldSlots': heldSlots.map((e) => e.toMap()).toList(),
+      // Omit bookedSlots so client writes preserve server-maintained Cloud Function data.
       'startHour': startTime.hour,
       'startMinute': startTime.minute,
       'endHour': endTime.hour,
@@ -759,6 +910,30 @@ class ArtistBooksSchedule {
       workingDays: map['workingDays'] != null
           ? (map['workingDays'] as List).map((e) => (e as num).toInt()).toSet()
           : const {2, 3, 4, 5, 6},
+      blockedDates: (map['blockedDates'] as List?)
+              ?.map((e) => e.toString())
+              .where((s) => s.isNotEmpty)
+              .toSet() ??
+          const {},
+      openOverrideDates: (map['openOverrideDates'] as List?)
+              ?.map((e) => e.toString())
+              .where((s) => s.isNotEmpty)
+              .toSet() ??
+          const {},
+      minLeadTimeHours: (map['minLeadTimeHours'] as num?)?.toInt() ?? 0,
+      maxWorkingDaysPerWeek: (map['maxWorkingDaysPerWeek'] as num?)?.toInt(),
+      bookedSlots: (map['bookedSlots'] as List?)
+              ?.whereType<Map>()
+              .map((e) => ScheduleSlotEntry.fromMap(Map<String, dynamic>.from(e)))
+              .where((e) => e.dateKey.isNotEmpty && e.timeSlot.isNotEmpty)
+              .toList() ??
+          const [],
+      heldSlots: (map['heldSlots'] as List?)
+              ?.whereType<Map>()
+              .map((e) => ScheduleSlotEntry.fromMap(Map<String, dynamic>.from(e)))
+              .where((e) => e.dateKey.isNotEmpty && e.timeSlot.isNotEmpty)
+              .toList() ??
+          const [],
       startTime: TimeOfDay(
         hour: (map['startHour'] as num?)?.toInt() ?? 11,
         minute: (map['startMinute'] as num?)?.toInt() ?? 0,
@@ -927,26 +1102,152 @@ class ArtistDashboardRepository {
     notifyPendingRequestsChanged();
   }
 
-  static void addCustomHold(CustomHold hold) {
+  static void addCustomHold(CustomHold hold, {String? artistId}) {
     customHolds = [...customHolds, hold];
+    _syncHeldSlots(artistId: artistId);
   }
 
-  static void releaseCustomHold(String id) {
+  static void releaseCustomHold(String id, {String? artistId}) {
     customHolds = customHolds.where((h) => h.id != id).toList();
+    _syncHeldSlots(artistId: artistId);
   }
 
-  static final Set<String> _blockedDates = {};
-  static String _dateKey(DateTime dt) =>
-      '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
-
-  static bool isDateBlocked(DateTime date) => _blockedDates.contains(_dateKey(date));
-  static void blockDate(DateTime date) {
-    _blockedDates.add(_dateKey(date));
-    notifyPendingRequestsChanged();
+  static void _syncHeldSlots({String? artistId}) {
+    final now = DateTime.now();
+    final activeEntries = customHolds
+        .where((h) => !now.isAfter(h.expiresAt))
+        .map(
+          (h) => ScheduleSlotEntry(
+            dateKey: ArtistBooksSchedule.dateKey(h.date),
+            timeSlot: h.timeSlot,
+            expiresAt: h.expiresAt,
+          ),
+        )
+        .toList();
+    booksSchedule = booksSchedule.copyWith(heldSlots: activeEntries);
+    final resolvedId = (artistId ?? BookingSyncService.resolveCurrentUid('')).trim();
+    if (resolvedId.isNotEmpty) {
+      BookingSyncService.syncHeldSlotsToCloud(activeEntries, artistId: resolvedId);
+    }
   }
-  static void unblockDate(DateTime date) {
-    _blockedDates.remove(_dateKey(date));
-    notifyPendingRequestsChanged();
+
+  static bool isDateBlocked(DateTime date, {ArtistBooksSchedule? schedule}) =>
+      (schedule ?? booksSchedule).isDateBlocked(date);
+
+  static bool isDateForceOpened(DateTime date, {ArtistBooksSchedule? schedule}) =>
+      (schedule ?? booksSchedule).isDateForceOpened(date);
+
+  static void _updateDateOverrides({
+    required Set<String> blockedDates,
+    required Set<String> openOverrideDates,
+    String? artistId,
+  }) {
+    final updated = booksSchedule.copyWith(
+      blockedDates: Set<String>.unmodifiable(blockedDates),
+      openOverrideDates: Set<String>.unmodifiable(openOverrideDates),
+    );
+    booksSchedule = updated;
+    final resolvedId = (artistId ?? BookingSyncService.resolveCurrentUid('')).trim();
+    if (resolvedId.isNotEmpty) {
+      BookingSyncService.syncBooksScheduleToCloud(updated, artistId: resolvedId);
+    }
+  }
+
+  static void blockDate(DateTime date, {String? artistId}) =>
+      blockDates([date], artistId: artistId);
+
+  static void unblockDate(DateTime date, {String? artistId}) =>
+      unblockDates([date], artistId: artistId);
+
+  static void forceOpenDate(DateTime date, {String? artistId}) =>
+      forceOpenDates([date], artistId: artistId);
+
+  static void revertForceOpenDate(DateTime date, {String? artistId}) {
+    final key = ArtistBooksSchedule.dateKey(date);
+    final nextOpen = Set<String>.from(booksSchedule.openOverrideDates)..remove(key);
+    _updateDateOverrides(
+      blockedDates: Set<String>.from(booksSchedule.blockedDates),
+      openOverrideDates: nextOpen,
+      artistId: artistId,
+    );
+  }
+
+  /// Marks [dates] as blocked days off and removes any conflicting force-open overrides.
+  static void blockDates(Iterable<DateTime> dates, {String? artistId}) {
+    final nextBlocked = Set<String>.from(booksSchedule.blockedDates);
+    final nextOpen = Set<String>.from(booksSchedule.openOverrideDates);
+    for (final d in dates) {
+      final key = ArtistBooksSchedule.dateKey(d);
+      nextBlocked.add(key);
+      nextOpen.remove(key);
+    }
+    _updateDateOverrides(
+      blockedDates: nextBlocked,
+      openOverrideDates: nextOpen,
+      artistId: artistId,
+    );
+  }
+
+  /// Removes [dates] from the explicit blocked-dates override set.
+  static void unblockDates(Iterable<DateTime> dates, {String? artistId}) {
+    final nextBlocked = Set<String>.from(booksSchedule.blockedDates);
+    for (final d in dates) {
+      nextBlocked.remove(ArtistBooksSchedule.dateKey(d));
+    }
+    _updateDateOverrides(
+      blockedDates: nextBlocked,
+      openOverrideDates: Set<String>.from(booksSchedule.openOverrideDates),
+      artistId: artistId,
+    );
+  }
+
+  /// Force-opens [dates] (even on weekly off-days) and clears any conflicting block.
+  static void forceOpenDates(Iterable<DateTime> dates, {String? artistId}) {
+    final nextBlocked = Set<String>.from(booksSchedule.blockedDates);
+    final nextOpen = Set<String>.from(booksSchedule.openOverrideDates);
+    for (final d in dates) {
+      final key = ArtistBooksSchedule.dateKey(d);
+      nextOpen.add(key);
+      nextBlocked.remove(key);
+    }
+    _updateDateOverrides(
+      blockedDates: nextBlocked,
+      openOverrideDates: nextOpen,
+      artistId: artistId,
+    );
+  }
+
+  /// Clears all explicit blocked dates while preserving force-opened overrides.
+  static void clearAllBlockedDates({String? artistId}) {
+    if (booksSchedule.blockedDates.isEmpty) return;
+    _updateDateOverrides(
+      blockedDates: const {},
+      openOverrideDates: Set<String>.from(booksSchedule.openOverrideDates),
+      artistId: artistId,
+    );
+  }
+
+  /// Clears all force-opened off-weekday overrides while preserving blocked dates.
+  static void clearAllOpenOverrides({String? artistId}) {
+    if (booksSchedule.openOverrideDates.isEmpty) return;
+    _updateDateOverrides(
+      blockedDates: Set<String>.from(booksSchedule.blockedDates),
+      openOverrideDates: const {},
+      artistId: artistId,
+    );
+  }
+
+  /// Clears both blocked-date and force-open overrides.
+  static void clearAllDateOverrides({String? artistId}) {
+    if (booksSchedule.blockedDates.isEmpty &&
+        booksSchedule.openOverrideDates.isEmpty) {
+      return;
+    }
+    _updateDateOverrides(
+      blockedDates: const {},
+      openOverrideDates: const {},
+      artistId: artistId,
+    );
   }
 
   /// Parses duration strings like "1 hr", "2.5 hrs", "3hrs", "90 mins" into minutes.
@@ -961,27 +1262,305 @@ class ArtistDashboardRepository {
     return (val * 60).round().clamp(15, 720);
   }
 
+  static Iterable<DashboardAppointment> _matchingAppointments(
+    ArtistBooksSchedule s,
+    String? artistId,
+  ) {
+    final includeLocalRepo = identical(s, booksSchedule);
+    return calendarAppointments.where((apt) {
+      if (includeLocalRepo) {
+        return artistId == null || apt.artistId == null || apt.artistId == artistId;
+      }
+      return artistId != null && apt.artistId == artistId;
+    });
+  }
+
+  static Iterable<CustomHold> _activeLocalHolds(
+    ArtistBooksSchedule s,
+    DateTime now,
+  ) {
+    if (!identical(s, booksSchedule)) return const [];
+    return customHolds.where((h) => !now.isAfter(h.expiresAt));
+  }
+
+  /// Returns canonical `YYYY-MM-DD` date keys that have at least one confirmed
+  /// appointment or unexpired 24h custom hold.
+  static Set<String> getOccupiedDateKeys({
+    ArtistBooksSchedule? schedule,
+    String? artistId,
+    DateTime? now,
+  }) {
+    final s = schedule ?? booksSchedule;
+    final effectiveNow = now ?? DateTime.now();
+    final keys = <String>{};
+
+    for (final apt in _matchingAppointments(s, artistId)) {
+      if (apt.scheduledDate != null) {
+        keys.add(ArtistBooksSchedule.dateKey(apt.scheduledDate!));
+      }
+    }
+    for (final entry in s.bookedSlots) {
+      if (entry.dateKey.isNotEmpty) keys.add(entry.dateKey);
+    }
+    for (final entry in s.heldSlots) {
+      if (entry.dateKey.isNotEmpty && entry.isActiveAt(effectiveNow)) {
+        keys.add(entry.dateKey);
+      }
+    }
+    for (final hold in _activeLocalHolds(s, effectiveNow)) {
+      keys.add(ArtistBooksSchedule.dateKey(hold.date));
+    }
+    return keys;
+  }
+
+  static bool isDateOccupied(
+    DateTime date, {
+    ArtistBooksSchedule? schedule,
+    String? artistId,
+    DateTime? now,
+  }) {
+    return getOccupiedDateKeys(
+      schedule: schedule,
+      artistId: artistId,
+      now: now,
+    ).contains(ArtistBooksSchedule.dateKey(date));
+  }
+
+  /// Counts distinct occupied dates in the Sunday–Saturday week containing [date].
+  static int countBookedDaysInWeek(
+    DateTime date, {
+    ArtistBooksSchedule? schedule,
+    String? artistId,
+    DateTime? now,
+  }) {
+    final occupied = getOccupiedDateKeys(
+      schedule: schedule,
+      artistId: artistId,
+      now: now,
+    );
+    if (occupied.isEmpty) return 0;
+
+    final sun = ArtistBooksSchedule.weekStartSunday(date);
+    int count = 0;
+    for (int i = 0; i < 7; i++) {
+      final day = DateTime(sun.year, sun.month, sun.day + i);
+      if (occupied.contains(ArtistBooksSchedule.dateKey(day))) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /// Returns true when [date] is an unbooked working day closed because the
+  /// artist reached their configured Sun–Sat [maxWorkingDaysPerWeek] cap.
+  static bool isClosedByWeeklyCap(
+    DateTime date, {
+    ArtistBooksSchedule? schedule,
+    String? artistId,
+    BookingMode? mode,
+    DateTime? now,
+  }) {
+    if ((mode ?? bookingMode) != BookingMode.alwaysOpen || isPaused) {
+      return false;
+    }
+    final s = schedule ?? booksSchedule;
+    final cap = s.maxWorkingDaysPerWeek;
+    if (cap == null || cap <= 0 || !s.isWorkingDay(date)) return false;
+
+    final effectiveNow = now ?? DateTime.now();
+    final occupied = getOccupiedDateKeys(
+      schedule: s,
+      artistId: artistId,
+      now: effectiveNow,
+    );
+    final key = ArtistBooksSchedule.dateKey(date);
+    if (occupied.contains(key)) return false;
+
+    final sun = ArtistBooksSchedule.weekStartSunday(date);
+    int weekCount = 0;
+    for (int i = 0; i < 7; i++) {
+      final day = DateTime(sun.year, sun.month, sun.day + i);
+      if (occupied.contains(ArtistBooksSchedule.dateKey(day))) {
+        weekCount++;
+      }
+    }
+    return weekCount >= cap;
+  }
+
   /// Checks whether a time slot currently has an active (non-expired) 24h custom hold.
   static bool hasActiveHoldForSlot({
     required DateTime date,
     required String timeSlot,
+    ArtistBooksSchedule? schedule,
+    DateTime? now,
   }) {
-    final targetTime = timeSlot.split('(').first.trim().toUpperCase();
-    return customHolds.any((hold) {
-      if (hold.isExpired) return false;
-      final sameDay = hold.date.year == date.year &&
-          hold.date.month == date.month &&
-          hold.date.day == date.day;
-      if (!sameDay) return false;
-      final holdTime = hold.timeSlot.split('(').first.trim().toUpperCase();
-      return holdTime == targetTime;
+    final s = schedule ?? booksSchedule;
+    final effectiveNow = now ?? DateTime.now();
+    final key = ArtistBooksSchedule.dateKey(date);
+    final targetTime = ArtistBooksSchedule.normalizeTimeLabel(timeSlot);
+
+    if (s.heldSlots.any((entry) =>
+        entry.dateKey == key &&
+        entry.isActiveAt(effectiveNow) &&
+        ArtistBooksSchedule.normalizeTimeLabel(entry.timeSlot) == targetTime)) {
+      return true;
+    }
+
+    return _activeLocalHolds(s, effectiveNow).any((hold) {
+      return ArtistBooksSchedule.dateKey(hold.date) == key &&
+          ArtistBooksSchedule.normalizeTimeLabel(hold.timeSlot) == targetTime;
     });
+  }
+
+  static bool _isSlotBookableOnPrevalidatedDay({
+    required DateTime dayOnly,
+    required String timeSlot,
+    required ArtistBooksSchedule schedule,
+    required String? artistId,
+    required BookingMode mode,
+    required DateTime now,
+    required bool hasBookingOrHoldOnDay,
+  }) {
+    if (isTimeSlotBooked(
+      date: dayOnly,
+      timeSlot: timeSlot,
+      schedule: schedule,
+      artistId: artistId,
+    )) {
+      return false;
+    }
+    if (hasActiveHoldForSlot(
+      date: dayOnly,
+      timeSlot: timeSlot,
+      schedule: schedule,
+      now: now,
+    )) {
+      return false;
+    }
+
+    final slotDt = ArtistBooksSchedule.parseSlotDateTime(dayOnly, timeSlot);
+    if (slotDt != null) {
+      if (!slotDt.isAfter(now)) return false;
+      if (mode == BookingMode.alwaysOpen &&
+          schedule.minLeadTimeHours > 0 &&
+          !hasBookingOrHoldOnDay) {
+        final cutoff = now.add(Duration(hours: schedule.minLeadTimeHours));
+        if (slotDt.isBefore(cutoff)) return false;
+      }
+    }
+    return true;
+  }
+
+  /// Returns true if [timeSlot] on [date] can currently be booked by a client.
+  static bool isSlotBookable({
+    required DateTime date,
+    required String timeSlot,
+    ArtistBooksSchedule? schedule,
+    String? artistId,
+    BookingMode? mode,
+    DateTime? now,
+  }) {
+    final effectiveNow = now ?? DateTime.now();
+    final effectiveMode = mode ?? bookingMode;
+    final s = schedule ?? booksSchedule;
+    if (!s.isBooksOpen) return false;
+
+    final dayOnly = DateTime(date.year, date.month, date.day);
+    final today = DateTime(effectiveNow.year, effectiveNow.month, effectiveNow.day);
+    if (dayOnly.isBefore(today)) return false;
+
+    if (effectiveMode == BookingMode.alwaysOpen) {
+      if (!s.isWorkingDay(dayOnly)) return false;
+      if (isClosedByWeeklyCap(
+        dayOnly,
+        schedule: s,
+        artistId: artistId,
+        mode: effectiveMode,
+        now: effectiveNow,
+      )) {
+        return false;
+      }
+    } else {
+      if (!s.workingDays.contains(dayOnly.weekday)) return false;
+    }
+
+    final hasBookingOrHoldOnDay = isDateOccupied(
+      dayOnly,
+      schedule: s,
+      artistId: artistId,
+      now: effectiveNow,
+    );
+    return _isSlotBookableOnPrevalidatedDay(
+      dayOnly: dayOnly,
+      timeSlot: timeSlot,
+      schedule: s,
+      artistId: artistId,
+      mode: effectiveMode,
+      now: effectiveNow,
+      hasBookingOrHoldOnDay: hasBookingOrHoldOnDay,
+    );
+  }
+
+  /// Returns true if [date] has at least one client-bookable time slot under the
+  /// artist's working days, two-way overrides, weekly cap, and empty-day lead time.
+  static bool isDateBookable({
+    required DateTime date,
+    ArtistBooksSchedule? schedule,
+    String? artistId,
+    BookingMode? mode,
+    DateTime? now,
+  }) {
+    final effectiveNow = now ?? DateTime.now();
+    final effectiveMode = mode ?? bookingMode;
+    final s = schedule ?? booksSchedule;
+    if (!s.isBooksOpen) return false;
+
+    final dayOnly = DateTime(date.year, date.month, date.day);
+    final today = DateTime(effectiveNow.year, effectiveNow.month, effectiveNow.day);
+    if (dayOnly.isBefore(today)) return false;
+
+    if (effectiveMode == BookingMode.alwaysOpen) {
+      if (!s.isWorkingDay(dayOnly)) return false;
+      if (isClosedByWeeklyCap(
+        dayOnly,
+        schedule: s,
+        artistId: artistId,
+        mode: effectiveMode,
+        now: effectiveNow,
+      )) {
+        return false;
+      }
+    } else {
+      if (!s.workingDays.contains(dayOnly.weekday)) return false;
+    }
+
+    final slots = s.generateTimeSlots();
+    if (slots.isEmpty) return false;
+
+    final hasBookingOrHoldOnDay = isDateOccupied(
+      dayOnly,
+      schedule: s,
+      artistId: artistId,
+      now: effectiveNow,
+    );
+
+    return slots.any(
+      (slot) => _isSlotBookableOnPrevalidatedDay(
+        dayOnly: dayOnly,
+        timeSlot: slot.time,
+        schedule: s,
+        artistId: artistId,
+        mode: effectiveMode,
+        now: effectiveNow,
+        hasBookingOrHoldOnDay: hasBookingOrHoldOnDay,
+      ),
+    );
   }
 
   /// Computes the remaining factual open minutes on [date], accounting for
   /// scheduled appointments, active 24h holds, and session buffers.
   static int getRemainingOpenMinutes(DateTime date) {
-    if (isDateBlocked(date) || isPaused) return 0;
+    if (isPaused) return 0;
 
     if (bookingMode == BookingMode.drops) {
       final drop = currentBookDrop;
@@ -992,7 +1571,9 @@ class ArtistDashboardRepository {
       if (dateOnly.isBefore(startOnly) || dateOnly.isAfter(endOnly)) return 0;
       if (!drop.selectedDays.contains(date.day)) return 0;
     } else {
-      if (!booksSchedule.isWorkingDay(date)) return 0;
+      if (!booksSchedule.isWorkingDay(date) || isClosedByWeeklyCap(date)) {
+        return 0;
+      }
     }
 
     final apts = getAppointmentsForDate(date);
@@ -1017,14 +1598,8 @@ class ArtistDashboardRepository {
 
   /// Calculates the visual capacity status for a given calendar date
   static DayCapacityStatus getDayCapacityStatus(DateTime date) {
-    if (isDateBlocked(date)) {
-      return DayCapacityStatus.blocked;
-    }
-    if (isPaused) {
-      return DayCapacityStatus.closed;
-    }
-
     if (bookingMode == BookingMode.drops) {
+      if (isPaused) return DayCapacityStatus.closed;
       final drop = currentBookDrop;
       if (drop == null || drop.status == BookDropStatus.closed) {
         return DayCapacityStatus.closed;
@@ -1039,7 +1614,12 @@ class ArtistDashboardRepository {
         return DayCapacityStatus.closed;
       }
     } else {
-      if (!booksSchedule.isWorkingDay(date)) {
+      if (isDateBlocked(date)) {
+        return DayCapacityStatus.blocked;
+      }
+      if (isPaused ||
+          !booksSchedule.isWorkingDay(date) ||
+          isClosedByWeeklyCap(date)) {
         return DayCapacityStatus.closed;
       }
     }
@@ -1523,7 +2103,6 @@ class ArtistDashboardRepository {
     _liveBookingMode = BookingMode.alwaysOpen;
     _mockIsPaused = false;
     _liveIsPaused = false;
-    _blockedDates.clear();
     _mockBookDrop = BookDrop(
       id: 'drop_dec_2026',
       title: 'December Booking Drop',
@@ -1606,7 +2185,9 @@ class ArtistDashboardRepository {
         DateTime.now().add(const Duration(days: 3));
     if (scheduledDate == null && request.preferredDate == null) {
       int guard = 0;
-      while (!booksSchedule.isWorkingDay(effectiveDate) && guard < 14) {
+      while ((!booksSchedule.isWorkingDay(effectiveDate) ||
+              isClosedByWeeklyCap(effectiveDate)) &&
+          guard < 30) {
         effectiveDate = effectiveDate.add(const Duration(days: 1));
         guard++;
       }
@@ -1655,6 +2236,7 @@ class ArtistDashboardRepository {
       clientId: resolvedClientId,
       artistId: resolvedArtistId,
       clientName: request.clientName,
+      clientAvatar: request.clientAvatar,
       serviceType: 'Custom: ${request.category}',
       duration: durationLabel,
       time: effectiveTimeSlot,
@@ -1686,9 +2268,10 @@ class ArtistDashboardRepository {
     );
 
     // 5. Create & register Client Upcoming appointment
+    final liveArtistAvatar = BookingSyncService.resolveCurrentUserPhotoUrlSync();
     final effectiveAvatar = MockDataConfig.isEnabled
         ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'
-        : '';
+        : liveArtistAvatar;
     final effectiveStudio = booksSchedule.locationNote.isNotEmpty
         ? booksSchedule.locationNote
         : (MockDataConfig.isEnabled ? 'Obsidian Atelier' : request.artistName);
@@ -1740,6 +2323,9 @@ class ArtistDashboardRepository {
     final thread = MessageThread(
       id: 'thread_custom_${request.id}',
       artistId: resolvedArtistId,
+      clientId: resolvedClientId,
+      clientName: request.clientName,
+      clientAvatar: request.clientAvatar ?? '',
       artistName: request.artistName,
       artistAvatar: effectiveAvatar,
       studioName: effectiveStudio,
@@ -1756,6 +2342,8 @@ class ArtistDashboardRepository {
       clientId: resolvedClientId,
       artistId: resolvedArtistId,
       clientName: request.clientName,
+      clientAvatar: request.clientAvatar,
+      artistAvatar: effectiveAvatar,
     );
 
     return calendarApt;
@@ -2223,20 +2811,23 @@ class ArtistDashboardRepository {
   static bool isTimeSlotBooked({
     required DateTime date,
     required String timeSlot,
+    ArtistBooksSchedule? schedule,
     String? artistId,
   }) {
-    final cleanSlot = timeSlot.trim().toUpperCase();
-    return calendarAppointments.any((apt) {
-      if (apt.scheduledDate == null) return false;
-      final sameDay = apt.scheduledDate!.year == date.year &&
-          apt.scheduledDate!.month == date.month &&
-          apt.scheduledDate!.day == date.day;
-      if (!sameDay) return false;
+    final s = schedule ?? booksSchedule;
+    final key = ArtistBooksSchedule.dateKey(date);
+    final targetTime = ArtistBooksSchedule.normalizeTimeLabel(timeSlot);
 
-      // Extract base time e.g. "1:30 PM" from "1:30 PM (3.0 hrs)" if applicable
-      final aptTime = apt.time.split('(').first.trim().toUpperCase();
-      final targetTime = cleanSlot.split('(').first.trim().toUpperCase();
-      return aptTime == targetTime;
+    if (s.bookedSlots.any((entry) =>
+        entry.dateKey == key &&
+        ArtistBooksSchedule.normalizeTimeLabel(entry.timeSlot) == targetTime)) {
+      return true;
+    }
+
+    return _matchingAppointments(s, artistId).any((apt) {
+      if (apt.scheduledDate == null) return false;
+      if (ArtistBooksSchedule.dateKey(apt.scheduledDate!) != key) return false;
+      return ArtistBooksSchedule.normalizeTimeLabel(apt.time) == targetTime;
     });
   }
 
@@ -2360,10 +2951,12 @@ class ArtistDashboardRepository {
 
     // 5. Post reschedule notice to active message threads
     final resolvedArtistId = updatedApt.artistId ?? BookingSyncService.resolveCurrentUid('artist_1');
-    final resolvedArtistName = MockDataConfig.isEnabled ? 'OddMaree' : 'Artist';
+    final resolvedArtistName = MockDataConfig.isEnabled
+        ? 'OddMaree'
+        : BookingSyncService.resolveCurrentUserDisplayNameSync('Artist');
     final effectiveAvatar = MockDataConfig.isEnabled
         ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'
-        : '';
+        : BookingSyncService.resolveCurrentUserPhotoUrlSync();
     final effectiveStudio = booksSchedule.locationNote.isNotEmpty
         ? booksSchedule.locationNote
         : (MockDataConfig.isEnabled ? 'Obsidian Atelier' : 'Studio');
@@ -2378,6 +2971,9 @@ class ArtistDashboardRepository {
     final thread = MessageThread(
       id: 'thread_resched_$appointmentId',
       artistId: resolvedArtistId,
+      clientId: updatedApt.clientId,
+      clientName: updatedApt.clientName,
+      clientAvatar: updatedApt.clientAvatar ?? '',
       artistName: resolvedArtistName,
       artistAvatar: effectiveAvatar,
       studioName: effectiveStudio,
@@ -2394,6 +2990,8 @@ class ArtistDashboardRepository {
       clientId: updatedApt.clientId,
       artistId: resolvedArtistId,
       clientName: updatedApt.clientName,
+      clientAvatar: updatedApt.clientAvatar,
+      artistAvatar: effectiveAvatar,
     );
 
     // 6. Sync to Cloud Firestore & send notification
@@ -2472,10 +3070,12 @@ class ArtistDashboardRepository {
     }
 
     final resolvedArtistId = removedApt.artistId ?? BookingSyncService.resolveCurrentUid('artist_1');
-    final resolvedArtistName = MockDataConfig.isEnabled ? 'OddMaree' : 'Artist';
+    final resolvedArtistName = MockDataConfig.isEnabled
+        ? 'OddMaree'
+        : BookingSyncService.resolveCurrentUserDisplayNameSync('Artist');
     final effectiveAvatar = MockDataConfig.isEnabled
         ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'
-        : '';
+        : BookingSyncService.resolveCurrentUserPhotoUrlSync();
     final effectiveStudio = booksSchedule.locationNote.isNotEmpty
         ? booksSchedule.locationNote
         : (MockDataConfig.isEnabled ? 'Obsidian Atelier' : 'Studio');
@@ -2493,6 +3093,9 @@ class ArtistDashboardRepository {
     final thread = MessageThread(
       id: 'thread_cancel_$appointmentId',
       artistId: resolvedArtistId,
+      clientId: removedApt.clientId,
+      clientName: removedApt.clientName,
+      clientAvatar: removedApt.clientAvatar ?? '',
       artistName: resolvedArtistName,
       artistAvatar: effectiveAvatar,
       studioName: effectiveStudio,
@@ -2509,6 +3112,8 @@ class ArtistDashboardRepository {
       clientId: removedApt.clientId,
       artistId: resolvedArtistId,
       clientName: removedApt.clientName,
+      clientAvatar: removedApt.clientAvatar,
+      artistAvatar: effectiveAvatar,
     );
 
     BookingSyncService.syncAppointmentToCloud(

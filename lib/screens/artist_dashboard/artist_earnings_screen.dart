@@ -14,6 +14,7 @@ import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/artist_top_bar.dart';
+import '../../widgets/user_avatar.dart';
 import 'appointment_detail_screen.dart';
 import 'artist_account_screen.dart';
 import '../../features/messages/presentation/screens/messages_screen.dart';
@@ -109,33 +110,17 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
   }
 
   Widget _buildAvatarWidget({double radius = 18}) {
-    return CircleAvatar(
+    return UserAvatar(
+      imageUrl: _avatarUrl,
+      displayName: _artistDisplayName,
       radius: radius,
-      backgroundColor: const Color(0xFF262929),
-      child: ClipOval(
-        child: FlashImage(
-          urlOrPath: _avatarUrl,
-          width: radius * 2,
-          height: radius * 2,
-          fit: BoxFit.cover,
-          errorWidget: Container(
-            color: const Color(0xFF262929),
-            alignment: Alignment.center,
-            child: Text(
-              _artistDisplayName.isNotEmpty ? _artistDisplayName[0] : 'O',
-              style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFFEEC200),
-                fontWeight: FontWeight.bold,
-                fontSize: radius * 0.9,
-              ),
-            ),
-          ),
-        ),
-      ),
+      fallbackInitial: 'O',
+      initialFontSize: radius * 0.9,
     );
   }
 
   void _navigateToAccountScreen() {
+    FocusManager.instance.primaryFocus?.unfocus();
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -859,6 +844,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
       child: TextField(
         key: const Key('history_search_field'),
         controller: _searchController,
+        onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
         style: GoogleFonts.plusJakartaSans(
           color: Colors.white,
           fontSize: 14,
@@ -1058,6 +1044,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
     final content = SafeArea(
       bottom: false,
       child: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         physics: const BouncingScrollPhysics(),
         padding: EdgeInsets.fromLTRB(
           AppSpacing.screenGutter,
@@ -1134,6 +1121,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
       messagesKey: const Key('earnings_messages_button'),
       avatarKey: const Key('earnings_avatar_button'),
       onMessagesTap: () {
+        FocusManager.instance.primaryFocus?.unfocus();
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const MessagesScreen()),

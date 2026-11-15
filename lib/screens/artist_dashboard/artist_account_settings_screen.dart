@@ -7,6 +7,7 @@ import '../../theme/app_spacing.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_glass_app_bar.dart';
 import '../../widgets/flash_snack_bar.dart';
+import '../../widgets/inline_email_verification_tile.dart';
 import '../../widgets/reauthentication_bottom_sheet.dart';
 import '../../services/auth_service.dart';
 import '../../providers/app_providers.dart';
@@ -32,6 +33,30 @@ class ArtistAccountSettingsScreen extends StatefulWidget {
 class _ArtistAccountSettingsScreenState extends State<ArtistAccountSettingsScreen> {
   late final AuthService _authService = widget.authService ?? AuthService();
   bool _isDeleting = false;
+  late String _email = _resolveInitialEmail();
+  late bool _emailVerified = _readInitialEmailVerified();
+  String? _pendingBackupEmail;
+
+  String _resolveInitialEmail() {
+    if (widget.email.trim().isNotEmpty) {
+      return widget.email.trim();
+    }
+    try {
+      return _authService.currentUser?.email?.trim() ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  bool _readInitialEmailVerified() {
+    try {
+      final user = _authService.currentUser;
+      if (user == null) return false;
+      return user.emailVerified;
+    } catch (_) {
+      return false;
+    }
+  }
 
   Future<void> _handleDeleteAccount() async {
     if (_isDeleting) return;
@@ -279,24 +304,26 @@ class _ArtistAccountSettingsScreenState extends State<ArtistAccountSettingsScree
                     padding: EdgeInsets.zero,
                     child: Column(
                       children: [
-                        ListTile(
-                          leading: const Icon(Icons.alternate_email, color: AppTheme.gold),
-                          title: Text(
-                            'Primary Account Email',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 15,
-                            ),
-                          ),
-                          subtitle: Text(
-                            widget.email,
-                            style: GoogleFonts.plusJakartaSans(
-                              color: const Color(0xFF919696),
-                              fontSize: 13,
-                            ),
-                          ),
-                          trailing: const Icon(Icons.lock_outline, color: Color(0xFF6B7280), size: 16),
+                        InlineEmailVerificationTile(
+                          title: 'Primary Account Email',
+                          icon: Icons.alternate_email,
+                          email: _email,
+                          pendingEmail: _pendingBackupEmail,
+                          emailVerified: _emailVerified,
+                          authService: _authService,
+                          isArtist: true,
+                          onVerificationLinkSent: (pendingEmail) {
+                            setState(() {
+                              _pendingBackupEmail = pendingEmail;
+                            });
+                          },
+                          onEmailVerified: (newEmail) {
+                            setState(() {
+                              _email = newEmail;
+                              _emailVerified = true;
+                              _pendingBackupEmail = null;
+                            });
+                          },
                         ),
                         const Divider(color: AppTheme.darkBorder, height: 1),
                         ListTile(

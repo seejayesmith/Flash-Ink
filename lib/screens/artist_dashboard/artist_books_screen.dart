@@ -12,12 +12,13 @@ import '../../services/booking_sync_service.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/flash_switch.dart';
 import '../../widgets/artist_top_bar.dart';
+import '../../widgets/user_avatar.dart';
 import 'add_waitlist_entry_sheet.dart';
 import 'artist_account_screen.dart';
+import 'artist_calendar_screen.dart';
 import 'artist_waitlist_screen.dart';
 import 'books_open_options_modal.dart';
 import 'create_book_drop_screen.dart';
@@ -33,6 +34,7 @@ class ArtistBooksScreen extends StatefulWidget {
   final AuthService? authService;
   final bool isEmbeddedInTab;
   final VoidCallback? onBack;
+  final VoidCallback? onNavigateToCalendar;
 
   const ArtistBooksScreen({
     super.key,
@@ -40,6 +42,7 @@ class ArtistBooksScreen extends StatefulWidget {
     this.authService,
     this.isEmbeddedInTab = false,
     this.onBack,
+    this.onNavigateToCalendar,
   });
 
   @override
@@ -53,6 +56,9 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
   late DateTime _windowStart;
   late DateTime _windowEnd;
   late Set<int> _workingDays;
+  Set<int>? _previousWorkingDays;
+  late int _minLeadTimeHours;
+  int? _maxWorkingDaysPerWeek;
   late TimeOfDay _startTime;
   late TimeOfDay _endTime;
   late int _slotDurationMinutes;
@@ -64,6 +70,8 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
   late final TextEditingController _locationController;
 
   bool _isSaving = false;
+
+  bool get _isAllDaysOpen => _workingDays.length == 7;
 
   @override
   void initState() {
@@ -82,6 +90,11 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
     _windowStart = schedule.bookingWindowStart;
     _windowEnd = schedule.bookingWindowEnd;
     _workingDays = Set<int>.from(schedule.workingDays);
+    if (schedule.workingDays.length < 7) {
+      _previousWorkingDays = Set<int>.from(schedule.workingDays);
+    }
+    _minLeadTimeHours = schedule.minLeadTimeHours;
+    _maxWorkingDaysPerWeek = schedule.maxWorkingDaysPerWeek;
     _startTime = schedule.startTime;
     _endTime = schedule.endTime;
     _slotDurationMinutes = schedule.slotDurationMinutes;
@@ -226,11 +239,14 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
   Future<void> _handleSave() async {
     setState(() => _isSaving = true);
 
-    final updated = ArtistBooksSchedule(
+    final updated = ArtistDashboardRepository.booksSchedule.copyWith(
       isBooksOpen: _isBooksOpen,
       bookingWindowStart: _windowStart,
       bookingWindowEnd: _windowEnd,
-      workingDays: _workingDays,
+      workingDays: Set<int>.from(_workingDays),
+      minLeadTimeHours: _minLeadTimeHours,
+      maxWorkingDaysPerWeek: _maxWorkingDaysPerWeek,
+      clearMaxWorkingDaysPerWeek: _maxWorkingDaysPerWeek == null,
       startTime: _startTime,
       endTime: _endTime,
       slotDurationMinutes: _slotDurationMinutes,
@@ -289,12 +305,13 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
     final content = SafeArea(
       bottom: false,
       child: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         physics: const BouncingScrollPhysics(),
         padding: EdgeInsets.fromLTRB(
           AppSpacing.screenGutter,
           12,
           AppSpacing.screenGutter,
-          MediaQuery.paddingOf(context).bottom + (widget.isEmbeddedInTab ? 80 : 16),
+          MediaQuery.paddingOf(context).bottom + 100,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -308,6 +325,8 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
             _buildBookingWindowCard(),
             const SizedBox(height: 24),
             _buildWorkingDaysCard(),
+            const SizedBox(height: 24),
+            _buildAvailabilityRulesCard(),
             const SizedBox(height: 24),
             _buildWorkingHoursAndBufferCard(),
             const SizedBox(height: 24),
@@ -357,27 +376,12 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
   Widget _buildTopActionBar() {
     final canGoBack = !widget.isEmbeddedInTab && Navigator.canPop(context);
 
-    final avatarChild = CircleAvatar(
+    final avatarChild = UserAvatar(
+      imageUrl: _avatarUrl,
+      displayName: _artistDisplayName,
       radius: 18,
-      backgroundColor: const Color(0xFF262929),
-      child: ClipOval(
-        child: FlashImage(
-          urlOrPath: _avatarUrl,
-          width: 36,
-          height: 36,
-          fit: BoxFit.cover,
-          errorWidget: Center(
-            child: Text(
-              _artistDisplayName.isNotEmpty ? _artistDisplayName[0] : 'O',
-              style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFFEEC200),
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-          ),
-        ),
-      ),
+      fallbackInitial: 'O',
+      initialFontSize: 16,
     );
 
     return ArtistTopBar(
@@ -397,12 +401,14 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
       messagesKey: const Key('books_messages_button'),
       avatarKey: const Key('books_artist_avatar_button'),
       onMessagesTap: () {
+        FocusManager.instance.primaryFocus?.unfocus();
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const MessagesScreen()),
         );
       },
       onAvatarTap: () {
+        FocusManager.instance.primaryFocus?.unfocus();
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -546,33 +552,38 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: activeColor,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: activeColor.withAlpha(160),
-                          blurRadius: 6,
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: activeColor,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: activeColor.withAlpha(160),
+                            blurRadius: 6,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        statusLabel,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: activeColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.2,
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    statusLabel,
-                    style: GoogleFonts.plusJakartaSans(
-                      color: activeColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               FlashSwitch(
                 key: const Key('books_status_switch'),
@@ -781,36 +792,13 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
                   ),
                   child: Row(
                     children: [
-                      CircleAvatar(
+                      UserAvatar(
+                        imageUrl: entry.avatarUrl,
+                        displayName: entry.clientName,
                         radius: 14,
                         backgroundColor: const Color(0xFF2A2E2E),
-                        child: ClipOval(
-                          child: entry.avatarUrl != null && entry.avatarUrl!.isNotEmpty
-                              ? FlashImage(
-                                  urlOrPath: entry.avatarUrl!,
-                                  width: 28,
-                                  height: 28,
-                                  fit: BoxFit.cover,
-                                  errorWidget: Center(
-                                    child: Text(
-                                      entry.clientName.isNotEmpty ? entry.clientName[0] : '?',
-                                      style: GoogleFonts.plusJakartaSans(
-                                        color: const Color(0xFFEEC200),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                )
-                              : Text(
-                                  entry.clientName.isNotEmpty ? entry.clientName[0] : '?',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    color: const Color(0xFFEEC200),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                        ),
+                        fallbackInitial: '?',
+                        initialFontSize: 12,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -1050,6 +1038,39 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
     );
   }
 
+  void _handleOpenAllDaysToggle(bool enabled) {
+    setState(() {
+      if (enabled) {
+        if (_workingDays.length < 7) {
+          _previousWorkingDays = Set<int>.from(_workingDays);
+        }
+        _workingDays = {1, 2, 3, 4, 5, 6, 7};
+      } else {
+        final fallback = (_previousWorkingDays != null &&
+                _previousWorkingDays!.isNotEmpty &&
+                _previousWorkingDays!.length < 7)
+            ? _previousWorkingDays!
+            : const {2, 3, 4, 5, 6};
+        _workingDays = Set<int>.from(fallback);
+      }
+    });
+  }
+
+  void _navigateToCalendar() {
+    if (widget.onNavigateToCalendar != null) {
+      widget.onNavigateToCalendar!();
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ArtistCalendarScreen(
+          artist: widget.artist,
+          authService: _authService,
+        ),
+      ),
+    );
+  }
+
   /// Recurring weekly working days selector
   Widget _buildWorkingDaysCard() {
     const days = [
@@ -1062,6 +1083,10 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
       {'val': 7, 'label': 'Sun'},
     ];
 
+    final schedule = ArtistDashboardRepository.booksSchedule;
+    final blockedCount = schedule.blockedDates.length;
+    final openedCount = schedule.openOverrideDates.length;
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -1072,16 +1097,52 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'WEEKLY WORKING DAYS',
-            style: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFF8C9191),
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.0,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'WEEKLY WORKING DAYS',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF8C9191),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _isAllDaysOpen
+                          ? 'All 7 days open — block specific dates in Calendar'
+                          : 'Set recurring weekdays for client bookings',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF6B7272),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Open All Days',
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFFCCCCCC),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 8),
+              FlashSwitch(
+                key: const Key('open_all_days_switch'),
+                value: _isAllDaysOpen,
+                onChanged: _handleOpenAllDaysToggle,
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Row(
             children: days.map((d) {
               final dayVal = d['val'] as int;
@@ -1127,6 +1188,228 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
                 ),
               );
             }).toList(),
+          ),
+          const SizedBox(height: 14),
+          GestureDetector(
+            key: const Key('books_manage_days_off_link'),
+            onTap: _navigateToCalendar,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF161818),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF2C2F30)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.event_busy_outlined,
+                    size: 16,
+                    color: Color(0xFFEEC200),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Manage specific days off & overrides in Calendar',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFFCCCCCC),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (blockedCount > 0 || openedCount > 0) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEEC200).withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        [
+                          if (blockedCount > 0) '$blockedCount off',
+                          if (openedCount > 0) '$openedCount open',
+                        ].join(' · '),
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFFEEC200),
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 15,
+                    color: Color(0xFFEEC200),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRuleChip({
+    required Key key,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      key: key,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF161818),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF2C2F30),
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            color: isSelected ? const Color(0xFF121414) : const Color(0xFF8C9191),
+            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+            fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Dynamic availability rules: minimum empty-day booking notice & Sun–Sat weekly cap
+  Widget _buildAvailabilityRulesCard() {
+    const leadTimeOptions = <({int hours, String label})>[
+      (hours: 0, label: 'None'),
+      (hours: 24, label: '24h'),
+      (hours: 48, label: '48h'),
+      (hours: 72, label: '72h'),
+      (hours: 168, label: '7d'),
+    ];
+    const weeklyCapOptions = <({int? days, String label})>[
+      (days: null, label: 'No Limit'),
+      (days: 2, label: '2d'),
+      (days: 3, label: '3d'),
+      (days: 4, label: '4d'),
+      (days: 5, label: '5d'),
+      (days: 6, label: '6d'),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E2121),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF282C2C)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'AVAILABILITY RULES',
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFF8C9191),
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF161818),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFF2C2F30)),
+                ),
+                child: Text(
+                  'Always Open',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFF8C9191),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'MINIMUM BOOKING NOTICE',
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFFCCCCCC),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Lead time required before an empty day can be booked. Already-booked days keep open slots.',
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFF6B7272),
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: leadTimeOptions
+                .map(
+                  (opt) => _buildRuleChip(
+                    key: Key('lead_time_chip_${opt.hours}'),
+                    label: opt.label,
+                    isSelected: _minLeadTimeHours == opt.hours,
+                    onTap: () => setState(() => _minLeadTimeHours = opt.hours),
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 18),
+          const Divider(color: Color(0xFF282C2C), height: 1),
+          const SizedBox(height: 16),
+          Text(
+            'MAX BOOKED DAYS / WEEK',
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFFCCCCCC),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Sunday–Saturday cap. Once reached, remaining empty days auto-close while booked days stay open.',
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFF6B7272),
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: weeklyCapOptions
+                .map(
+                  (opt) => _buildRuleChip(
+                    key: Key('weekly_cap_chip_${opt.days ?? 'none'}'),
+                    label: opt.label,
+                    isSelected: _maxWorkingDaysPerWeek == opt.days,
+                    onTap: () =>
+                        setState(() => _maxWorkingDaysPerWeek = opt.days),
+                  ),
+                )
+                .toList(),
           ),
         ],
       ),
@@ -1427,6 +1710,7 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
           TextField(
             key: const Key('books_location_field'),
             controller: _locationController,
+            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
             style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 14),
             decoration: InputDecoration(
               filled: true,

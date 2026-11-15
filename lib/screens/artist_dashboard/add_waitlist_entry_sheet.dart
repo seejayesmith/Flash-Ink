@@ -9,7 +9,6 @@ import '../../theme/app_radius.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
-import '../../widgets/keyboard_collapse_button.dart';
 
 /// Bottom sheet dialog for artists to add friends, family, or VIP clients to their waitlist.
 /// Supports both searching registered Flash users and manual entry for friends not yet on Flash.
@@ -215,17 +214,10 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
                     letterSpacing: -0.3,
                   ),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const KeyboardCollapseButton(),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      key: const Key('close_waitlist_sheet'),
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close_rounded, color: Color(0xFF8C9191)),
-                    ),
-                  ],
+                IconButton(
+                  key: const Key('close_waitlist_sheet'),
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded, color: Color(0xFF8C9191)),
                 ),
               ],
             ),
@@ -236,6 +228,7 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
           // Body Form Scrollable
           Expanded(
             child: ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: EdgeInsets.fromLTRB(22, 16, 22, bottomInset + 16),
               physics: const BouncingScrollPhysics(),
               children: [

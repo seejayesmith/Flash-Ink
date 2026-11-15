@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/utils/distance_calculator.dart';
+import '../../core/utils/maps_directions_launcher.dart';
 import '../../models/artist.dart';
 import '../../providers/app_providers.dart';
 import '../../screens/flash_details_screen.dart';
@@ -20,7 +21,7 @@ import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/guest_auth_prompt_bottom_sheet.dart';
 import '../artist/presentation/screens/artist_profile_screen.dart';
 import '../explore/domain/models/explore_studio.dart';
-import 'studio_map_screen.dart';
+import 'studio_map_screen.dart' show kDefaultGoogleMapsApiKey;
 
 /// Session-scoped reactive bookmark state for favorited tattoo studios.
 class FavoriteStudiosNotifier extends Notifier<Set<String>> {
@@ -247,7 +248,7 @@ class _StudioProfileContentState extends ConsumerState<_StudioProfileContent> {
     );
   }
 
-  void _handleDirections(StudioMapMarkerData effectiveStudio) {
+  Future<void> _handleDirections(StudioMapMarkerData effectiveStudio) async {
     if (effectiveStudio.isPrivateStudio) {
       FlashSnackBar.showInfo(
         context,
@@ -261,27 +262,16 @@ class _StudioProfileContentState extends ConsumerState<_StudioProfileContent> {
       return;
     }
 
-    if (widget.openedFromMap) {
-      final destination = _details?.formattedAddress.isNotEmpty == true
-          ? _details!.formattedAddress
-          : effectiveStudio.address;
-      Clipboard.setData(ClipboardData(text: destination));
-      FlashSnackBar.showSuccess(
-        context,
-        'Studio address copied for directions!',
-      );
-      return;
-    }
+    final destination = _details?.formattedAddress.isNotEmpty == true
+        ? _details!.formattedAddress
+        : effectiveStudio.address;
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => StudioMapScreen(
-          apiKey: widget.apiKey,
-          placesService: widget.placesService,
-          initialSelectedStudio: effectiveStudio,
-          openDetailsOnLoad: false,
-        ),
-      ),
+    await MapsDirectionsLauncher.openDirections(
+      context,
+      address: destination,
+      latitude: effectiveStudio.position.latitude,
+      longitude: effectiveStudio.position.longitude,
+      studioName: effectiveStudio.name,
     );
   }
 

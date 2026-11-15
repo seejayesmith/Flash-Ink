@@ -15,6 +15,7 @@ import '../../widgets/phone_number_input_formatter.dart';
 import '../../widgets/tattoo_background_wrapper.dart';
 import '../../widgets/username_input_formatter.dart';
 import '../../features/onboarding/shared/onboarding_step_scaffold.dart';
+import '../backup_email_verification_screen.dart';
 import 'artist_phone_verification_screen.dart';
 import 'artist_profile_photo_screen.dart';
 
@@ -42,6 +43,7 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
+  late final TextEditingController _backupEmailController;
   final FocusNode _nameFocusNode = FocusNode();
 
   bool _agreedToTerms = false;
@@ -50,12 +52,32 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
   String? _verifiedPhoneNumber;
   bool _isPhoneVerified = false;
 
+  String get _existingEmail {
+    if (widget.initialEmail != null && widget.initialEmail!.trim().isNotEmpty) {
+      return widget.initialEmail!.trim();
+    }
+    try {
+      return _authService.currentUser?.email?.trim() ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  bool get _needsBackupEmail => !_isGoogleUser && _existingEmail.isEmpty;
+
   bool get _isGoogleUser {
     final user = _authService.currentUser;
     if (user != null && AuthService.isGoogleAuthUser(user)) {
       return true;
     }
-    final email = widget.initialEmail ?? user?.email ?? '';
+    String email = widget.initialEmail ?? '';
+    if (email.isEmpty) {
+      try {
+        email = user?.email ?? '';
+      } catch (_) {
+        email = '';
+      }
+    }
     if (email.toLowerCase().endsWith('@gmail.com') || email.toLowerCase().endsWith('@googlemail.com')) {
       return true;
     }
@@ -78,6 +100,8 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
     }
     _nameController = TextEditingController(text: defaultName);
     _nameFocusNode.addListener(_handleNameFocusChange);
+
+    _backupEmailController = TextEditingController(text: _existingEmail);
 
     String? rawPhone = widget.initialPhone;
     if (!_isGoogleUser) {
@@ -142,6 +166,7 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
     _phoneController.removeListener(_onPhoneChanged);
     _nameController.dispose();
     _phoneController.dispose();
+    _backupEmailController.dispose();
     super.dispose();
   }
 
@@ -174,7 +199,9 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
     final formattedPhone = _isGoogleUser ? '' : _formatPhoneNumber(_phoneController.text.trim());
     final currentUser = _authService.currentUser;
     final uid = currentUser?.uid ?? 'artist_${DateTime.now().millisecondsSinceEpoch}';
-    final email = widget.initialEmail ?? currentUser?.email ?? '';
+    final email = _existingEmail;
+    final enteredBackupEmail =
+        _needsBackupEmail ? _backupEmailController.text.trim() : '';
 
     try {
       if (currentUser != null) {
@@ -214,6 +241,8 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
           'uid': uid,
           if (!hasClientName) 'displayName': name,
           if (email.isNotEmpty) 'email': email,
+          if (enteredBackupEmail.isNotEmpty)
+            'pendingBackupEmail': enteredBackupEmail,
           if (!_isGoogleUser && formattedPhone.isNotEmpty) 'phoneNumber': formattedPhone,
           if (!_isGoogleUser) 'phoneVerified': _isPhoneVerified,
           'onboardingRole': 'artist',
@@ -242,6 +271,8 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
 
         final privateSettings = <String, dynamic>{
           'email': email,
+          if (enteredBackupEmail.isNotEmpty)
+            'pendingBackupEmail': enteredBackupEmail,
           if (!_isGoogleUser && formattedPhone.isNotEmpty) 'phoneNumber': formattedPhone,
           if (!_isGoogleUser && _isPhoneVerified) 'phoneVerified': true,
           'updatedAt': FieldValue.serverTimestamp(),
@@ -253,8 +284,34 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
         ).timeout(timeoutDuration);
       } catch (_) {}
 
-      // If Google user or phone is already verified, bypass SMS verification and proceed to Profile Photo
+      // If Google user or phone is already verified, bypass SMS verification and proceed
       if (_isGoogleUser || _isPhoneVerified) {
+        if (enteredBackupEmail.isNotEmpty) {
+          try {
+            await _authService.sendBackupEmailVerification(
+              enteredBackupEmail,
+              isArtist: true,
+            );
+          } catch (_) {}
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          FocusManager.instance.primaryFocus?.unfocus();
+          Navigator.pushReplacement(
+            context,
+            FadePageRoute(
+              builder: (_) => BackupEmailVerificationScreen(
+                email: enteredBackupEmail,
+                authService: _authService,
+                isArtist: true,
+                nextScreenBuilder: (_) => ArtistProfilePhotoScreen(
+                  artistName: name,
+                  authService: _authService,
+                ),
+              ),
+            ),
+          );
+          return;
+        }
         if (!mounted) return;
         setState(() => _isLoading = false);
         FocusManager.instance.primaryFocus?.unfocus();
@@ -274,6 +331,32 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
       await _authService.verifyPhoneNumber(
         phoneNumber: formattedPhone,
         onVerificationCompleted: (_) async {
+          if (enteredBackupEmail.isNotEmpty) {
+            try {
+              await _authService.sendBackupEmailVerification(
+                enteredBackupEmail,
+                isArtist: true,
+              );
+            } catch (_) {}
+            if (!mounted) return;
+            setState(() => _isLoading = false);
+            FocusManager.instance.primaryFocus?.unfocus();
+            Navigator.pushReplacement(
+              context,
+              FadePageRoute(
+                builder: (_) => BackupEmailVerificationScreen(
+                  email: enteredBackupEmail,
+                  authService: _authService,
+                  isArtist: true,
+                  nextScreenBuilder: (_) => ArtistProfilePhotoScreen(
+                    artistName: name,
+                    authService: _authService,
+                  ),
+                ),
+              ),
+            );
+            return;
+          }
           if (!mounted) return;
           setState(() => _isLoading = false);
           FocusManager.instance.primaryFocus?.unfocus();
@@ -300,6 +383,8 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
                 resendToken: resendToken,
                 artistName: name,
                 artistEmail: email,
+                backupEmail:
+                    enteredBackupEmail.isNotEmpty ? enteredBackupEmail : null,
                 authService: _authService,
               ),
             ),
@@ -321,6 +406,8 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
                   resendToken: 123,
                   artistName: name,
                   artistEmail: email,
+                  backupEmail:
+                      enteredBackupEmail.isNotEmpty ? enteredBackupEmail : null,
                   authService: _authService,
                 ),
               ),
@@ -552,6 +639,24 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
                         final digits = value.replaceAll(RegExp(r'\D'), '');
                         if (digits.length < 10) {
                           return 'Please enter a valid 10-digit phone number';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                  if (_needsBackupEmail) ...[
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      key: const Key('artist_backup_email_field'),
+                      label: 'Backup Email (Optional)',
+                      controller: _backupEmailController,
+                      hintText: 'you@studio.com',
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (value) {
+                        final trimmed = value?.trim() ?? '';
+                        if (trimmed.isEmpty) return null;
+                        if (!trimmed.contains('@') || !trimmed.contains('.')) {
+                          return 'Please enter a valid backup email address';
                         }
                         return null;
                       },

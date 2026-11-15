@@ -273,6 +273,8 @@ class StripeService {
 
         final clientId = (metadata['client_id'] ?? 'client_unknown').toString();
         final artistId = (metadata['artist_id'] ?? 'artist_unknown').toString();
+        final flashImageUrl =
+            (metadata['flash_image_url'] ?? metadata['artwork_image_url'] ?? '').toString();
 
         ArtistDashboardRepository.addCalendarAppointment(
           DashboardAppointment(
@@ -289,6 +291,7 @@ class StripeService {
             notes: 'Verified via Stripe Webhook (${object['id']})',
             depositPaid: depositDollars,
             fullPrice: totalDollars,
+            artworkImageUrl: flashImageUrl,
             visitType: 'Flash Tattoo',
             dotColor: const Color(0xFF22C55E),
           ),
@@ -302,7 +305,7 @@ class StripeService {
             studioName: 'Obsidian Atelier',
             studioAddress: ArtistDashboardRepository.booksSchedule.locationNote,
             flashTitle: flashTitle,
-            flashImageUrl: 'assets/images/flash_tiger_tattoo.jpg',
+            flashImageUrl: flashImageUrl,
             dateTime: DateTime(parsedDate.year, parsedDate.month, parsedDate.day),
             timeSlot: '$timeSlot (2.0 hrs)',
             placement: placement,

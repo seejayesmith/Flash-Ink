@@ -12,6 +12,7 @@ import '../../../../screens/custom_request_screen.dart';
 import '../../../../screens/flash_details_screen.dart';
 import '../../../../services/auth_service.dart';
 import '../../../../services/booking_sync_service.dart';
+import '../../../../services/notification_service.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
@@ -122,6 +123,15 @@ class _ArtistProfileContentState extends ConsumerState<_ArtistProfileContent> {
     setState(() {
       _isFavorited = !_isFavorited;
     });
+
+    final uid = AuthService().currentUser?.uid;
+    if (uid != null && uid.isNotEmpty) {
+      NotificationService.syncFollowedArtist(
+        uid,
+        artistId: widget.artist.id,
+        isFollowed: _isFavorited,
+      );
+    }
   }
 
   void _onTabSelected(ArtistShowcaseTab tab) {

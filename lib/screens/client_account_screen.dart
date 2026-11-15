@@ -9,10 +9,12 @@ import '../features/appointments/domain/models/appointment_item.dart';
 import '../providers/app_providers.dart';
 import '../repositories/artist_repository.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/flash_snack_bar.dart';
 import '../widgets/flash_switch.dart';
+import '../widgets/inline_email_verification_tile.dart';
 import '../widgets/inline_phone_verification_tile.dart';
 import '../widgets/tattoo_machine_icon.dart';
 import '../widgets/photo_source_bottom_sheet.dart';
@@ -56,6 +58,8 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
   // Profile fields
   String _username = 'flashclient';
   String _email = 'client@flash.ink';
+  bool _emailVerified = false;
+  String? _pendingBackupEmail;
   String _phoneNumber = '(555) 234-5678';
   bool _phoneVerified = true;
   String? _photoUrl;
@@ -108,6 +112,26 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
     return FirebaseFirestore.instance;
   }
 
+  Future<void> _updateNotificationPreference(String key, bool value) async {
+    final user = _authService.currentUser;
+    if (user == null || user.uid.isEmpty) return;
+    FirebaseFirestore? injectedFirestore = widget.firestore;
+    if (injectedFirestore == null && mounted) {
+      try {
+        injectedFirestore = ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(firebaseFirestoreProvider);
+      } catch (_) {}
+    }
+    await NotificationService.updatePreference(
+      user.uid,
+      key: key,
+      value: value,
+      firestore: injectedFirestore,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -124,8 +148,28 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
       } catch (_) {}
       if (mounted) {
         setState(() {
-          if (user.email != null && user.email!.isNotEmpty) {
-            _email = user.email!;
+          String? userEmail;
+          try {
+            userEmail = user.email;
+          } catch (_) {}
+          bool authEmailVerified = false;
+          try {
+            authEmailVerified = user.emailVerified;
+          } catch (_) {}
+          bool isPhoneAuth = userPhone != null && userPhone.isNotEmpty;
+          if (!isPhoneAuth) {
+            try {
+              isPhoneAuth = user.providerData.any(
+                (info) => info.providerId == 'phone',
+              );
+            } catch (_) {}
+          }
+          if (userEmail != null && userEmail.isNotEmpty) {
+            _email = userEmail;
+            _emailVerified = authEmailVerified;
+          } else if (isPhoneAuth) {
+            _email = '';
+            _emailVerified = false;
           }
           if (user.photoURL != null && user.photoURL!.isNotEmpty) {
             _photoUrl = user.photoURL;
@@ -160,6 +204,16 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
             if (data['email'] != null) {
               _email = data['email'] as String;
             }
+            if (data['emailVerified'] is bool) {
+              _emailVerified = data['emailVerified'] as bool;
+            }
+            if (data['pendingBackupEmail'] is String &&
+                (data['pendingBackupEmail'] as String).isNotEmpty) {
+              _pendingBackupEmail = data['pendingBackupEmail'] as String;
+            } else if (data.containsKey('pendingBackupEmail') &&
+                data['pendingBackupEmail'] == null) {
+              _pendingBackupEmail = null;
+            }
             final photo = data['photoURL'] ?? data['photoUrl'] ?? data['avatarUrl'];
             if (photo is String && photo.isNotEmpty) {
               _photoUrl = photo;
@@ -180,6 +234,16 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
               if (list.isNotEmpty) {
                 _aesthetics = list;
               }
+            }
+            if (data['notificationPreferences'] is Map) {
+              final prefs = NotificationPreferences.fromMap(
+                Map<String, dynamic>.from(
+                  data['notificationPreferences'] as Map,
+                ),
+              );
+              _flashDropAlerts = prefs.flashDropAlerts;
+              _bookingReminders = prefs.bookingReminders;
+              _artistMessages = prefs.artistMessages;
             }
           });
         }
@@ -782,11 +846,25 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
                 onTap: _showEditProfileDialog,
               ),
               const Divider(color: AppTheme.darkBorder, height: 1),
-              _buildSettingsTile(
-                icon: Icons.email_outlined,
-                title: 'Email Address',
-                subtitle: _email,
-                trailing: const Icon(Icons.lock_outline, color: Color(0xFF6B7280), size: 16),
+              InlineEmailVerificationTile(
+                email: _email,
+                pendingEmail: _pendingBackupEmail,
+                emailVerified: _emailVerified,
+                authService: _authService,
+                firestore: _resolveFirestore(),
+                isArtist: false,
+                onVerificationLinkSent: (pendingEmail) {
+                  setState(() {
+                    _pendingBackupEmail = pendingEmail;
+                  });
+                },
+                onEmailVerified: (newEmail) {
+                  setState(() {
+                    _email = newEmail;
+                    _emailVerified = true;
+                    _pendingBackupEmail = null;
+                  });
+                },
               ),
               const Divider(color: AppTheme.darkBorder, height: 1),
               InlinePhoneVerificationTile(
@@ -815,7 +893,10 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
                 title: 'Flash Drop Alerts',
                 subtitle: 'Notify immediately when followed artists drop flash',
                 value: _flashDropAlerts,
-                onChanged: (val) => setState(() => _flashDropAlerts = val),
+                onChanged: (val) {
+                  setState(() => _flashDropAlerts = val);
+                  _updateNotificationPreference('flashDropAlerts', val);
+                },
               ),
               const Divider(color: AppTheme.darkBorder, height: 1),
               _buildSwitchTile(
@@ -823,7 +904,10 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
                 title: 'Appointment Reminders',
                 subtitle: '24-hour and 2-hour session reminders via push',
                 value: _bookingReminders,
-                onChanged: (val) => setState(() => _bookingReminders = val),
+                onChanged: (val) {
+                  setState(() => _bookingReminders = val);
+                  _updateNotificationPreference('bookingReminders', val);
+                },
               ),
               const Divider(color: AppTheme.darkBorder, height: 1),
               _buildSwitchTile(
@@ -831,7 +915,10 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
                 title: 'Direct Messages',
                 subtitle: 'Alerts when artists reply to your inquiries',
                 value: _artistMessages,
-                onChanged: (val) => setState(() => _artistMessages = val),
+                onChanged: (val) {
+                  setState(() => _artistMessages = val);
+                  _updateNotificationPreference('artistMessages', val);
+                },
               ),
             ]),
 

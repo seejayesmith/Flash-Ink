@@ -7,8 +7,8 @@ import '../../models/waitlist_entry.dart';
 import '../../theme/app_radius.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/adaptive_glass_container.dart';
-import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
+import '../../widgets/user_avatar.dart';
 import 'add_waitlist_entry_sheet.dart';
 import 'books_open_options_modal.dart';
 import 'early_access_outreach_sheet.dart';
@@ -194,6 +194,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
             // Content List
             Expanded(
               child: CustomScrollView(
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                 physics: const BouncingScrollPhysics(),
                 slivers: [
                   SliverPadding(
@@ -605,6 +606,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
             ),
             child: TextField(
               controller: _searchController,
+              onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
               onChanged: (val) => setState(() => _searchQuery = val),
               style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13),
               decoration: InputDecoration(
@@ -724,26 +726,13 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CircleAvatar(
+                    UserAvatar(
+                      imageUrl: entry.avatarUrl,
+                      displayName: entry.clientName,
                       radius: 20,
                       backgroundColor: const Color(0xFF282D2D),
-                      child: ClipOval(
-                        child: entry.avatarUrl != null
-                            ? FlashImage(
-                                urlOrPath: entry.avatarUrl!,
-                                width: 40,
-                                height: 40,
-                                fit: BoxFit.cover,
-                              )
-                            : Text(
-                                entry.clientName.isNotEmpty ? entry.clientName[0] : '?',
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: const Color(0xFFEEC200),
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                      ),
+                      fallbackInitial: '?',
+                      initialFontSize: 16,
                     ),
                     const SizedBox(width: 12),
                     Expanded(

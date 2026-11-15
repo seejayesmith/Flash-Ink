@@ -100,8 +100,15 @@ void main() {
     });
   });
 
+  bool hasEditableFocus() {
+    final focusContext = FocusManager.instance.primaryFocus?.context;
+    if (focusContext == null || !focusContext.mounted) return false;
+    return focusContext.widget is EditableText ||
+        focusContext.findAncestorStateOfType<EditableTextState>() != null;
+  }
+
   group('Modal Keyboard Collapse Button Integration Tests', () {
-    testWidgets('AddWaitlistEntrySheet includes collapse keyboard button in header', (tester) async {
+    testWidgets('AddWaitlistEntrySheet omits collapse keyboard button and dismisses keyboard on outside tap', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -111,24 +118,22 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final collapseButton = find.byKey(const Key('collapse_keyboard_button'));
-      expect(collapseButton, findsOneWidget);
+      expect(find.byKey(const Key('collapse_keyboard_button')), findsNothing);
 
-      // Find one of the text fields and focus it
+      // Focus one of the text fields
       final nameField = find.byType(TextField).first;
       await tester.tap(nameField);
-      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(hasEditableFocus(), isTrue);
 
-      // Tap collapse button
-      await tester.tap(collapseButton);
-      await tester.pump();
+      // Tap non-input header area inside the sheet
+      await tester.tap(find.text('Add to VIP Waitlist'));
+      await tester.pumpAndSettle();
 
-      // Verify no primary focus on the text field
-      final primaryFocus = FocusManager.instance.primaryFocus;
-      expect(primaryFocus?.context?.widget is! EditableText, isTrue);
+      expect(hasEditableFocus(), isFalse);
     });
 
-    testWidgets('GuestAuthPromptBottomSheet includes collapse keyboard button', (tester) async {
+    testWidgets('GuestAuthPromptBottomSheet omits collapse keyboard button', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -140,14 +145,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final collapseButton = find.byKey(const Key('collapse_keyboard_button'));
-      expect(collapseButton, findsOneWidget);
-
-      await tester.tap(collapseButton);
-      await tester.pump();
+      expect(find.byKey(const Key('collapse_keyboard_button')), findsNothing);
     });
 
-    testWidgets('ReauthenticationBottomSheet includes collapse keyboard button', (tester) async {
+    testWidgets('ReauthenticationBottomSheet omits collapse keyboard button and dismisses keyboard on outside tap', (tester) async {
       final mockAuth = AuthService(
         mockUser: _ReauthTestUser(
           uid: 'user_reauth_test',
@@ -167,21 +168,20 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final collapseButton = find.byKey(const Key('collapse_keyboard_button'));
-      expect(collapseButton, findsOneWidget);
+      expect(find.byKey(const Key('collapse_keyboard_button')), findsNothing);
 
       // Focus password field
       final passwordField = find.byKey(const Key('reauth_password_field'));
       expect(passwordField, findsOneWidget);
       await tester.tap(passwordField);
-      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(hasEditableFocus(), isTrue);
 
-      // Tap collapse button
-      await tester.tap(collapseButton);
-      await tester.pump();
+      // Tap non-input header area inside the sheet
+      await tester.tap(find.byKey(const Key('reauth_modal_title')));
+      await tester.pumpAndSettle();
 
-      final primaryFocus = FocusManager.instance.primaryFocus;
-      expect(primaryFocus?.context?.widget is! EditableText, isTrue);
+      expect(hasEditableFocus(), isFalse);
     });
 
     testWidgets('ArtistPoliciesScreen Edit Policy modal removes collapse button while retaining tap-out dismiss', (tester) async {
@@ -336,7 +336,7 @@ void main() {
       expect(primaryFocus?.context?.widget is! EditableText, isTrue);
     });
 
-    testWidgets('FlashBookingScreen placement bottom sheet includes collapse keyboard button', (tester) async {
+    testWidgets('FlashBookingScreen placement bottom sheet omits collapse keyboard button and dismisses keyboard first', (tester) async {
       tester.view.physicalSize = const Size(800, 1400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -369,8 +369,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Select Body Placement'), findsOneWidget);
-      final collapseButton = find.byKey(const Key('collapse_keyboard_button'));
-      expect(collapseButton, findsOneWidget);
+      expect(find.byKey(const Key('collapse_keyboard_button')), findsNothing);
 
       // Tap 'Other' to reveal custom placement text field
       await tester.tap(find.byKey(const Key('placement_option_Other')));
@@ -381,14 +380,28 @@ void main() {
 
       // Focus the custom field
       await tester.tap(customField);
-      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(hasEditableFocus(), isTrue);
 
-      // Tap collapse button
-      await tester.tap(collapseButton);
-      await tester.pump();
+      // Tap non-input header inside the sheet -> dismisses keyboard while sheet stays open
+      await tester.tap(find.text('Select Body Placement'));
+      await tester.pumpAndSettle();
+      expect(hasEditableFocus(), isFalse);
+      expect(find.text('Select Body Placement'), findsOneWidget);
 
-      final primaryFocus = FocusManager.instance.primaryFocus;
-      expect(primaryFocus?.context?.widget is! EditableText, isTrue);
+      // Re-focus custom field and tap modal barrier -> dismisses keyboard first, then second tap closes sheet
+      await tester.tap(customField);
+      await tester.pumpAndSettle();
+      expect(hasEditableFocus(), isTrue);
+
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+      expect(hasEditableFocus(), isFalse);
+      expect(find.text('Select Body Placement'), findsOneWidget);
+
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+      expect(find.text('Select Body Placement'), findsNothing);
     });
   });
 

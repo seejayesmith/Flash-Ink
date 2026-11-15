@@ -81,6 +81,41 @@ service firebase.storage {
       allow write: if isOwner(artistId) && isValidImageWrite();
     }
 
+    // -------------------------------------------------------------------------
+    // CHAT ATTACHMENTS & CUSTOM REQUEST REFERENCE IMAGES
+    // -------------------------------------------------------------------------
+    function isValidChatAttachmentWrite() {
+      return request.resource != null
+        && request.resource.size < 15 * 1024 * 1024 // 15 MB max
+        && (
+          request.resource.contentType.matches('image/.*')
+          || request.resource.contentType == 'application/pdf'
+          || request.resource.contentType == 'text/plain'
+          || request.resource.contentType == 'application/msword'
+          || request.resource.contentType.matches('application/vnd\\.openxmlformats-officedocument\\..*')
+        );
+    }
+
+    function isChatParticipant(threadId) {
+      return isSignedIn()
+        && firestore.exists(/databases/(default)/documents/chats/$(threadId))
+        && request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(threadId)).data.participants;
+    }
+
+    match /chat_attachments/{threadId}/{allPaths=**} {
+      allow read: if isChatParticipant(threadId);
+      allow write: if isChatParticipant(threadId)
+        && isValidChatAttachmentWrite()
+        && 'senderId' in request.resource.metadata
+        && request.resource.metadata['senderId'] == request.auth.uid
+        && (resource == null || resource.metadata['senderId'] == request.auth.uid);
+    }
+
+    match /custom_requests/{userId}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId) && isValidImageWrite();
+    }
+
     // =========================================================================
     // DEFAULT DENY ALL OTHER PATHS
     // =========================================================================

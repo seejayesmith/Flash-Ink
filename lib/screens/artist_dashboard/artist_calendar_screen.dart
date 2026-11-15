@@ -10,6 +10,7 @@ import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/tattoo_machine_icon.dart';
 import '../../widgets/artist_top_bar.dart';
+import '../../widgets/user_avatar.dart';
 import 'appointment_detail_screen.dart';
 import 'artist_account_screen.dart';
 import '../../features/messages/presentation/screens/messages_screen.dart';
@@ -238,6 +239,7 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
       messagesKey: const Key('calendar_messages_button'),
       avatarKey: const Key('calendar_artist_avatar_button'),
       onMessagesTap: () {
+        FocusManager.instance.primaryFocus?.unfocus();
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const MessagesScreen()),
@@ -250,42 +252,146 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
   }
 
   Widget _buildAvatarWidget({double radius = 18}) {
-    return CircleAvatar(
+    return UserAvatar(
+      imageUrl: _avatarUrl,
+      displayName: _artistDisplayName,
       radius: radius,
-      backgroundColor: const Color(0xFF262929),
-      child: ClipOval(
-        child: FlashImage(
-          urlOrPath: _avatarUrl,
-          width: radius * 2,
-          height: radius * 2,
-          fit: BoxFit.cover,
-          errorWidget: Container(
-            color: const Color(0xFF262929),
-            alignment: Alignment.center,
-            child: Text(
-              _artistDisplayName.isNotEmpty ? _artistDisplayName[0] : 'O',
-              style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFFEEC200),
-                fontWeight: FontWeight.bold,
-                fontSize: radius * 0.9,
-              ),
-            ),
-          ),
-        ),
-      ),
+      fallbackInitial: 'O',
+      initialFontSize: radius * 0.9,
     );
   }
 
   /// Page title "Calendar"
-  Widget _buildTitleRow() {
-    return Text(
-      'Calendar',
-      style: GoogleFonts.plusJakartaSans(
-        color: Colors.white,
-        fontSize: 30,
-        fontWeight: FontWeight.w800,
-        letterSpacing: -0.5,
+  String? get _resolvedArtistId {
+    final widgetId = widget.artist?.id;
+    if (widgetId != null && widgetId.isNotEmpty) return widgetId;
+    try {
+      final authId = _authService.currentUser?.uid;
+      if (authId != null && authId.isNotEmpty) return authId;
+    } catch (_) {}
+    final syncedId = BookingSyncService.resolveCurrentUid('');
+    return syncedId.isNotEmpty ? syncedId : null;
+  }
+
+  List<CustomHold> _holdsForDate(DateTime date) {
+    final key = ArtistBooksSchedule.dateKey(date);
+    return ArtistDashboardRepository.customHolds
+        .where((h) => !h.isExpired && ArtistBooksSchedule.dateKey(h.date) == key)
+        .toList();
+  }
+
+  ({int appointments, int holds}) _countConflicts(Iterable<DateTime> dates) {
+    int aptCount = 0;
+    int holdCount = 0;
+    for (final d in dates) {
+      aptCount += ArtistDashboardRepository.getAppointmentsForDate(d).length;
+      holdCount += _holdsForDate(d).length;
+    }
+    return (appointments: aptCount, holds: holdCount);
+  }
+
+  void _confirmAndBlockDates(
+    List<DateTime> dates, {
+    VoidCallback? onApplied,
+  }) {
+    if (dates.isEmpty) return;
+    final conflicts = _countConflicts(dates);
+    if (conflicts.appointments == 0 && conflicts.holds == 0) {
+      ArtistDashboardRepository.blockDates(dates, artistId: _resolvedArtistId);
+      setState(() {});
+      FlashSnackBar.showInfo(
+        context,
+        dates.length == 1
+            ? 'Date marked as time off.'
+            : '${dates.length} dates blocked off.',
+      );
+      onApplied?.call();
+      return;
+    }
+
+    _showBlockConflictDialog(
+      dates: dates,
+      appointmentCount: conflicts.appointments,
+      holdCount: conflicts.holds,
+      onApplied: onApplied,
+    );
+  }
+
+  void _openManageTimeOffSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => _ManageTimeOffSheet(
+        initialMonth: _activeMonth,
+        artistId: _resolvedArtistId,
+        countConflicts: _countConflicts,
+        onDatesChanged: () {
+          if (mounted) setState(() {});
+        },
       ),
+    );
+  }
+
+  Widget _buildTitleRow() {
+    final schedule = ArtistDashboardRepository.booksSchedule;
+    final overrideCount =
+        schedule.blockedDates.length + schedule.openOverrideDates.length;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Text(
+            'Calendar',
+            style: GoogleFonts.plusJakartaSans(
+              color: Colors.white,
+              fontSize: 30,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 8),
+        GestureDetector(
+          key: const Key('calendar_manage_time_off_button'),
+          onTap: _openManageTimeOffSheet,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E2121),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: overrideCount > 0
+                    ? const Color(0xFFEEC200).withAlpha(110)
+                    : const Color(0xFF2C2F30),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.date_range_rounded,
+                  size: 14,
+                  color: Color(0xFFEEC200),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  overrideCount > 0
+                      ? 'Time Off ($overrideCount)'
+                      : 'Manage Time Off',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -626,19 +732,24 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
   }) {
     final cellDate = DateTime(_activeMonth.year, _activeMonth.month, dayNumber);
     final capacity = ArtistDashboardRepository.getDayCapacityStatus(cellDate);
-    final isClosedOrBlocked = capacity == DayCapacityStatus.closed || capacity == DayCapacityStatus.blocked;
-    final holds = ArtistDashboardRepository.customHolds.where((h) =>
-        !h.isExpired &&
-        h.date.year == cellDate.year &&
-        h.date.month == cellDate.month &&
-        h.date.day == cellDate.day);
+    final isBlocked = ArtistDashboardRepository.isDateBlocked(cellDate);
+    final isForceOpened = ArtistDashboardRepository.isDateForceOpened(cellDate);
+    final isWeeklyCapClosed =
+        ArtistDashboardRepository.isClosedByWeeklyCap(cellDate);
+    final isClosedOrBlocked =
+        capacity == DayCapacityStatus.closed || capacity == DayCapacityStatus.blocked;
+    final holds = _holdsForDate(cellDate);
     final hasHold = holds.isNotEmpty;
 
     Color dotColor = const Color(0xFF8C9191);
     if (hasHold) {
       dotColor = const Color(0xFFA855F7); // Purple for 24h holds
-    } else if (capacity == DayCapacityStatus.blocked) {
-      dotColor = const Color(0xFFF97316).withAlpha(140); // Muted orange for blocked time off
+    } else if (isBlocked) {
+      dotColor = const Color(0xFFF97316).withAlpha(180); // Orange for blocked time off
+    } else if (isForceOpened && !hasAppointments) {
+      dotColor = const Color(0xFF22C55E); // Green for force-opened off-weekday
+    } else if (isWeeklyCapClosed) {
+      dotColor = const Color(0xFFEEC200).withAlpha(130); // Amber dot for cap closed
     } else if (hasAppointments) {
       if (capacity == DayCapacityStatus.full) {
         dotColor = const Color(0xFF8C9191);
@@ -648,6 +759,13 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
         dotColor = const Color(0xFF22C55E);
       }
     }
+
+    final showIndicatorDot = !isSelected &&
+        (hasAppointments ||
+            hasHold ||
+            isBlocked ||
+            isForceOpened ||
+            isWeeklyCapClosed);
 
     return GestureDetector(
       key: Key('calendar_day_$dayNumber'),
@@ -660,11 +778,22 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
           decoration: BoxDecoration(
             color: isSelected
                 ? const Color(0xFF2C3030)
-                : (isClosedOrBlocked ? const Color(0xFF131515) : Colors.transparent),
+                : (isForceOpened && !isClosedOrBlocked
+                    ? const Color(0xFF142119)
+                    : (isClosedOrBlocked
+                        ? const Color(0xFF131515)
+                        : Colors.transparent)),
             borderRadius: BorderRadius.circular(12),
-            border: isClosedOrBlocked && !isSelected
-                ? Border.all(color: const Color(0xFF1D2020), width: 0.8)
-                : null,
+            border: isSelected
+                ? null
+                : (isForceOpened && !isClosedOrBlocked
+                    ? Border.all(
+                        color: const Color(0xFF22C55E).withAlpha(80),
+                        width: 0.9,
+                      )
+                    : (isClosedOrBlocked
+                        ? Border.all(color: const Color(0xFF1D2020), width: 0.8)
+                        : null)),
           ),
           alignment: Alignment.center,
           child: Column(
@@ -690,7 +819,7 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
                     shape: BoxShape.circle,
                   ),
                 )
-              else if (hasAppointments || hasHold || capacity == DayCapacityStatus.blocked)
+              else if (showIndicatorDot)
                 Container(
                   width: 4,
                   height: 4,
@@ -794,17 +923,40 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
   /// Header row for the schedule section: "Today's Schedule" + session count badge
   Widget _buildScheduleHeader() {
     final sessionCount = _currentAppointments.length;
+    final schedule = ArtistDashboardRepository.booksSchedule;
     final isBlocked = ArtistDashboardRepository.isDateBlocked(_selectedDate);
+    final isForceOpened = ArtistDashboardRepository.isDateForceOpened(_selectedDate);
+    final isWeekdayScheduled = schedule.workingDays.contains(_selectedDate.weekday);
+
+    IconData toggleIcon = Icons.beach_access_outlined;
+    Color toggleColor = const Color(0xFF8C9191);
+    String toggleTooltip = 'Block Date Off (Time Off)';
+    if (isBlocked) {
+      toggleIcon = Icons.beach_access;
+      toggleColor = const Color(0xFFF97316);
+      toggleTooltip = 'Unblock Date';
+    } else if (!isWeekdayScheduled && !isForceOpened) {
+      toggleIcon = Icons.event_available_outlined;
+      toggleColor = const Color(0xFFEEC200);
+      toggleTooltip = 'Open This Off-Day for Bookings';
+    } else if (!isWeekdayScheduled && isForceOpened) {
+      toggleIcon = Icons.event_available;
+      toggleColor = const Color(0xFF22C55E);
+      toggleTooltip = 'Revert to Weekly Off-Day';
+    }
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          _scheduleSectionTitle,
-          style: GoogleFonts.plusJakartaSans(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
+        Expanded(
+          child: Text(
+            _scheduleSectionTitle,
+            style: GoogleFonts.plusJakartaSans(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         Row(
@@ -831,24 +983,36 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
             IconButton(
               key: const Key('calendar_toggle_time_off_button'),
               icon: Icon(
-                isBlocked ? Icons.beach_access : Icons.beach_access_outlined,
-                color: isBlocked ? const Color(0xFFF97316) : const Color(0xFF8C9191),
+                toggleIcon,
+                color: toggleColor,
                 size: 20,
               ),
-              tooltip: isBlocked ? 'Unblock Date' : 'Block Date Off (Time Off)',
+              tooltip: toggleTooltip,
               onPressed: () {
                 if (isBlocked) {
-                  ArtistDashboardRepository.unblockDate(_selectedDate);
+                  ArtistDashboardRepository.unblockDate(
+                    _selectedDate,
+                    artistId: _resolvedArtistId,
+                  );
                   FlashSnackBar.showSuccess(context, 'Date unblocked.');
+                  setState(() {});
+                } else if (!isWeekdayScheduled && !isForceOpened) {
+                  ArtistDashboardRepository.forceOpenDate(
+                    _selectedDate,
+                    artistId: _resolvedArtistId,
+                  );
+                  FlashSnackBar.showSuccess(context, 'Date opened for bookings.');
+                  setState(() {});
+                } else if (!isWeekdayScheduled && isForceOpened) {
+                  ArtistDashboardRepository.revertForceOpenDate(
+                    _selectedDate,
+                    artistId: _resolvedArtistId,
+                  );
+                  FlashSnackBar.showInfo(context, 'Returned to weekly off-day.');
+                  setState(() {});
                 } else {
-                  if (_currentAppointments.isNotEmpty) {
-                    _showBlockConflictDialog();
-                  } else {
-                    ArtistDashboardRepository.blockDate(_selectedDate);
-                    FlashSnackBar.showInfo(context, 'Date marked as time off.');
-                  }
+                  _confirmAndBlockDates([_selectedDate]);
                 }
-                setState(() {});
               },
             ),
           ],
@@ -857,33 +1021,70 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
     );
   }
 
-  void _showBlockConflictDialog() {
+  void _showBlockConflictDialog({
+    required List<DateTime> dates,
+    required int appointmentCount,
+    required int holdCount,
+    VoidCallback? onApplied,
+  }) {
+    final nounParts = <String>[
+      if (appointmentCount > 0)
+        '$appointmentCount confirmed ${appointmentCount == 1 ? 'appointment' : 'appointments'}',
+      if (holdCount > 0)
+        '$holdCount active 24h ${holdCount == 1 ? 'hold' : 'holds'}',
+    ];
+    final targetLabel = dates.length == 1 ? 'this date' : 'these ${dates.length} dates';
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E2121),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
-          'Appointments on this Date',
-          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
+          'Existing Bookings on Date',
+          style: GoogleFonts.plusJakartaSans(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         content: Text(
-          'You have ${_currentAppointments.length} confirmed appointment(s) on this date. Would you like to keep them and block the rest of the day, or reschedule them first?',
-          style: GoogleFonts.plusJakartaSans(color: const Color(0xFF8C9191), fontSize: 13),
+          'You have ${nounParts.join(' and ')} on $targetLabel. Existing bookings and holds stay intact while remaining open slots will be blocked.',
+          style: GoogleFonts.plusJakartaSans(
+            color: const Color(0xFF8C9191),
+            fontSize: 13,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF8C9191))),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.plusJakartaSans(color: const Color(0xFF8C9191)),
+            ),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              ArtistDashboardRepository.blockDate(_selectedDate);
+              ArtistDashboardRepository.blockDates(
+                dates,
+                artistId: _resolvedArtistId,
+              );
               setState(() {});
-              FlashSnackBar.showInfo(context, 'Date blocked out.');
+              FlashSnackBar.showInfo(
+                context,
+                dates.length == 1
+                    ? 'Date blocked out.'
+                    : '${dates.length} dates blocked out.',
+              );
+              onApplied?.call();
             },
-            child: Text('Block Anyway', style: GoogleFonts.plusJakartaSans(color: const Color(0xFFF97316), fontWeight: FontWeight.bold)),
+            child: Text(
+              'Block Anyway',
+              style: GoogleFonts.plusJakartaSans(
+                color: const Color(0xFFF97316),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -893,12 +1094,13 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
   /// List of appointments for the active selected day
   Widget _buildScheduleList() {
     final appointments = _currentAppointments;
-    final holds = ArtistDashboardRepository.customHolds.where((h) =>
-        !h.isExpired &&
-        h.date.year == _selectedDate.year &&
-        h.date.month == _selectedDate.month &&
-        h.date.day == _selectedDate.day).toList();
+    final holds = _holdsForDate(_selectedDate);
+    final schedule = ArtistDashboardRepository.booksSchedule;
     final isBlocked = ArtistDashboardRepository.isDateBlocked(_selectedDate);
+    final isForceOpened = ArtistDashboardRepository.isDateForceOpened(_selectedDate);
+    final isWeekdayScheduled = schedule.workingDays.contains(_selectedDate.weekday);
+    final isWeeklyCapClosed =
+        ArtistDashboardRepository.isClosedByWeeklyCap(_selectedDate);
 
     if (appointments.isEmpty && holds.isEmpty) {
       if (isBlocked) {
@@ -926,6 +1128,7 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
               const SizedBox(height: 4),
               Text(
                 'Clients cannot book or request appointments on this day.',
+                textAlign: TextAlign.center,
                 style: GoogleFonts.plusJakartaSans(
                   color: const Color(0xFF8C9191),
                   fontSize: 12,
@@ -934,7 +1137,10 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
               const SizedBox(height: 14),
               OutlinedButton(
                 onPressed: () {
-                  ArtistDashboardRepository.unblockDate(_selectedDate);
+                  ArtistDashboardRepository.unblockDate(
+                    _selectedDate,
+                    artistId: _resolvedArtistId,
+                  );
                   setState(() {});
                 },
                 style: OutlinedButton.styleFrom(
@@ -945,6 +1151,98 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
                   ),
                 ),
                 child: const Text('Unblock Day'),
+              ),
+            ],
+          ),
+        );
+      }
+
+      if (isWeeklyCapClosed) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+          decoration: BoxDecoration(
+            color: const Color(0xFF191B1B),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF252828)),
+          ),
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.event_note_rounded, color: Color(0xFFEEC200), size: 34),
+              const SizedBox(height: 12),
+              Text(
+                'Weekly Cap Reached (${schedule.maxWorkingDaysPerWeek}d/wk)',
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Other booked days filled this Sun–Sat week. Empty days auto-close until slots free up.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFF8C9191),
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
+      if (!isWeekdayScheduled && !isForceOpened) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+          decoration: BoxDecoration(
+            color: const Color(0xFF191B1B),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF252828)),
+          ),
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.nights_stay_outlined, color: Color(0xFF8C9191), size: 34),
+              const SizedBox(height: 12),
+              Text(
+                'Weekly Off Day',
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Clients cannot book on this weekday unless you open it for this date.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFF8C9191),
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 14),
+              OutlinedButton(
+                key: const Key('calendar_open_override_button'),
+                onPressed: () {
+                  ArtistDashboardRepository.forceOpenDate(
+                    _selectedDate,
+                    artistId: _resolvedArtistId,
+                  );
+                  setState(() {});
+                  FlashSnackBar.showSuccess(context, 'Date opened for bookings.');
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF22C55E),
+                  side: const BorderSide(color: Color(0xFF22C55E)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: const Text('Open This Date'),
               ),
             ],
           ),
@@ -962,10 +1260,14 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.event_available, color: Color(0xFF8C9191), size: 36),
+            Icon(
+              Icons.event_available,
+              color: isForceOpened ? const Color(0xFF22C55E) : const Color(0xFF8C9191),
+              size: 36,
+            ),
             const SizedBox(height: 12),
             Text(
-              'No appointments on this date',
+              isForceOpened ? 'Opened for Bookings (Override)' : 'No appointments on this date',
               style: GoogleFonts.plusJakartaSans(
                 color: Colors.white,
                 fontSize: 15,
@@ -974,7 +1276,10 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Enjoy your open studio time or open booking slots.',
+              isForceOpened
+                  ? 'This off-weekday is open as a special booking date.'
+                  : 'Enjoy your open studio time or open booking slots.',
+              textAlign: TextAlign.center,
               style: GoogleFonts.plusJakartaSans(
                 color: const Color(0xFF8C9191),
                 fontSize: 12,
@@ -990,6 +1295,42 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
 
     return Column(
       children: [
+        if (isBlocked)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF231812),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFF97316).withAlpha(90)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.beach_access, color: Color(0xFFF97316), size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Remaining open slots blocked for time off',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFF97316),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    ArtistDashboardRepository.unblockDate(
+                      _selectedDate,
+                      artistId: _resolvedArtistId,
+                    );
+                    setState(() {});
+                  },
+                  child: const Text('Unblock'),
+                ),
+              ],
+            ),
+          ),
         // Custom 24h holds
         ...holds.map((hold) => _buildCustomHoldCard(hold)),
         // Confirmed appointments
@@ -1068,7 +1409,10 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
             children: [
               TextButton(
                 onPressed: () {
-                  ArtistDashboardRepository.releaseCustomHold(hold.id);
+                  ArtistDashboardRepository.releaseCustomHold(
+                    hold.id,
+                    artistId: _resolvedArtistId,
+                  );
                   setState(() {});
                   FlashSnackBar.showInfo(context, 'Hold released.');
                 },
@@ -1097,26 +1441,23 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle)),
-              const SizedBox(width: 8),
-              Text(
-                openHoursText,
-                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-              ),
-            ],
+          Expanded(
+            child: Row(
+              children: [
+                Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle)),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    openHoursText,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
           ),
           TextButton(
-            onPressed: () {
-              if (_currentAppointments.isNotEmpty) {
-                _showBlockConflictDialog();
-              } else {
-                ArtistDashboardRepository.blockDate(_selectedDate);
-                setState(() {});
-                FlashSnackBar.showInfo(context, 'Remaining open time blocked out.');
-              }
-            },
+            onPressed: () => _confirmAndBlockDates([_selectedDate]),
             child: Text(
               '+ Block Out Time',
               style: GoogleFonts.plusJakartaSans(color: const Color(0xFF22C55E), fontSize: 12, fontWeight: FontWeight.w600),
@@ -1408,6 +1749,563 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
         builder: (_) => ArtistAccountScreen(
           artist: widget.artist,
           authService: _authService,
+        ),
+      ),
+    );
+  }
+}
+
+enum _TimeOffSelectionMode { tapDates, dateRange }
+
+/// Dedicated multi-date and date-range picker bottom sheet for managing
+/// two-way calendar overrides (blocking days off or force-opening off-weekdays).
+class _ManageTimeOffSheet extends StatefulWidget {
+  final DateTime initialMonth;
+  final String? artistId;
+  final ({int appointments, int holds}) Function(Iterable<DateTime> dates)
+      countConflicts;
+  final VoidCallback onDatesChanged;
+
+  const _ManageTimeOffSheet({
+    required this.initialMonth,
+    required this.artistId,
+    required this.countConflicts,
+    required this.onDatesChanged,
+  });
+
+  @override
+  State<_ManageTimeOffSheet> createState() => _ManageTimeOffSheetState();
+}
+
+class _ManageTimeOffSheetState extends State<_ManageTimeOffSheet> {
+  static const List<String> _monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+  static const List<String> _weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+  late DateTime _viewMonth;
+  _TimeOffSelectionMode _mode = _TimeOffSelectionMode.tapDates;
+  final Set<String> _selectedKeys = {};
+  DateTime? _rangeStart;
+  DateTime? _rangeEnd;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewMonth = DateTime(widget.initialMonth.year, widget.initialMonth.month, 1);
+  }
+
+  List<DateTime> get _selectedDates {
+    final parsed = <DateTime>[];
+    for (final key in _selectedKeys) {
+      final parts = key.split('-');
+      if (parts.length == 3) {
+        final y = int.tryParse(parts[0]);
+        final m = int.tryParse(parts[1]);
+        final d = int.tryParse(parts[2]);
+        if (y != null && m != null && d != null) {
+          parsed.add(DateTime(y, m, d));
+        }
+      }
+    }
+    parsed.sort((a, b) => a.compareTo(b));
+    return parsed;
+  }
+
+  void _onTapDate(DateTime date) {
+    final normalized = DateTime(date.year, date.month, date.day);
+    final key = ArtistBooksSchedule.dateKey(normalized);
+
+    setState(() {
+      if (_mode == _TimeOffSelectionMode.tapDates) {
+        if (_selectedKeys.contains(key)) {
+          _selectedKeys.remove(key);
+        } else {
+          _selectedKeys.add(key);
+        }
+        return;
+      }
+
+      if (_rangeStart == null || _rangeEnd != null) {
+        _rangeStart = normalized;
+        _rangeEnd = null;
+        _selectedKeys
+          ..clear()
+          ..add(key);
+      } else {
+        final start =
+            normalized.isBefore(_rangeStart!) ? normalized : _rangeStart!;
+        final end =
+            normalized.isBefore(_rangeStart!) ? _rangeStart! : normalized;
+        _rangeStart = start;
+        _rangeEnd = end;
+        _selectedKeys.clear();
+        var cursor = start;
+        while (!cursor.isAfter(end)) {
+          _selectedKeys.add(ArtistBooksSchedule.dateKey(cursor));
+          cursor = DateTime(cursor.year, cursor.month, cursor.day + 1);
+        }
+      }
+    });
+  }
+
+  Future<void> _handleBlockSelected() async {
+    final dates = _selectedDates;
+    if (dates.isEmpty) return;
+
+    final conflicts = widget.countConflicts(dates);
+    if (conflicts.appointments > 0 || conflicts.holds > 0) {
+      final nounParts = <String>[
+        if (conflicts.appointments > 0)
+          '${conflicts.appointments} confirmed ${conflicts.appointments == 1 ? 'appointment' : 'appointments'}',
+        if (conflicts.holds > 0)
+          '${conflicts.holds} active 24h ${conflicts.holds == 1 ? 'hold' : 'holds'}',
+      ];
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dlgCtx) => AlertDialog(
+          backgroundColor: const Color(0xFF1E2121),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            'Existing Bookings on Selected Dates',
+            style: GoogleFonts.plusJakartaSans(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: Text(
+            'You have ${nounParts.join(' and ')} across ${dates.length} selected ${dates.length == 1 ? 'date' : 'dates'}. Existing bookings and holds stay intact while remaining open slots will be blocked.',
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFF8C9191),
+              fontSize: 13,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dlgCtx, false),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.plusJakartaSans(color: const Color(0xFF8C9191)),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dlgCtx, true),
+              child: Text(
+                'Block Anyway',
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFFF97316),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    ArtistDashboardRepository.blockDates(dates, artistId: widget.artistId);
+    widget.onDatesChanged();
+    if (!mounted) return;
+    Navigator.pop(context);
+    FlashSnackBar.showInfo(
+      context,
+      dates.length == 1
+          ? '1 date blocked off.'
+          : '${dates.length} dates blocked off.',
+    );
+  }
+
+  void _handleOpenSelected() {
+    final dates = _selectedDates;
+    if (dates.isEmpty) return;
+
+    ArtistDashboardRepository.forceOpenDates(dates, artistId: widget.artistId);
+    widget.onDatesChanged();
+    Navigator.pop(context);
+    FlashSnackBar.showSuccess(
+      context,
+      dates.length == 1
+          ? '1 date opened for bookings.'
+          : '${dates.length} dates opened for bookings.',
+    );
+  }
+
+  void _handleClearAllBlocked() {
+    ArtistDashboardRepository.clearAllBlockedDates(artistId: widget.artistId);
+    widget.onDatesChanged();
+    setState(() {
+      _selectedKeys.clear();
+      _rangeStart = null;
+      _rangeEnd = null;
+    });
+    FlashSnackBar.showSuccess(context, 'All blocked dates cleared.');
+  }
+
+  Widget _buildModeChip({
+    required Key key,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        key: key,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF141616),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected ? const Color(0xFFEEC200) : const Color(0xFF2C2F30),
+            ),
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.plusJakartaSans(
+              color: isSelected ? const Color(0xFF121414) : const Color(0xFF8C9191),
+              fontSize: 12,
+              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final schedule = ArtistDashboardRepository.booksSchedule;
+    final daysInMonth = DateUtils.getDaysInMonth(_viewMonth.year, _viewMonth.month);
+    final firstWeekday =
+        DateTime(_viewMonth.year, _viewMonth.month, 1).weekday % 7;
+    final totalCells = firstWeekday + daysInMonth;
+    final rowCount = (totalCells / 7).ceil();
+
+    final blockedCount = schedule.blockedDates.length;
+    final openedCount = schedule.openOverrideDates.length;
+    final hasSelection = _selectedKeys.isNotEmpty;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF191B1B),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        16,
+        20,
+        20 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3A3F3F),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Manage Time Off & Overrides',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Block trips or open specific off-weekdays',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF8C9191),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    key: const Key('time_off_close_button'),
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: Color(0xFF8C9191)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  _buildModeChip(
+                    key: const Key('time_off_mode_tap'),
+                    label: 'Tap Dates',
+                    isSelected: _mode == _TimeOffSelectionMode.tapDates,
+                    onTap: () => setState(() {
+                      _mode = _TimeOffSelectionMode.tapDates;
+                      _rangeStart = null;
+                      _rangeEnd = null;
+                    }),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildModeChip(
+                    key: const Key('time_off_mode_range'),
+                    label: 'Date Range',
+                    isSelected: _mode == _TimeOffSelectionMode.dateRange,
+                    onTap: () => setState(() {
+                      _mode = _TimeOffSelectionMode.dateRange;
+                      _selectedKeys.clear();
+                      _rangeStart = null;
+                      _rangeEnd = null;
+                    }),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    key: const Key('time_off_prev_month'),
+                    onPressed: () => setState(() {
+                      _viewMonth = DateTime(_viewMonth.year, _viewMonth.month - 1, 1);
+                    }),
+                    icon: const Icon(Icons.chevron_left, color: Colors.white),
+                  ),
+                  Text(
+                    '${_monthNames[_viewMonth.month - 1]} ${_viewMonth.year}',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    key: const Key('time_off_next_month'),
+                    onPressed: () => setState(() {
+                      _viewMonth = DateTime(_viewMonth.year, _viewMonth.month + 1, 1);
+                    }),
+                    icon: const Icon(Icons.chevron_right, color: Colors.white),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: _weekdays
+                    .map(
+                      (d) => SizedBox(
+                        width: 38,
+                        child: Center(
+                          child: Text(
+                            d,
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF6B7272),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: 8),
+              Column(
+                children: List.generate(rowCount, (rowIndex) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: List.generate(7, (colIndex) {
+                        final cellIndex = rowIndex * 7 + colIndex;
+                        final dayNum = cellIndex - firstWeekday + 1;
+                        if (dayNum < 1 || dayNum > daysInMonth) {
+                          return const SizedBox(width: 38, height: 38);
+                        }
+                        final cellDate = DateTime(
+                          _viewMonth.year,
+                          _viewMonth.month,
+                          dayNum,
+                        );
+                        final key = ArtistBooksSchedule.dateKey(cellDate);
+                        final isPicked = _selectedKeys.contains(key);
+                        final isBlocked = schedule.isDateBlocked(cellDate);
+                        final isForceOpened = schedule.isDateForceOpened(cellDate);
+
+                        return GestureDetector(
+                          key: Key('time_off_picker_day_$dayNum'),
+                          onTap: () => _onTapDate(cellDate),
+                          child: Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: isPicked
+                                  ? const Color(0xFFEEC200)
+                                  : (isBlocked
+                                      ? const Color(0xFF2B1C12)
+                                      : (isForceOpened
+                                          ? const Color(0xFF142419)
+                                          : const Color(0xFF141616))),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isPicked
+                                    ? const Color(0xFFEEC200)
+                                    : (isBlocked
+                                        ? const Color(0xFFF97316).withAlpha(140)
+                                        : (isForceOpened
+                                            ? const Color(0xFF22C55E).withAlpha(120)
+                                            : const Color(0xFF252828))),
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '$dayNum',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: isPicked
+                                    ? const Color(0xFF121414)
+                                    : (isBlocked
+                                        ? const Color(0xFFF97316)
+                                        : (isForceOpened
+                                            ? const Color(0xFF22C55E)
+                                            : Colors.white)),
+                                fontSize: 13,
+                                fontWeight: isPicked
+                                    ? FontWeight.w800
+                                    : FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                hasSelection
+                    ? '${_selectedKeys.length} ${_selectedKeys.length == 1 ? 'date' : 'dates'} selected'
+                    : (_mode == _TimeOffSelectionMode.dateRange
+                        ? (_rangeStart == null
+                            ? 'Tap start date, then end date'
+                            : 'Tap end date to complete range')
+                        : 'Tap one or more dates above'),
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFF8C9191),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      key: const Key('time_off_block_selected_button'),
+                      onPressed: hasSelection ? _handleBlockSelected : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFF97316),
+                        disabledBackgroundColor: const Color(0xFF252828),
+                        foregroundColor: Colors.white,
+                        disabledForegroundColor: const Color(0xFF6B7272),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('Block Selected'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      key: const Key('time_off_open_selected_button'),
+                      onPressed: hasSelection ? _handleOpenSelected : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF22C55E),
+                        disabledBackgroundColor: const Color(0xFF252828),
+                        foregroundColor: const Color(0xFF0E1410),
+                        disabledForegroundColor: const Color(0xFF6B7272),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('Open Selected'),
+                    ),
+                  ),
+                ],
+              ),
+              if (blockedCount > 0 || openedCount > 0) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    if (blockedCount > 0)
+                      Expanded(
+                        child: OutlinedButton(
+                          key: const Key('time_off_clear_all_blocked_button'),
+                          onPressed: _handleClearAllBlocked,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFEEC200),
+                            side: const BorderSide(color: Color(0xFF2C2F30)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text('Clear All Blocked ($blockedCount)'),
+                        ),
+                      ),
+                    if (blockedCount > 0 && openedCount > 0)
+                      const SizedBox(width: 10),
+                    if (openedCount > 0)
+                      Expanded(
+                        child: OutlinedButton(
+                          key: const Key('time_off_clear_all_opened_button'),
+                          onPressed: () {
+                            ArtistDashboardRepository.clearAllOpenOverrides(
+                              artistId: widget.artistId,
+                            );
+                            widget.onDatesChanged();
+                            setState(() {});
+                            FlashSnackBar.showInfo(
+                              context,
+                              'Cleared open-day overrides.',
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF8C9191),
+                            side: const BorderSide(color: Color(0xFF2C2F30)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text('Reset Opened ($openedCount)'),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

@@ -1,6 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flash_ink/core/utils/device_corner_radius.dart';
 import 'package:flash_ink/widgets/adaptive_glass_container.dart';
+
+({BorderRadius radius, BorderSide side}) _expectSuperellipseSheet(WidgetTester tester) {
+  expect(
+    find.descendant(
+      of: find.byType(AdaptiveGlassContainer),
+      matching: find.byType(ClipRSuperellipse),
+    ),
+    findsOneWidget,
+  );
+
+  final containerFinder = find.descendant(
+    of: find.byType(AdaptiveGlassContainer),
+    matching: find.byType(Container),
+  );
+  final decorated = tester.widgetList<Container>(containerFinder).firstWhere(
+    (c) => c.foregroundDecoration is ShapeDecoration,
+  );
+  final bgDecoration = decorated.decoration as ShapeDecoration;
+  expect(bgDecoration.shape, isA<RoundedSuperellipseBorder>());
+
+  final fgDecoration = decorated.foregroundDecoration as ShapeDecoration;
+  final shape = fgDecoration.shape as RoundedSuperellipseBorder;
+  return (
+    radius: shape.borderRadius as BorderRadius,
+    side: shape.side,
+  );
+}
 
 void main() {
   group('AdaptiveGlassContainer.bottomSheet Bezel & Border Tests', () {
@@ -31,33 +59,24 @@ void main() {
         ),
       );
 
-      final containerFinder = find.byType(Container);
-      expect(containerFinder, findsWidgets);
+      final (:radius, :side) = _expectSuperellipseSheet(tester);
 
-      // Find the container with decoration
-      final containers = tester.widgetList<Container>(containerFinder);
-      final decoratedContainer = containers.firstWhere(
-        (c) => c.decoration is BoxDecoration,
-      );
+      // 390x844 pt (47.33 pt raw) with 2.0 dp inset => 45.33 pt concentric bottom radius
+      expect(radius.bottomLeft.x, closeTo(45.33, 0.01));
+      expect(radius.bottomRight.x, closeTo(45.33, 0.01));
+      expect(radius.topLeft.x, equals(28.0));
+      expect(radius.topRight.x, equals(28.0));
 
-      final decoration = decoratedContainer.decoration as BoxDecoration;
-      final borderRadius = decoration.borderRadius as BorderRadius;
-
-      // 844 pt height with bottom padding => 50.0 pt corner radius
-      expect(borderRadius.bottomLeft.x, equals(50.0));
-      expect(borderRadius.bottomRight.x, equals(50.0));
-      expect(borderRadius.topLeft.x, equals(28.0));
-      expect(borderRadius.topRight.x, equals(28.0));
-
-      // Effective margin: 1px inset to keep border inside hardware curve
+      // Effective margin: 2.0 dp clearance inset to keep border inside hardware bezel
       expect(
-        find.byWidgetPredicate((w) => w is Padding && w.padding == const EdgeInsets.fromLTRB(1.0, 0, 1.0, 1.0)),
+        find.byWidgetPredicate(
+          (w) => w is Padding && w.padding == const EdgeInsets.fromLTRB(2.0, 0, 2.0, 2.0),
+        ),
         findsOneWidget,
       );
 
       // Border uses strokeAlignInside
-      final border = decoration.border as Border;
-      expect(border.top.strokeAlign, equals(BorderSide.strokeAlignInside));
+      expect(side.strokeAlign, equals(BorderSide.strokeAlignInside));
 
       // Contains internal SafeArea
       expect(find.byType(SafeArea), findsWidgets);
@@ -90,19 +109,14 @@ void main() {
         ),
       );
 
-      final containerFinder = find.byType(Container);
-      final containers = tester.widgetList<Container>(containerFinder);
-      final decoratedContainer = containers.firstWhere(
-        (c) => c.decoration is BoxDecoration,
-      );
+      final (:radius, side: _) = _expectSuperellipseSheet(tester);
 
-      final decoration = decoratedContainer.decoration as BoxDecoration;
-      final borderRadius = decoration.borderRadius as BorderRadius;
-
-      expect(borderRadius.bottomLeft.x, equals(0.0));
-      expect(borderRadius.bottomRight.x, equals(0.0));
+      expect(radius.bottomLeft.x, equals(0.0));
+      expect(radius.bottomRight.x, equals(0.0));
       expect(
-        find.byWidgetPredicate((w) => w is Padding && w.padding == const EdgeInsets.fromLTRB(1.0, 0, 1.0, 0.0)),
+        find.byWidgetPredicate(
+          (w) => w is Padding && w.padding == const EdgeInsets.fromLTRB(2.0, 0, 2.0, 0.0),
+        ),
         findsOneWidget,
       );
     });
@@ -137,19 +151,14 @@ void main() {
         ),
       );
 
-      final containerFinder = find.byType(Container);
-      final containers = tester.widgetList<Container>(containerFinder);
-      final decoratedContainer = containers.firstWhere(
-        (c) => c.decoration is BoxDecoration,
-      );
+      final (:radius, side: _) = _expectSuperellipseSheet(tester);
 
-      final decoration = decoratedContainer.decoration as BoxDecoration;
-      final borderRadius = decoration.borderRadius as BorderRadius;
-
-      expect(borderRadius.bottomLeft.x, equals(0.0));
-      expect(borderRadius.bottomRight.x, equals(0.0));
+      expect(radius.bottomLeft.x, equals(0.0));
+      expect(radius.bottomRight.x, equals(0.0));
       expect(
-        find.byWidgetPredicate((w) => w is Padding && w.padding == const EdgeInsets.fromLTRB(1.0, 0, 1.0, 0.0)),
+        find.byWidgetPredicate(
+          (w) => w is Padding && w.padding == const EdgeInsets.fromLTRB(2.0, 0, 2.0, 0.0),
+        ),
         findsOneWidget,
       );
 
@@ -250,6 +259,167 @@ void main() {
       final decoration = decoratedContainer.decoration as BoxDecoration;
       expect(decoration.gradient, isNull);
       expect(decoration.color, isNotNull);
+    });
+
+    testWidgets('Computes accurate concentric corner radii for modern device sizes', (tester) async {
+      final cases = <(Size size, double expectedConcentric)>[
+        (const Size(393, 852), 53.0), // 55.0 - 2.0 (iPhone 14 Pro / 15 / 16)
+        (const Size(402, 874), 60.0), // 62.0 - 2.0 (iPhone 16 Pro / 17 / 17 Pro)
+        (const Size(440, 956), 60.0), // 62.0 - 2.0 (iPhone 16 Pro Max / 17 Pro Max)
+      ];
+
+      for (final (size, expectedConcentric) in cases) {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(
+                size: size,
+                viewPadding: const EdgeInsets.only(bottom: 34),
+              ),
+              child: const AdaptiveGlassContainer.bottomSheet(
+                glassEnabled: false,
+                child: Text('Sized Sheet'),
+              ),
+            ),
+          ),
+        );
+
+        final (:radius, side: _) = _expectSuperellipseSheet(tester);
+        expect(radius.bottomLeft.x, closeTo(expectedConcentric, 0.01), reason: 'Failed for $size');
+        expect(radius.bottomRight.x, closeTo(expectedConcentric, 0.01), reason: 'Failed for $size');
+      }
+    });
+
+    testWidgets('Prefers MediaQuery.displayCornerRadii when provided (Android API 31+)', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(
+              size: Size(412, 915),
+              viewPadding: EdgeInsets.only(bottom: 24),
+              displayCornerRadii: BorderRadius.only(
+                topLeft: Radius.circular(40),
+                topRight: Radius.circular(40),
+                bottomLeft: Radius.circular(38),
+                bottomRight: Radius.circular(36),
+              ),
+            ),
+            child: AdaptiveGlassContainer.bottomSheet(
+              glassEnabled: false,
+              child: Text('Android 12+ Corner Radii'),
+            ),
+          ),
+        ),
+      );
+
+      final (:radius, side: _) = _expectSuperellipseSheet(tester);
+      expect(radius.bottomLeft.x, closeTo(36.0, 0.01)); // 38 - 2.0
+      expect(radius.bottomRight.x, closeTo(34.0, 0.01)); // 36 - 2.0
+    });
+
+    testWidgets('Uses DeviceCornerRadius iOS native override and reacts to updates', (tester) async {
+      addTearDown(DeviceCornerRadius.resetForTesting);
+      DeviceCornerRadius.setTestingIosRadii((bottomLeft: 58.0, bottomRight: 58.0));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.iOS),
+          home: const MediaQuery(
+            data: MediaQueryData(
+              size: Size(402, 874),
+              viewPadding: EdgeInsets.only(bottom: 34),
+            ),
+            child: AdaptiveGlassContainer.bottomSheet(
+              glassEnabled: false,
+              child: Text('iOS Concentric Sheet'),
+            ),
+          ),
+        ),
+      );
+
+      var (:radius, side: _) = _expectSuperellipseSheet(tester);
+      expect(radius.bottomLeft.x, closeTo(56.0, 0.01)); // 58 - 2.0
+      expect(radius.bottomRight.x, closeTo(56.0, 0.01));
+
+      DeviceCornerRadius.setTestingIosRadii((bottomLeft: 62.0, bottomRight: 62.0));
+      await tester.pump();
+
+      (:radius, side: _) = _expectSuperellipseSheet(tester);
+      expect(radius.bottomLeft.x, closeTo(60.0, 0.01)); // 62 - 2.0
+      expect(radius.bottomRight.x, closeTo(60.0, 0.01));
+    });
+
+    testWidgets('Tap inside sheet unfocuses field, and first barrier tap dismisses keyboard before closing', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: ElevatedButton(
+                  onPressed: () {
+                    showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => AdaptiveGlassContainer.bottomSheet(
+                        glassEnabled: false,
+                        padding: const EdgeInsets.all(20),
+                        child: const Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('Sheet Header Area'),
+                            SizedBox(height: 16),
+                            TextField(key: Key('sheet_input')),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('Open Sheet'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Sheet'));
+      await tester.pumpAndSettle();
+      expect(find.text('Sheet Header Area'), findsOneWidget);
+
+      bool hasEditableFocus() {
+        final ctx = FocusManager.instance.primaryFocus?.context;
+        if (ctx == null || !ctx.mounted) return false;
+        return ctx.widget is EditableText ||
+            ctx.findAncestorStateOfType<EditableTextState>() != null;
+      }
+
+      // Focus TextField
+      await tester.tap(find.byKey(const Key('sheet_input')));
+      await tester.pumpAndSettle();
+      expect(hasEditableFocus(), isTrue);
+
+      // Tap non-input area inside sheet -> dismisses keyboard while keeping sheet open
+      await tester.tap(find.text('Sheet Header Area'));
+      await tester.pumpAndSettle();
+      expect(hasEditableFocus(), isFalse);
+      expect(find.text('Sheet Header Area'), findsOneWidget);
+
+      // Re-focus TextField
+      await tester.tap(find.byKey(const Key('sheet_input')));
+      await tester.pumpAndSettle();
+      expect(hasEditableFocus(), isTrue);
+
+      // First barrier tap dismisses keyboard only; sheet stays open
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+      expect(hasEditableFocus(), isFalse);
+      expect(find.text('Sheet Header Area'), findsOneWidget);
+
+      // Second barrier tap closes the modal sheet
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+      expect(find.text('Sheet Header Area'), findsNothing);
     });
   });
 }

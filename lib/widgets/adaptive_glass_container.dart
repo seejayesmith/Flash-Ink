@@ -1,5 +1,7 @@
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../core/utils/device_corner_radius.dart';
 import '../theme/app_radius.dart';
 
 /// An adaptive surface container that renders high-fidelity
@@ -112,102 +114,198 @@ class AdaptiveGlassContainer extends StatelessWidget {
           maxScreenHeightFraction: maxScreenHeightFraction,
         );
 
+  /// Edge clearance inset (in dp) applied to curved bottom sheets so borders
+  /// sit concentrically inside the hardware display bezel without clipping.
+  static const double sheetEdgeInset = 2.0;
+
   @override
   Widget build(BuildContext context) {
-    final viewPadding = MediaQuery.viewPaddingOf(context);
-    final mediaQueryPadding = MediaQuery.paddingOf(context);
-    final bottomSafe = viewPadding.bottom > 0 ? viewPadding.bottom : mediaQueryPadding.bottom;
-    final viewInsets = MediaQuery.viewInsetsOf(context);
-    final hasHardwareCurve = isBottomSheet && bottomSafe > 0 && viewInsets.bottom == 0;
-
-    final double bottomRadius;
-    if (hasHardwareCurve) {
-      final screenHeight = MediaQuery.sizeOf(context).height;
-      if (screenHeight >= 900) {
-        bottomRadius = 55.0;
-      } else if (screenHeight >= 840) {
-        bottomRadius = 50.0;
-      } else {
-        bottomRadius = 47.0;
-      }
-    } else {
-      bottomRadius = 0.0;
+    if (!isBottomSheet) {
+      return _buildCardSurface(context);
     }
 
-    final BorderRadius radius;
-    if (isBottomSheet) {
-      final custom = customBorderRadius;
-      final topL = custom is BorderRadius
-          ? custom.topLeft
-          : Radius.circular(borderRadius != AppRadius.radiusLg ? borderRadius : AppRadius.radiusSheet);
-      final topR = custom is BorderRadius
-          ? custom.topRight
-          : Radius.circular(borderRadius != AppRadius.radiusLg ? borderRadius : AppRadius.radiusSheet);
-      radius = BorderRadius.only(
-        topLeft: topL,
-        topRight: topR,
-        bottomLeft: Radius.circular(bottomRadius),
-        bottomRight: Radius.circular(bottomRadius),
+    DeviceCornerRadius.ensureInitialized(Theme.of(context).platform);
+
+    return ValueListenableBuilder<({double bottomLeft, double bottomRight})?>(
+      valueListenable: DeviceCornerRadius.iosRadiiNotifier,
+      builder: (context, _, _) => _buildBottomSheetSurface(context),
+    );
+  }
+
+  static void _dismissKeyboard(BuildContext context) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    FocusScope.of(context).unfocus();
+  }
+
+  static bool _hasEditableTextFocus() {
+    final focusContext = FocusManager.instance.primaryFocus?.context;
+    if (focusContext == null || !focusContext.mounted) return false;
+    return focusContext.widget is EditableText ||
+        focusContext.findAncestorStateOfType<EditableTextState>() != null;
+  }
+
+  Widget _buildCardSurface(BuildContext context) {
+    final radius = (customBorderRadius as BorderRadius?) ?? BorderRadius.circular(borderRadius);
+    final content = SizedBox(
+      width: width,
+      height: height,
+      child: Container(
+        padding: padding,
+        child: child,
+      ),
+    );
+
+    Widget surface = _buildSurfaceLayer(
+      radius: radius,
+      content: content,
+      useSuperellipse: false,
+    );
+
+    if (margin != null) {
+      surface = Padding(padding: margin!, child: surface);
+    }
+
+    if (onTap != null) {
+      return GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: surface,
       );
-    } else {
-      radius = (customBorderRadius as BorderRadius?) ?? BorderRadius.circular(borderRadius);
     }
 
-    final hasKeyboard = isBottomSheet && avoidKeyboard && viewInsets.bottom > 0;
+    return surface;
+  }
 
-    Widget effectiveChild;
-    if (isBottomSheet) {
-      if (hasKeyboard) {
-        effectiveChild = Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Flexible(
-              fit: FlexFit.loose,
-              child: Container(
-                padding: padding,
-                child: child,
-              ),
+  Widget _buildBottomSheetSurface(BuildContext context) {
+    final viewInsets = MediaQuery.viewInsetsOf(context);
+    final rawRadii = DeviceCornerRadius.resolveBottomRadii(context);
+    final hasHardwareCurve =
+        viewInsets.bottom == 0 && (rawRadii.bottomLeft > 0 || rawRadii.bottomRight > 0);
+
+    final bottomLeftRadius = hasHardwareCurve && rawRadii.bottomLeft > 0
+        ? math.max(rawRadii.bottomLeft - sheetEdgeInset, 0.0)
+        : 0.0;
+    final bottomRightRadius = hasHardwareCurve && rawRadii.bottomRight > 0
+        ? math.max(rawRadii.bottomRight - sheetEdgeInset, 0.0)
+        : 0.0;
+
+    final custom = customBorderRadius;
+    final topL = custom is BorderRadius
+        ? custom.topLeft
+        : Radius.circular(borderRadius != AppRadius.radiusLg ? borderRadius : AppRadius.radiusSheet);
+    final topR = custom is BorderRadius
+        ? custom.topRight
+        : Radius.circular(borderRadius != AppRadius.radiusLg ? borderRadius : AppRadius.radiusSheet);
+    final radius = BorderRadius.only(
+      topLeft: topL,
+      topRight: topR,
+      bottomLeft: Radius.circular(bottomLeftRadius),
+      bottomRight: Radius.circular(bottomRightRadius),
+    );
+
+    final hasKeyboard = avoidKeyboard && viewInsets.bottom > 0;
+    final Widget effectiveChild;
+    if (hasKeyboard) {
+      effectiveChild = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Flexible(
+            fit: FlexFit.loose,
+            child: Container(
+              padding: padding,
+              child: child,
             ),
-            // Subtle hairline accent divider visually separating sheet content from keyboard
-            Container(
-              key: const Key('sheet_keyboard_hairline_divider'),
-              height: 1.0,
-              color: const Color(0xFF2E3232),
-            ),
-            // Spacer extending behind the software keyboard, filled with surface background
-            SizedBox(
-              key: const Key('sheet_keyboard_spacer'),
-              height: viewInsets.bottom,
-            ),
-          ],
-        );
-      } else {
-        effectiveChild = Container(
-          padding: padding,
-          child: SafeArea(
-            top: false,
-            bottom: true,
-            child: child,
           ),
-        );
-      }
+          // Subtle hairline accent divider visually separating sheet content from keyboard
+          Container(
+            key: const Key('sheet_keyboard_hairline_divider'),
+            height: 1.0,
+            color: const Color(0xFF2E3232),
+          ),
+          // Spacer extending behind the software keyboard, filled with surface background
+          SizedBox(
+            key: const Key('sheet_keyboard_spacer'),
+            height: viewInsets.bottom,
+          ),
+        ],
+      );
     } else {
       effectiveChild = Container(
         padding: padding,
-        child: child,
+        child: SafeArea(
+          top: false,
+          bottom: true,
+          child: child,
+        ),
       );
     }
 
-    Widget content = SizedBox(
+    final content = SizedBox(
       width: width,
       height: height,
-      child: effectiveChild,
+      child: Material(
+        type: MaterialType.transparency,
+        child: effectiveChild,
+      ),
     );
 
-    Widget surface;
+    Widget surface = _buildSurfaceLayer(
+      radius: radius,
+      content: content,
+      useSuperellipse: true,
+    );
+
+    if (hasKeyboard) {
+      final maxHeight = MediaQuery.sizeOf(context).height * maxScreenHeightFraction;
+      surface = ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: surface,
+      );
+    }
+
+    final effectiveMargin = margin ??
+        EdgeInsets.fromLTRB(
+          sheetEdgeInset,
+          0,
+          sheetEdgeInset,
+          hasHardwareCurve ? sheetEdgeInset : 0.0,
+        );
+    surface = Padding(padding: effectiveMargin, child: surface);
+
+    final interactiveSheet = GestureDetector(
+      behavior: onTap != null ? HitTestBehavior.opaque : HitTestBehavior.translucent,
+      onTap: () {
+        _dismissKeyboard(context);
+        onTap?.call();
+      },
+      child: surface,
+    );
+
+    return ListenableBuilder(
+      listenable: FocusManager.instance,
+      builder: (context, cachedChild) {
+        final hasEditableFocus = _hasEditableTextFocus();
+        return PopScope(
+          canPop: !hasEditableFocus,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) {
+              _dismissKeyboard(context);
+            }
+          },
+          child: cachedChild!,
+        );
+      },
+      child: interactiveSheet,
+    );
+  }
+
+  Widget _buildSurfaceLayer({
+    required BorderRadius radius,
+    required Widget content,
+    required bool useSuperellipse,
+  }) {
     if (glassEnabled) {
-      // 💎 Pure Frosted Glass View
       final int topAlpha;
       final int bottomAlpha;
       if (isSelected) {
@@ -222,142 +320,158 @@ class AdaptiveGlassContainer extends StatelessWidget {
             : (baseTintAlpha != null ? (baseTintAlpha! + 20).clamp(0, 255) : 110);
       }
 
-      surface = Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          borderRadius: radius,
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: selectedBorderColor.withAlpha(55),
-                    blurRadius: 18,
-                    spreadRadius: 1,
-                    offset: const Offset(0, 4),
-                  ),
-                  BoxShadow(
-                    color: Colors.black.withAlpha(60),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(45),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-        ),
-        child: ClipRRect(
-          borderRadius: radius,
-          child: BackdropFilter(
-            // Silky liquid blur for superior background diffusion & legibility
-            filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-            child: Stack(
-              children: [
-                // Layer 1: Base translucent liquid tint (refraction & high contrast translucency)
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: radius,
-                      color: useGradient ? null : const Color(0xFF1E2222).withAlpha(topAlpha),
-                      gradient: useGradient
-                          ? LinearGradient(
-                              begin: const Alignment(-0.8, -0.8), // Light angle -45°
-                              end: const Alignment(0.8, 0.8),
-                              colors: [
-                                const Color(0xFF1E2222).withAlpha(topAlpha),
-                                const Color(0xFF0F1111).withAlpha(bottomAlpha),
-                              ],
-                            )
-                          : null,
-                    ),
-                  ),
-                ),
-
-                // Layer 2: Subtle translucent border stroke & content container
-                Container(
-                  width: width,
-                  height: height,
-                  decoration: BoxDecoration(
-                    borderRadius: radius,
-                    border: Border.all(
-                      color: isSelected
-                          ? selectedBorderColor
-                          : unselectedBorderColor.withAlpha(90),
-                      width: isSelected ? selectedBorderWidth : unselectedBorderWidth,
-                      strokeAlign: BorderSide.strokeAlignInside,
-                    ),
-                  ),
-                  child: content,
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    } else {
-      // Material Surface Container fallback
-      surface = Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          color: androidSurfaceColor,
-          borderRadius: radius,
-          border: Border.all(
-            color: isSelected
-                ? selectedBorderColor
-                : const Color(0xFF2E3232),
-            width: isSelected ? selectedBorderWidth : unselectedBorderWidth,
-            strokeAlign: BorderSide.strokeAlignInside,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(isSelected ? 140 : 80),
-              blurRadius: isSelected ? 14 : 8,
-              offset: const Offset(0, 4),
-            ),
-            if (isSelected)
+      final shadows = isSelected
+          ? [
               BoxShadow(
-                color: selectedBorderColor.withAlpha(40),
-                blurRadius: 12,
-                spreadRadius: 0,
-                offset: const Offset(0, 2),
+                color: selectedBorderColor.withAlpha(55),
+                blurRadius: 18,
+                spreadRadius: 1,
+                offset: const Offset(0, 4),
               ),
+              BoxShadow(
+                color: Colors.black.withAlpha(60),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ]
+          : [
+              BoxShadow(
+                color: Colors.black.withAlpha(45),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ];
+
+      final gradient = useGradient
+          ? LinearGradient(
+              begin: const Alignment(-0.8, -0.8), // Light angle -45°
+              end: const Alignment(0.8, 0.8),
+              colors: [
+                const Color(0xFF1E2222).withAlpha(topAlpha),
+                const Color(0xFF0F1111).withAlpha(bottomAlpha),
+              ],
+            )
+          : null;
+      final tintColor = useGradient ? null : const Color(0xFF1E2222).withAlpha(topAlpha);
+      final borderSide = BorderSide(
+        color: isSelected ? selectedBorderColor : unselectedBorderColor.withAlpha(90),
+        width: isSelected ? selectedBorderWidth : unselectedBorderWidth,
+        strokeAlign: BorderSide.strokeAlignInside,
+      );
+
+      final blurStack = BackdropFilter(
+        // Silky liquid blur for superior background diffusion & legibility
+        filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+        child: Stack(
+          children: [
+            // Layer 1: Base translucent liquid tint (refraction & high contrast translucency)
+            Positioned.fill(
+              child: Container(
+                decoration: useSuperellipse
+                    ? ShapeDecoration(
+                        shape: RoundedSuperellipseBorder(borderRadius: radius),
+                        color: tintColor,
+                        gradient: gradient,
+                      )
+                    : BoxDecoration(
+                        borderRadius: radius,
+                        color: tintColor,
+                        gradient: gradient,
+                      ),
+              ),
+            ),
+            // Layer 2: Subtle translucent border stroke & content container
+            Container(
+              width: width,
+              height: height,
+              decoration: useSuperellipse
+                  ? ShapeDecoration(
+                      shape: RoundedSuperellipseBorder(
+                        borderRadius: radius,
+                        side: borderSide,
+                      ),
+                    )
+                  : BoxDecoration(
+                      borderRadius: radius,
+                      border: Border.fromBorderSide(borderSide),
+                    ),
+              child: content,
+            ),
           ],
         ),
-        child: content,
+      );
+
+      return Container(
+        width: width,
+        height: height,
+        decoration: useSuperellipse
+            ? ShapeDecoration(
+                shape: RoundedSuperellipseBorder(borderRadius: radius),
+                shadows: shadows,
+              )
+            : BoxDecoration(
+                borderRadius: radius,
+                boxShadow: shadows,
+              ),
+        child: useSuperellipse
+            ? ClipRSuperellipse(borderRadius: radius, child: blurStack)
+            : ClipRRect(borderRadius: radius, child: blurStack),
       );
     }
 
-    if (isBottomSheet && hasKeyboard) {
-      final screenHeight = MediaQuery.sizeOf(context).height;
-      final maxHeight = screenHeight * maxScreenHeightFraction;
-      surface = ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxHeight),
-        child: surface,
+    final borderSide = BorderSide(
+      color: isSelected ? selectedBorderColor : const Color(0xFF2E3232),
+      width: isSelected ? selectedBorderWidth : unselectedBorderWidth,
+      strokeAlign: BorderSide.strokeAlignInside,
+    );
+    final shadows = [
+      BoxShadow(
+        color: Colors.black.withAlpha(isSelected ? 140 : 80),
+        blurRadius: isSelected ? 14 : 8,
+        offset: const Offset(0, 4),
+      ),
+      if (isSelected)
+        BoxShadow(
+          color: selectedBorderColor.withAlpha(40),
+          blurRadius: 12,
+          spreadRadius: 0,
+          offset: const Offset(0, 2),
+        ),
+    ];
+
+    if (useSuperellipse) {
+      return Container(
+        width: width,
+        height: height,
+        decoration: ShapeDecoration(
+          color: androidSurfaceColor,
+          shape: RoundedSuperellipseBorder(borderRadius: radius),
+          shadows: shadows,
+        ),
+        foregroundDecoration: ShapeDecoration(
+          shape: RoundedSuperellipseBorder(
+            borderRadius: radius,
+            side: borderSide,
+          ),
+        ),
+        child: ClipRSuperellipse(
+          borderRadius: radius,
+          child: content,
+        ),
       );
     }
 
-    final effectiveMargin = margin ??
-        (isBottomSheet
-            ? EdgeInsets.fromLTRB(1.0, 0, 1.0, hasHardwareCurve ? 1.0 : 0.0)
-            : null);
-
-    if (effectiveMargin != null) {
-      surface = Padding(padding: effectiveMargin, child: surface);
-    }
-
-    if (onTap != null) {
-      return GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: surface,
-      );
-    }
-
-    return surface;
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: androidSurfaceColor,
+        borderRadius: radius,
+        border: Border.fromBorderSide(borderSide),
+        boxShadow: shadows,
+      ),
+      child: content,
+    );
   }
 }
 

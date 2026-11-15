@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_theme.dart';
+import '../../../../widgets/user_avatar.dart';
 import '../../domain/models/message_thread.dart';
 import '../screens/chat_conversation_screen.dart';
 
@@ -9,11 +10,13 @@ import '../screens/chat_conversation_screen.dart';
 class MessageThreadTile extends StatelessWidget {
   final MessageThread thread;
   final VoidCallback? onTap;
+  final bool isArtistView;
 
   const MessageThreadTile({
     super.key,
     required this.thread,
     this.onTap,
+    this.isArtistView = false,
   });
 
   String _formatRelativeTime(DateTime dt) {
@@ -30,15 +33,23 @@ class MessageThreadTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap ??
-          () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ChatConversationScreen(thread: thread),
-              ),
-            );
-          },
+      onTap: () {
+        FocusManager.instance.primaryFocus?.unfocus();
+        FocusScope.of(context).unfocus();
+        if (onTap != null) {
+          onTap!();
+          return;
+        }
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChatConversationScreen(
+              thread: thread,
+              isArtistView: isArtistView,
+            ),
+          ),
+        );
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(14),
@@ -64,8 +75,7 @@ class MessageThreadTile extends StatelessWidget {
               clipBehavior: Clip.none,
               children: [
                 Container(
-                  width: 52,
-                  height: 52,
+                  padding: const EdgeInsets.all(1.5),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
@@ -73,15 +83,17 @@ class MessageThreadTile extends StatelessWidget {
                       width: 1.5,
                     ),
                   ),
-                  child: ClipOval(
-                    child: Image.network(
-                      thread.artistAvatar,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: AppTheme.onyxContainer,
-                        child: const Icon(Icons.person, color: AppTheme.gold, size: 26),
-                      ),
-                    ),
+                  child: UserAvatar(
+                    imageUrl: isArtistView ? thread.clientAvatar : thread.artistAvatar,
+                    displayName: isArtistView
+                        ? (thread.clientName?.isNotEmpty == true
+                            ? thread.clientName!
+                            : (thread.flashTitleContext ?? 'Client'))
+                        : thread.artistName,
+                    radius: 24.5,
+                    backgroundColor: AppTheme.onyxContainer,
+                    foregroundColor: AppTheme.gold,
+                    fallbackInitial: isArtistView ? 'C' : 'A',
                   ),
                 ),
                 if (thread.isOnline)
