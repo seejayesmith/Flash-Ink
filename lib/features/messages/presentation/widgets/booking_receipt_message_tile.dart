@@ -1,39 +1,84 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:add_2_calendar/add_2_calendar.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/utils/calendar_event_launcher.dart';
+import '../../../../models/artist_dashboard_data.dart';
 import '../../../../theme/app_buttons.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/flash_image.dart';
 import '../../domain/models/message_thread.dart';
 
-class BookingReceiptMessageTile extends StatelessWidget {
+class BookingReceiptMessageTile extends StatefulWidget {
   final ChatMessage message;
+  final MessageThread? thread;
 
-  const BookingReceiptMessageTile({super.key, required this.message});
+  const BookingReceiptMessageTile({
+    super.key,
+    required this.message,
+    this.thread,
+  });
+
+  @override
+  State<BookingReceiptMessageTile> createState() =>
+      _BookingReceiptMessageTileState();
+}
+
+class _BookingReceiptMessageTileState extends State<BookingReceiptMessageTile> {
+  static const Color _confirmedGreen = Color(0xFF4ADE80);
+  static const Color _confirmedGreenBg = Color(0x1F4ADE80);
+
+  bool _addedToCalendar = false;
+  bool _isAdding = false;
+
+  DateTime? _effectiveAppointmentDateTime() {
+    final base = widget.message.appointmentDate;
+    if (base == null) return null;
+    final slot = widget.message.appointmentTimeSlot?.trim() ?? '';
+    if (slot.isNotEmpty) {
+      return ArtistBooksSchedule.parseSlotDateTime(base, slot) ?? base;
+    }
+    return base;
+  }
 
   String _formatDateTime(DateTime date) {
     return DateFormat('MMM d, yyyy • h:mm a').format(date);
   }
 
-  void _addToCalendar() {
-    if (message.appointmentDate == null) return;
-    
-    final event = Event(
-      title: 'Tattoo Session',
-      description: 'Your tattoo session appointment',
-      location: 'Studio',
-      startDate: message.appointmentDate!,
-      endDate: message.appointmentDate!.add(const Duration(hours: 2)), // Default 2 hours
+  Future<void> _addToCalendar() async {
+    final baseDate = widget.message.appointmentDate;
+    if (baseDate == null || _isAdding) return;
+
+    setState(() => _isAdding = true);
+
+    final event = CalendarEventLauncher.buildTattooAppointmentEvent(
+      date: baseDate,
+      timeSlot: widget.message.appointmentTimeSlot,
+      durationMinutes: widget.message.appointmentDurationMinutes,
+      flashTitle: widget.message.flashTitle ?? widget.thread?.flashTitleContext,
+      artistName: widget.message.artistName ?? widget.thread?.artistName,
+      studioName: widget.thread?.studioName,
+      studioAddress: widget.message.studioLocation,
+      placement: widget.message.placement,
+      depositAmount: widget.message.receiptAmount,
     );
-    
-    Add2Calendar.addEvent2Cal(event);
+
+    final added = await CalendarEventLauncher.addEventToCalendar(context, event);
+    if (!mounted) return;
+    setState(() {
+      _isAdding = false;
+      if (added) {
+        _addedToCalendar = true;
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final message = widget.message;
+    final displayDateTime = _effectiveAppointmentDateTime();
+
     return Align(
       alignment: Alignment.center,
       child: Container(
@@ -76,7 +121,7 @@ class BookingReceiptMessageTile extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             // Content
             Padding(
               padding: const EdgeInsets.all(16),
@@ -97,7 +142,7 @@ class BookingReceiptMessageTile extends StatelessWidget {
                       ),
                     ),
                   if (message.flashImageUrl != null) const SizedBox(width: 12),
-                  
+
                   // Details
                   Expanded(
                     child: Column(
@@ -120,9 +165,9 @@ class BookingReceiptMessageTile extends StatelessWidget {
                             ),
                           ),
                         const SizedBox(height: 8),
-                        if (message.appointmentDate != null)
+                        if (displayDateTime != null)
                           Text(
-                            _formatDateTime(message.appointmentDate!),
+                            _formatDateTime(displayDateTime),
                             style: GoogleFonts.plusJakartaSans(
                               color: AppTheme.textPrimary,
                               fontSize: 13,
@@ -135,17 +180,30 @@ class BookingReceiptMessageTile extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             // Action Button
             if (message.appointmentDate != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 child: AppButtons.secondaryCTA(
-                  onPressed: _addToCalendar,
-                  icon: Icons.calendar_month,
-                  text: 'Add to Calendar',
-                  borderColor: AppTheme.goldBorder,
-                  foregroundColor: AppTheme.gold,
+                  key: const Key('receipt_add_to_calendar_button'),
+                  onPressed: _isAdding ? null : _addToCalendar,
+                  isLoading: _isAdding,
+                  icon: _addedToCalendar
+                      ? Icons.check_circle_rounded
+                      : Icons.calendar_month,
+                  text: _addedToCalendar
+                      ? 'Added to Calendar'
+                      : 'Add to Calendar',
+                  borderColor: _addedToCalendar
+                      ? _confirmedGreen
+                      : AppTheme.goldBorder,
+                  foregroundColor: _addedToCalendar
+                      ? _confirmedGreen
+                      : AppTheme.gold,
+                  backgroundColor: _addedToCalendar
+                      ? _confirmedGreenBg
+                      : Colors.transparent,
                 ),
               ),
           ],

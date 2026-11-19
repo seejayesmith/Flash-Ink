@@ -167,6 +167,7 @@ class _EmailAuthScreenState extends State<EmailAuthScreen> {
         MaterialPageRoute(
           builder: (_) => ArtistInfoScreen(
             authService: _authService,
+            signInMethod: ArtistSignInMethod.email,
           ),
         ),
       );

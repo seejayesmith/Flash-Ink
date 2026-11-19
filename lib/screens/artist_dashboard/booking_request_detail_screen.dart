@@ -123,7 +123,7 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                 maxHeight: MediaQuery.sizeOf(ctx).height * 0.85,
               ),
               child: AdaptiveGlassContainer.bottomSheet(
-                glassEnabled: false,
+                glassEnabled: true,
                 androidSurfaceColor: const Color(0xFF171A1A),
                 topRadius: AppRadius.radiusSheet,
                 child: SingleChildScrollView(
@@ -370,7 +370,7 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                                 clientName: widget.request.clientName,
                                 date: tempDate,
                                 timeSlot: tempSlot,
-                                durationMinutes: 180,
+                                durationMinutes: ArtistDashboardRepository.booksSchedule.slotDurationMinutes,
                                 estimatedPrice: tempPrice,
                                 deposit: tempDeposit,
                                 createdAt: DateTime.now(),
@@ -430,7 +430,7 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                 maxHeight: MediaQuery.sizeOf(ctx).height * 0.85,
               ),
               child: AdaptiveGlassContainer.bottomSheet(
-                glassEnabled: false,
+                glassEnabled: true,
                 androidSurfaceColor: const Color(0xFF171A1A),
                 topRadius: AppRadius.radiusSheet,
                 child: SingleChildScrollView(
@@ -583,7 +583,7 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                 maxHeight: MediaQuery.sizeOf(ctx).height * 0.85,
               ),
               child: AdaptiveGlassContainer.bottomSheet(
-                glassEnabled: false,
+                glassEnabled: true,
                 androidSurfaceColor: const Color(0xFF171A1A),
                 topRadius: AppRadius.radiusSheet,
                 child: SingleChildScrollView(

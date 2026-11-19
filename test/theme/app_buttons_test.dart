@@ -66,6 +66,15 @@ void main() {
         final secondaryTextRect = tester.getRect(find.text('Review Requests (0)'));
         expect(secondaryTextRect.left - secondaryButtonRect.left, greaterThanOrEqualTo(16.0));
         expect(secondaryButtonRect.right - secondaryTextRect.right, greaterThanOrEqualTo(16.0));
+
+        // Verify typography hierarchy: secondaryCTA is lighter and slightly smaller than primaryCTA
+        final primaryText = tester.widget<Text>(find.text('Open to Public Now'));
+        final secondaryText = tester.widget<Text>(find.text('Review Requests (0)'));
+        expect(primaryText.style?.fontSize, 14.0);
+        expect(primaryText.style?.fontWeight, FontWeight.w700);
+        expect(secondaryText.style?.fontSize, 13.0);
+        expect(secondaryText.style?.fontWeight, FontWeight.w600);
+        expect(secondaryText.style?.letterSpacing, 0.25);
       },
     );
   });

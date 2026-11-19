@@ -8,7 +8,6 @@ import 'package:flash_ink/screens/phone_verification_screen.dart';
 import 'package:flash_ink/screens/account_creation_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
 import 'package:flash_ink/widgets/flash_logo.dart';
-import 'package:flash_ink/widgets/tattoo_machine_icon.dart';
 
 class FakeUserCredential implements UserCredential {
   @override
@@ -73,9 +72,8 @@ void main() {
     // Verify SplashScreen and branding elements are displayed
     expect(find.byType(SplashScreen), findsOneWidget);
     expect(find.byType(FlashLogo), findsOneWidget);
-    expect(find.text('Flash'), findsOneWidget);
-    expect(find.byType(TattooMachineIcon), findsOneWidget);
-    expect(find.text('TATTOO DISCOVERY & BOOKING'), findsOneWidget);
+    expect(find.image(const AssetImage(FlashLogo.assetPath)), findsOneWidget);
+    expect(find.text('TATTOO DISCOVERY & BOOKING'), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 

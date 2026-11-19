@@ -1,5 +1,10 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../providers/app_providers.dart';
+import '../../services/username_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_glass_app_bar.dart';
@@ -11,6 +16,8 @@ class ArtistEditProfileScreen extends StatefulWidget {
   final String initialUsername;
   final String initialBio;
   final String initialLocation;
+  final String? currentUid;
+  final FirebaseFirestore? firestore;
   final Future<void> Function(String name, String username, String bio, String location)? onSave;
 
   const ArtistEditProfileScreen({
@@ -19,6 +26,8 @@ class ArtistEditProfileScreen extends StatefulWidget {
     required this.initialUsername,
     required this.initialBio,
     required this.initialLocation,
+    this.currentUid,
+    this.firestore,
     this.onSave,
   });
 
@@ -51,17 +60,46 @@ class _ArtistEditProfileScreenState extends State<ArtistEditProfileScreen> {
     super.dispose();
   }
 
+  FirebaseFirestore? _resolveInjectedFirestore() {
+    if (widget.firestore != null) return widget.firestore;
+    if (mounted) {
+      try {
+        return ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(firebaseFirestoreProvider);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  String? _resolveCurrentUid() {
+    if (widget.currentUid != null && widget.currentUid!.trim().isNotEmpty) {
+      return widget.currentUid!.trim();
+    }
+    try {
+      return FirebaseAuth.instance.currentUser?.uid;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _handleSave() async {
-    final newUsername = _usernameController.text.trim().replaceAll('@', '');
+    final formatError = UsernameService.validateFormat(
+      _usernameController.text,
+      emptyMessage: 'Username cannot be empty',
+    );
     final newBio = _bioController.text.trim();
     final newLocation = _locationController.text.trim();
 
-    if (newUsername.isEmpty) {
+    if (formatError != null) {
       setState(() {
-        _usernameError = 'Username cannot be empty';
+        _usernameError = formatError;
       });
       return;
     }
+
+    final newUsername = UsernameService.cleanDisplay(_usernameController.text);
 
     setState(() {
       _usernameError = null;
@@ -69,12 +107,41 @@ class _ArtistEditProfileScreenState extends State<ArtistEditProfileScreen> {
     });
 
     try {
+      final injectedDb = _resolveInjectedFirestore();
+      final isTest =
+          WidgetsBinding.instance.runtimeType.toString().contains('Test');
+      final uid = _resolveCurrentUid();
+      if (injectedDb != null || !isTest) {
+        final available = await UsernameService(firestore: injectedDb)
+            .isUsernameAvailable(
+              newUsername,
+              currentUid: uid,
+            );
+        if (!available) {
+          if (mounted) {
+            setState(() {
+              _usernameError = UsernameService.takenErrorMessage;
+            });
+          }
+          return;
+        }
+      }
+
       if (widget.onSave != null) {
         await widget.onSave!(
           newUsername,
           newUsername,
           newBio,
           newLocation,
+        );
+      } else if ((injectedDb != null || !isTest) &&
+          uid != null &&
+          uid.isNotEmpty) {
+        await UsernameService(firestore: injectedDb).claimUsername(
+          uid: uid,
+          rawUsername: newUsername,
+          previousUsername: widget.initialUsername,
+          emptyMessage: 'Username cannot be empty',
         );
       }
       if (mounted) {
@@ -83,6 +150,18 @@ class _ArtistEditProfileScreenState extends State<ArtistEditProfileScreen> {
           'username': newUsername,
           'bio': newBio,
           'location': newLocation,
+        });
+      }
+    } on UsernameTakenException catch (e) {
+      if (mounted) {
+        setState(() {
+          _usernameError = e.message;
+        });
+      }
+    } on UsernameFormatException catch (e) {
+      if (mounted) {
+        setState(() {
+          _usernameError = e.message;
         });
       }
     } finally {

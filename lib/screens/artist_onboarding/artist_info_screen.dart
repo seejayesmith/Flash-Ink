@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/dev_config.dart';
 import '../../providers/app_providers.dart';
 import '../../services/auth_service.dart';
+import '../../services/username_service.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/fade_page_route.dart';
@@ -19,18 +21,35 @@ import '../backup_email_verification_screen.dart';
 import 'artist_phone_verification_screen.dart';
 import 'artist_profile_photo_screen.dart';
 
+/// Determines which optional secondary contact field (if any) is requested on
+/// [ArtistInfoScreen] based on how the artist signed up.
+enum ArtistSignInMethod {
+  /// Google, Apple, or generic Account Creation dev-skip -> handle only.
+  oauth,
+
+  /// Phone OTP sign-up -> handle + optional backup email (phone already verified).
+  phone,
+
+  /// Email sign-up -> handle + optional phone number (email already verified).
+  email,
+}
+
 class ArtistInfoScreen extends StatefulWidget {
   final AuthService? authService;
+  final FirebaseFirestore? firestore;
   final String? initialName;
   final String? initialEmail;
   final String? initialPhone;
+  final ArtistSignInMethod? signInMethod;
 
   const ArtistInfoScreen({
     super.key,
     this.authService,
+    this.firestore,
     this.initialName,
     this.initialEmail,
     this.initialPhone,
+    this.signInMethod,
   });
 
   @override
@@ -49,8 +68,7 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
   bool _agreedToTerms = false;
   bool _isLoading = false;
   String? _errorMessage;
-  String? _verifiedPhoneNumber;
-  bool _isPhoneVerified = false;
+  String? _usernameConflictError;
 
   String get _existingEmail {
     if (widget.initialEmail != null && widget.initialEmail!.trim().isNotEmpty) {
@@ -63,25 +81,101 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
     }
   }
 
-  bool get _needsBackupEmail => !_isGoogleUser && _existingEmail.isEmpty;
+  String get _existingPhone {
+    if (widget.initialPhone != null && widget.initialPhone!.trim().isNotEmpty) {
+      return widget.initialPhone!.trim();
+    }
+    try {
+      return _authService.currentUser?.phoneNumber?.trim() ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
 
-  bool get _isGoogleUser {
-    final user = _authService.currentUser;
-    if (user != null && AuthService.isGoogleAuthUser(user)) {
-      return true;
+  ArtistSignInMethod get _resolvedSignInMethod {
+    if (widget.signInMethod != null) {
+      return widget.signInMethod!;
     }
-    String email = widget.initialEmail ?? '';
-    if (email.isEmpty) {
-      try {
-        email = user?.email ?? '';
-      } catch (_) {
-        email = '';
-      }
+
+    User? user;
+    try {
+      user = _authService.currentUser;
+    } catch (_) {}
+
+    // 1. OAuth users (Google or Apple) only need to create their handle.
+    if (user != null && AuthService.isOAuthUser(user)) {
+      return ArtistSignInMethod.oauth;
     }
-    if (email.toLowerCase().endsWith('@gmail.com') || email.toLowerCase().endsWith('@googlemail.com')) {
-      return true;
+
+    // 2. Inspect Firebase Auth providerData when present.
+    List<String> providerIds = const [];
+    try {
+      providerIds = user?.providerData
+              .map((info) => info.providerId)
+              .where((id) => id.isNotEmpty)
+              .toList() ??
+          const [];
+    } catch (_) {}
+
+    final hasPhoneProvider = providerIds.contains('phone');
+    final hasEmailProvider =
+        providerIds.contains('password') || providerIds.contains('emailLink');
+
+    final existingEmail = _existingEmail;
+    final existingPhone = _existingPhone;
+
+    if (hasPhoneProvider && !hasEmailProvider) {
+      return existingEmail.isEmpty
+          ? ArtistSignInMethod.phone
+          : ArtistSignInMethod.oauth;
     }
-    return false;
+    if (hasEmailProvider && !hasPhoneProvider) {
+      return existingPhone.isEmpty
+          ? ArtistSignInMethod.email
+          : ArtistSignInMethod.oauth;
+    }
+
+    // 3. Generic DevMockUser without an explicit signInMethod defaults to handle-only.
+    if (user is DevMockUser) {
+      return ArtistSignInMethod.oauth;
+    }
+
+    // 4. Fallback inference from email/phone values.
+    final lowerEmail = existingEmail.toLowerCase();
+    if (lowerEmail.endsWith('@gmail.com') ||
+        lowerEmail.endsWith('@googlemail.com') ||
+        lowerEmail.endsWith('@privaterelay.appleid.com')) {
+      return ArtistSignInMethod.oauth;
+    }
+
+    if (existingPhone.isNotEmpty && existingEmail.isEmpty) {
+      return ArtistSignInMethod.phone;
+    }
+    if (existingEmail.isNotEmpty && existingPhone.isEmpty) {
+      return ArtistSignInMethod.email;
+    }
+    if (existingPhone.isNotEmpty && existingEmail.isNotEmpty) {
+      return ArtistSignInMethod.oauth;
+    }
+
+    // Default when no prior auth metadata exists yet.
+    return ArtistSignInMethod.email;
+  }
+
+  bool get _showPhoneField => _resolvedSignInMethod == ArtistSignInMethod.email;
+
+  bool get _showBackupEmailField =>
+      _resolvedSignInMethod == ArtistSignInMethod.phone;
+
+  String get _subtitle {
+    switch (_resolvedSignInMethod) {
+      case ArtistSignInMethod.phone:
+        return 'Enter your artist name and an optional backup email to get set up.';
+      case ArtistSignInMethod.email:
+        return 'Enter your artist name and an optional phone number to get set up.';
+      case ArtistSignInMethod.oauth:
+        return 'Enter your artist name to get set up.';
+    }
   }
 
   @override
@@ -95,55 +189,20 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
         defaultName = '';
       }
     }
-    if (defaultName.isNotEmpty && !defaultName.startsWith('@')) {
-      defaultName = '@$defaultName';
+    if (defaultName.isNotEmpty) {
+      final cleanDefault = defaultName
+          .trim()
+          .replaceFirst(RegExp(r'^@+'), '')
+          .replaceAll(RegExp(r'\s+'), '_');
+      defaultName = cleanDefault.isNotEmpty ? '@$cleanDefault' : '';
     }
     _nameController = TextEditingController(text: defaultName);
     _nameFocusNode.addListener(_handleNameFocusChange);
 
-    _backupEmailController = TextEditingController(text: _existingEmail);
-
-    String? rawPhone = widget.initialPhone;
-    if (!_isGoogleUser) {
-      if (rawPhone == null || rawPhone.isEmpty) {
-        try {
-          rawPhone = _authService.currentUser?.phoneNumber;
-        } catch (_) {
-          rawPhone = null;
-        }
-      }
-    } else {
-      rawPhone = null;
-    }
-    _verifiedPhoneNumber = rawPhone;
-    final formattedPhone = AuthService.formatDisplayPhoneNumber(rawPhone);
-    _phoneController = TextEditingController(text: formattedPhone);
-    _isPhoneVerified = _checkIfPhoneMatchesVerified(formattedPhone);
-    _phoneController.addListener(_onPhoneChanged);
-  }
-
-  void _onPhoneChanged() {
-    final matches = _checkIfPhoneMatchesVerified(_phoneController.text);
-    if (matches != _isPhoneVerified) {
-      setState(() {
-        _isPhoneVerified = matches;
-      });
-    }
-  }
-
-  bool _checkIfPhoneMatchesVerified(String enteredPhone) {
-    if (_verifiedPhoneNumber == null || _verifiedPhoneNumber!.trim().isEmpty) {
-      return false;
-    }
-    final enteredDigits = enteredPhone.replaceAll(RegExp(r'\D'), '');
-    final verifiedDigits = _verifiedPhoneNumber!.replaceAll(RegExp(r'\D'), '');
-    final cleanEntered = enteredDigits.length == 11 && enteredDigits.startsWith('1')
-        ? enteredDigits.substring(1)
-        : enteredDigits;
-    final cleanVerified = verifiedDigits.length == 11 && verifiedDigits.startsWith('1')
-        ? verifiedDigits.substring(1)
-        : verifiedDigits;
-    return cleanEntered.isNotEmpty && cleanEntered == cleanVerified;
+    // Optional secondary contact inputs always start blank because the already-verified
+    // primary contact method is hidden on this screen.
+    _backupEmailController = TextEditingController();
+    _phoneController = TextEditingController();
   }
 
   void _handleNameFocusChange() {
@@ -163,7 +222,6 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
   void dispose() {
     _nameFocusNode.removeListener(_handleNameFocusChange);
     _nameFocusNode.dispose();
-    _phoneController.removeListener(_onPhoneChanged);
     _nameController.dispose();
     _phoneController.dispose();
     _backupEmailController.dispose();
@@ -180,6 +238,7 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
   }
 
   Future<void> _handleContinue() async {
+    _usernameConflictError = null;
     if (!_formKey.currentState!.validate()) return;
 
     if (!_agreedToTerms) {
@@ -195,15 +254,54 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
       _errorMessage = null;
     });
 
+    final method = _resolvedSignInMethod;
     final name = _nameController.text.trim();
-    final formattedPhone = _isGoogleUser ? '' : _formatPhoneNumber(_phoneController.text.trim());
+    final rawEnteredPhone = _showPhoneField ? _phoneController.text.trim() : '';
+    final enteredFormattedPhone =
+        rawEnteredPhone.isNotEmpty ? _formatPhoneNumber(rawEnteredPhone) : '';
+    final enteredBackupEmail =
+        _showBackupEmailField ? _backupEmailController.text.trim() : '';
+
     final currentUser = _authService.currentUser;
     final uid = currentUser?.uid ?? 'artist_${DateTime.now().millisecondsSinceEpoch}';
-    final email = _existingEmail;
-    final enteredBackupEmail =
-        _needsBackupEmail ? _backupEmailController.text.trim() : '';
+    final existingEmail = _existingEmail;
+    final existingPhone =
+        method == ArtistSignInMethod.phone && _existingPhone.isNotEmpty
+            ? _formatPhoneNumber(_existingPhone)
+            : '';
+    final persistedPhone =
+        existingPhone.isNotEmpty ? existingPhone : enteredFormattedPhone;
+    final bool hasVerifiedPhone =
+        method == ArtistSignInMethod.phone && existingPhone.isNotEmpty;
 
     try {
+      FirebaseFirestore? injectedDb = widget.firestore;
+      if (injectedDb == null && mounted) {
+        try {
+          injectedDb = ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(firebaseFirestoreProvider);
+        } catch (_) {}
+      }
+      final isWidgetTest =
+          WidgetsBinding.instance.runtimeType.toString().contains('Test');
+      final timeoutDuration = (!isWidgetTest || injectedDb != null)
+          ? const Duration(seconds: 6)
+          : const Duration(milliseconds: 200);
+
+      final cleanUsername = UsernameService.cleanDisplay(name);
+      final usernameService = UsernameService(firestore: injectedDb);
+      if (!isWidgetTest || injectedDb != null) {
+        await usernameService
+            .claimUsername(
+              uid: uid,
+              rawUsername: cleanUsername,
+              emptyMessage: 'Please enter your name or artist handle',
+            )
+            .timeout(timeoutDuration);
+      }
+
       if (currentUser != null) {
         try {
           await currentUser.updateDisplayName(name);
@@ -212,21 +310,7 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
 
       // 1. Save artist profile details to Firestore (PII isolated to /users/{uid} and /artists/{uid}/private/settings)
       try {
-        FirebaseFirestore? injectedDb;
-        if (mounted) {
-          try {
-            injectedDb = ProviderScope.containerOf(
-              context,
-              listen: false,
-            ).read(firebaseFirestoreProvider);
-          } catch (_) {}
-        }
         final db = injectedDb ?? FirebaseFirestore.instance;
-        final isWidgetTest =
-            WidgetsBinding.instance.runtimeType.toString().contains('Test');
-        final timeoutDuration = (!isWidgetTest || injectedDb != null)
-            ? const Duration(seconds: 6)
-            : const Duration(milliseconds: 200);
 
         final userDoc = db.collection('users').doc(uid);
         final existingUserSnap = await userDoc.get().timeout(timeoutDuration);
@@ -236,15 +320,19 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
         final bool hasClientName =
             (existingUserData?['displayName'] as String?)?.trim().isNotEmpty ==
                 true;
+        final bool hasClientUsername =
+            (existingUserData?['username'] as String?)?.trim().isNotEmpty ==
+                true;
 
         final userUpdates = <String, dynamic>{
           'uid': uid,
           if (!hasClientName) 'displayName': name,
-          if (email.isNotEmpty) 'email': email,
+          if (!hasClientUsername) 'username': cleanUsername,
+          if (existingEmail.isNotEmpty) 'email': existingEmail,
           if (enteredBackupEmail.isNotEmpty)
             'pendingBackupEmail': enteredBackupEmail,
-          if (!_isGoogleUser && formattedPhone.isNotEmpty) 'phoneNumber': formattedPhone,
-          if (!_isGoogleUser) 'phoneVerified': _isPhoneVerified,
+          if (persistedPhone.isNotEmpty) 'phoneNumber': persistedPhone,
+          if (hasVerifiedPhone) 'phoneVerified': true,
           'onboardingRole': 'artist',
           'activeMode': 'artist',
           if (!clientAlreadyCompleted) 'profileCompleted': false,
@@ -253,7 +341,6 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
 
         await userDoc.set(userUpdates, SetOptions(merge: true)).timeout(timeoutDuration);
 
-        final cleanUsername = name.replaceAll('@', '');
         final artistDoc = db.collection('artists').doc(uid);
         await artistDoc.set({
           'id': uid,
@@ -265,16 +352,16 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
           'rating': 5.0,
           'availablePieces': 0,
           'minDeposit': 50,
-          if (!_isGoogleUser && _isPhoneVerified) 'phoneVerified': true,
+          if (hasVerifiedPhone) 'phoneVerified': true,
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true)).timeout(timeoutDuration);
 
         final privateSettings = <String, dynamic>{
-          'email': email,
+          if (existingEmail.isNotEmpty) 'email': existingEmail,
           if (enteredBackupEmail.isNotEmpty)
             'pendingBackupEmail': enteredBackupEmail,
-          if (!_isGoogleUser && formattedPhone.isNotEmpty) 'phoneNumber': formattedPhone,
-          if (!_isGoogleUser && _isPhoneVerified) 'phoneVerified': true,
+          if (persistedPhone.isNotEmpty) 'phoneNumber': persistedPhone,
+          if (hasVerifiedPhone) 'phoneVerified': true,
           'updatedAt': FieldValue.serverTimestamp(),
         };
 
@@ -284,140 +371,130 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
         ).timeout(timeoutDuration);
       } catch (_) {}
 
-      // If Google user or phone is already verified, bypass SMS verification and proceed
-      if (_isGoogleUser || _isPhoneVerified) {
-        if (enteredBackupEmail.isNotEmpty) {
-          try {
-            await _authService.sendBackupEmailVerification(
-              enteredBackupEmail,
-              isArtist: true,
-            );
-          } catch (_) {}
-          if (!mounted) return;
-          setState(() => _isLoading = false);
-          FocusManager.instance.primaryFocus?.unfocus();
-          Navigator.pushReplacement(
-            context,
-            FadePageRoute(
-              builder: (_) => BackupEmailVerificationScreen(
-                email: enteredBackupEmail,
-                authService: _authService,
-                isArtist: true,
-                nextScreenBuilder: (_) => ArtistProfilePhotoScreen(
-                  artistName: name,
-                  authService: _authService,
-                ),
-              ),
-            ),
+      // 2a. Phone sign-up artist who entered an optional backup email -> verify email right away.
+      if (enteredBackupEmail.isNotEmpty) {
+        try {
+          await _authService.sendBackupEmailVerification(
+            enteredBackupEmail,
+            isArtist: true,
           );
-          return;
-        }
+        } catch (_) {}
         if (!mounted) return;
         setState(() => _isLoading = false);
         FocusManager.instance.primaryFocus?.unfocus();
         Navigator.pushReplacement(
           context,
           FadePageRoute(
-            builder: (_) => ArtistProfilePhotoScreen(
-              artistName: name,
+            builder: (_) => BackupEmailVerificationScreen(
+              email: enteredBackupEmail,
               authService: _authService,
+              isArtist: true,
+              nextScreenBuilder: (_) => ArtistProfilePhotoScreen(
+                artistName: name,
+                authService: _authService,
+              ),
             ),
           ),
         );
         return;
       }
 
-      // 2. Dispatch SMS verification code
-      await _authService.verifyPhoneNumber(
-        phoneNumber: formattedPhone,
-        onVerificationCompleted: (_) async {
-          if (enteredBackupEmail.isNotEmpty) {
-            try {
-              await _authService.sendBackupEmailVerification(
-                enteredBackupEmail,
-                isArtist: true,
-              );
-            } catch (_) {}
+      // 2b. Email sign-up artist who entered an optional phone number -> verify via SMS OTP.
+      if (enteredFormattedPhone.isNotEmpty) {
+        await _authService.verifyPhoneNumber(
+          phoneNumber: enteredFormattedPhone,
+          onVerificationCompleted: (_) async {
             if (!mounted) return;
             setState(() => _isLoading = false);
             FocusManager.instance.primaryFocus?.unfocus();
             Navigator.pushReplacement(
               context,
               FadePageRoute(
-                builder: (_) => BackupEmailVerificationScreen(
-                  email: enteredBackupEmail,
+                builder: (_) => ArtistProfilePhotoScreen(
+                  artistName: name,
                   authService: _authService,
-                  isArtist: true,
-                  nextScreenBuilder: (_) => ArtistProfilePhotoScreen(
-                    artistName: name,
-                    authService: _authService,
-                  ),
                 ),
               ),
             );
-            return;
-          }
-          if (!mounted) return;
-          setState(() => _isLoading = false);
-          FocusManager.instance.primaryFocus?.unfocus();
-          Navigator.pushReplacement(
-            context,
-            FadePageRoute(
-              builder: (_) => ArtistProfilePhotoScreen(
-                artistName: name,
-                authService: _authService,
-              ),
-            ),
-          );
-        },
-        onCodeSent: (String verificationId, int? resendToken) {
-          if (!mounted) return;
-          setState(() => _isLoading = false);
-          FocusManager.instance.primaryFocus?.unfocus();
-          Navigator.push(
-            context,
-            FadePageRoute(
-              builder: (_) => ArtistPhoneVerificationScreen(
-                phoneNumber: formattedPhone,
-                verificationId: verificationId,
-                resendToken: resendToken,
-                artistName: name,
-                artistEmail: email,
-                backupEmail:
-                    enteredBackupEmail.isNotEmpty ? enteredBackupEmail : null,
-                authService: _authService,
-              ),
-            ),
-          );
-        },
-        onVerificationFailed: (Exception error) {
-          if (!mounted) return;
-          setState(() => _isLoading = false);
-          final errorMsg = error.toString().replaceAll('Exception: ', '');
-          _showErrorSnackBar(errorMsg);
-          if (kEnableDevBypass) {
+          },
+          onCodeSent: (String verificationId, int? resendToken) {
+            if (!mounted) return;
+            setState(() => _isLoading = false);
             FocusManager.instance.primaryFocus?.unfocus();
             Navigator.push(
               context,
               FadePageRoute(
                 builder: (_) => ArtistPhoneVerificationScreen(
-                  phoneNumber: formattedPhone,
-                  verificationId: 'dev_verification_id',
-                  resendToken: 123,
+                  phoneNumber: enteredFormattedPhone,
+                  verificationId: verificationId,
+                  resendToken: resendToken,
                   artistName: name,
-                  artistEmail: email,
-                  backupEmail:
-                      enteredBackupEmail.isNotEmpty ? enteredBackupEmail : null,
+                  artistEmail: existingEmail,
                   authService: _authService,
                 ),
               ),
             );
-          }
-        },
-        onCodeAutoRetrievalTimeout: (String verificationId) {
-          // Verification ID is retained in AuthService state
-        },
+          },
+          onVerificationFailed: (Exception error) {
+            if (!mounted) return;
+            setState(() => _isLoading = false);
+            final errorMsg = error.toString().replaceAll('Exception: ', '');
+            _showErrorSnackBar(errorMsg);
+            if (kEnableDevBypass) {
+              FocusManager.instance.primaryFocus?.unfocus();
+              Navigator.push(
+                context,
+                FadePageRoute(
+                  builder: (_) => ArtistPhoneVerificationScreen(
+                    phoneNumber: enteredFormattedPhone,
+                    verificationId: 'dev_verification_id',
+                    resendToken: 123,
+                    artistName: name,
+                    artistEmail: existingEmail,
+                    authService: _authService,
+                  ),
+                ),
+              );
+            }
+          },
+          onCodeAutoRetrievalTimeout: (String verificationId) {
+            // Verification ID is retained in AuthService state
+          },
+        );
+        return;
+      }
+
+      // 2c. OAuth user OR artist who left the optional secondary contact blank -> proceed directly.
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      FocusManager.instance.primaryFocus?.unfocus();
+      Navigator.pushReplacement(
+        context,
+        FadePageRoute(
+          builder: (_) => ArtistProfilePhotoScreen(
+            artistName: name,
+            authService: _authService,
+          ),
+        ),
       );
+    } on UsernameTakenException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _usernameConflictError = e.message;
+        _errorMessage = e.message;
+      });
+      _formKey.currentState?.validate();
+      _showErrorSnackBar(e.message);
+    } on UsernameFormatException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _usernameConflictError = e.message;
+        _errorMessage = e.message;
+      });
+      _formKey.currentState?.validate();
+      _showErrorSnackBar(e.message);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -518,14 +595,18 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
   void _skipInfo() {
     FocusManager.instance.primaryFocus?.unfocus();
     final raw = _nameController.text.trim();
+    String? existingDisplayName;
+    try {
+      existingDisplayName = _authService.currentUser?.displayName;
+    } catch (_) {}
     final name = raw.isNotEmpty && raw != '@'
         ? raw
         : (widget.initialName?.isNotEmpty == true
             ? (widget.initialName!.startsWith('@') ? widget.initialName! : '@${widget.initialName}')
-            : (_authService.currentUser?.displayName?.isNotEmpty == true
-                ? (_authService.currentUser!.displayName!.startsWith('@')
-                    ? _authService.currentUser!.displayName!
-                    : '@${_authService.currentUser!.displayName}')
+            : (existingDisplayName?.isNotEmpty == true
+                ? (existingDisplayName!.startsWith('@')
+                    ? existingDisplayName
+                    : '@$existingDisplayName')
                 : '@OddMaree'));
     Navigator.push(
       context,
@@ -553,9 +634,7 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
         skipKey: const Key('skip_artist_info_button'),
         skipText: 'Skip',
         title: 'Artist Profile',
-        subtitle: _isGoogleUser
-            ? 'Enter your artist name to get set up.'
-            : 'Enter your artist name and contact number to get set up.',
+        subtitle: _subtitle,
         ctaText: 'Continue',
         ctaIcon: Icons.arrow_forward,
         ctaKey: const Key('continue_artist_info_button'),
@@ -564,9 +643,7 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
         backgroundOverlay: const TattooBackgroundWrapper(child: SizedBox.expand()),
         child: FlowPageLayout(
           title: 'Artist Profile',
-          subtitle: _isGoogleUser
-              ? 'Enter your artist name to get set up.'
-              : 'Enter your artist name and contact number to get set up.',
+          subtitle: _subtitle,
           ctaText: 'Continue',
           ctaKey: const Key('continue_artist_info_button'),
           onCtaPressed: _isLoading ? null : _handleContinue,
@@ -597,46 +674,33 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
                       }
                     },
                     validator: (value) {
-                      if (value == null || value.trim().isEmpty || value.trim() == '@') {
-                        return 'Please enter your name or artist handle';
+                      final formatError = UsernameService.validateFormat(
+                        value ?? '',
+                        emptyMessage: 'Please enter your name or artist handle',
+                      );
+                      if (formatError != null) {
+                        return formatError;
+                      }
+                      if (_usernameConflictError != null) {
+                        return _usernameConflictError;
                       }
                       return null;
                     },
                   ),
-                  if (!_isGoogleUser) ...[
+                  if (_showPhoneField) ...[
                     const SizedBox(height: 16),
-                    // Phone Number
+                    // Optional Phone Number (shown for Email sign-ups)
                     _buildTextField(
-                      label: 'Phone Number',
+                      key: const Key('artist_phone_field'),
+                      label: 'Phone Number (Optional)',
                       controller: _phoneController,
                       hintText: '(555) 000-0000',
                       keyboardType: TextInputType.phone,
                       inputFormatters: const [PhoneNumberInputFormatter()],
-                      trailingLabelWidget: _isPhoneVerified
-                          ? Container(
-                              key: const Key('artist_phone_verified_badge'),
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0x2222C55E),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: const Color(0xFF22C55E), width: 0.8),
-                              ),
-                              child: Text(
-                                'VERIFIED',
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: const Color(0xFF22C55E),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.6,
-                                ),
-                              ),
-                            )
-                          : null,
                       validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Please enter your phone number for SMS verification';
-                        }
-                        final digits = value.replaceAll(RegExp(r'\D'), '');
+                        final trimmed = value?.trim() ?? '';
+                        if (trimmed.isEmpty) return null;
+                        final digits = trimmed.replaceAll(RegExp(r'\D'), '');
                         if (digits.length < 10) {
                           return 'Please enter a valid 10-digit phone number';
                         }
@@ -644,8 +708,9 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
                       },
                     ),
                   ],
-                  if (_needsBackupEmail) ...[
+                  if (_showBackupEmailField) ...[
                     const SizedBox(height: 16),
+                    // Optional Backup Email (shown for Phone OTP sign-ups)
                     _buildTextField(
                       key: const Key('artist_backup_email_field'),
                       label: 'Backup Email (Optional)',

@@ -78,6 +78,7 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
   Uint8List? _activeRawImageBytes;
   String? _activeAssetPath;
   bool _isEditingDetails = false;
+  bool _isSubmitting = false;
   int? _editingItemIndex;
 
   final TextEditingController _titleController = TextEditingController(text: 'Traditional Panther');
@@ -403,50 +404,8 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
     _proceedToIdentityTags();
   }
 
-  Future<void> _proceedToIdentityTags() async {
-    final effectiveAuth = widget.authService ?? AuthService();
-    final user = effectiveAuth.currentUser ?? FirebaseAuth.instance.currentUser;
-
-    // Convert uploaded items to FlashArtwork list, uploading any picked images if online
-    final flashArtworks = <FlashArtwork>[];
-    for (final item in _uploadedItems) {
-      String imageUrl = item.assetPath ?? 'assets/images/flash_traditional_panther.jpg';
-
-      if (user != null && item.imageBytes != null) {
-        try {
-          final storageRef = FirebaseStorage.instance
-              .ref()
-              .child('artists')
-              .child(user.uid)
-              .child('flash')
-              .child('${item.id}.jpg');
-          await storageRef
-              .putData(item.imageBytes!, SettableMetadata(contentType: 'image/jpeg'))
-              .timeout(const Duration(seconds: 5));
-          imageUrl = await storageRef.getDownloadURL().timeout(const Duration(seconds: 3));
-        } catch (_) {
-          // Graceful fallback if offline or in tests
-        }
-      }
-
-      flashArtworks.add(
-        FlashArtwork(
-          id: item.id,
-          artistName: widget.artistName,
-          title: item.title,
-          imageUrl: imageUrl,
-          price: item.price,
-          deposit: widget.minDeposit,
-          dimensions: item.size,
-          status: item.isRepeatable ? FlashStatus.repeatable : FlashStatus.available,
-          category: item.styleTag,
-          isExclusive: !item.isRepeatable,
-        ),
-      );
-    }
-
-    if (!mounted) return;
-
+  void _skipFlashUpload() {
+    if (_isSubmitting) return;
     FocusManager.instance.primaryFocus?.unfocus();
     Navigator.push(
       context,
@@ -457,7 +416,7 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
           photoUrl: widget.photoUrl,
           instagramHandle: widget.instagramHandle,
           minDeposit: widget.minDeposit,
-          flashArtworks: flashArtworks,
+          flashArtworks: const [],
           authService: widget.authService,
           studioInformation: widget.studioInformation,
           artistBio: widget.artistBio,
@@ -465,6 +424,84 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _proceedToIdentityTags() async {
+    if (_isSubmitting) return;
+    setState(() => _isSubmitting = true);
+
+    try {
+      final effectiveAuth = widget.authService ?? AuthService();
+      User? user = effectiveAuth.currentUser;
+      if (user == null) {
+        try {
+          user = FirebaseAuth.instance.currentUser;
+        } catch (_) {}
+      }
+
+      // Convert uploaded items to FlashArtwork list, uploading any picked images if online
+      final flashArtworks = <FlashArtwork>[];
+      for (final item in _uploadedItems) {
+        String imageUrl = item.assetPath ?? 'assets/images/flash_traditional_panther.jpg';
+
+        if (user != null && user is! DevMockUser && item.imageBytes != null) {
+          try {
+            final storageRef = FirebaseStorage.instance
+                .ref()
+                .child('artists')
+                .child(user.uid)
+                .child('flash')
+                .child('${item.id}.jpg');
+            await storageRef
+                .putData(item.imageBytes!, SettableMetadata(contentType: 'image/jpeg'))
+                .timeout(const Duration(seconds: 5));
+            imageUrl = await storageRef.getDownloadURL().timeout(const Duration(seconds: 3));
+          } catch (_) {
+            // Graceful fallback if offline or in tests
+          }
+        }
+
+        flashArtworks.add(
+          FlashArtwork(
+            id: item.id,
+            artistName: widget.artistName,
+            title: item.title,
+            imageUrl: imageUrl,
+            price: item.price,
+            deposit: widget.minDeposit,
+            dimensions: item.size,
+            status: item.isRepeatable ? FlashStatus.repeatable : FlashStatus.available,
+            category: item.styleTag,
+            isExclusive: !item.isRepeatable,
+          ),
+        );
+      }
+
+      if (!mounted) return;
+
+      FocusManager.instance.primaryFocus?.unfocus();
+      Navigator.push(
+        context,
+        FadePageRoute(
+          builder: (_) => ArtistIdentityTagsScreen(
+            artistName: widget.artistName,
+            photoBytes: widget.photoBytes,
+            photoUrl: widget.photoUrl,
+            instagramHandle: widget.instagramHandle,
+            minDeposit: widget.minDeposit,
+            flashArtworks: flashArtworks,
+            authService: widget.authService,
+            studioInformation: widget.studioInformation,
+            artistBio: widget.artistBio,
+            policies: widget.policies,
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 
   @override
@@ -488,15 +525,16 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
                   Navigator.pop(context);
                 }
               : null),
-      onSkip: _proceedToIdentityTags,
+      onSkip: _skipFlashUpload,
       skipKey: const Key('skip_flash_button'),
       skipText: 'Skip',
       title: 'Showcase your\nwork',
       subtitle: 'Upload some custom flash work you plan on selling',
       ctaText: 'Done',
       ctaKey: const Key('done_flash_button'),
-      isCtaEnabled: _uploadedItems.isNotEmpty,
-      onCtaPressed: _uploadedItems.isNotEmpty ? _onDonePressed : null,
+      isCtaLoading: _isSubmitting,
+      isCtaEnabled: _uploadedItems.isNotEmpty && !_isSubmitting,
+      onCtaPressed: (_uploadedItems.isNotEmpty && !_isSubmitting) ? _onDonePressed : null,
       contentPadding: EdgeInsets.zero,
       backgroundOverlay: const TattooBackgroundWrapper(child: SizedBox.expand()),
       child: FlowPageLayout(

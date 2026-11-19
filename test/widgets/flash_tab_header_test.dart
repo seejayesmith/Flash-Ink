@@ -196,5 +196,28 @@ void main() {
       expect(find.text('Open Messages'), findsOneWidget);
       expect(find.byType(MessagesScreen), findsNothing);
     });
+
+    testWidgets('MessagesScreen shows back button and invokes onBack when provided', (tester) async {
+      var backTapped = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MessagesScreen(
+            onBack: () {
+              backTapped = true;
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final backButton = find.byKey(const Key('messages_back_button'));
+      expect(backButton, findsOneWidget);
+
+      await tester.tap(backButton);
+      await tester.pumpAndSettle();
+
+      expect(backTapped, isTrue);
+    });
   });
 }

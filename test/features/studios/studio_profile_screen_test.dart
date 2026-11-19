@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -414,6 +415,86 @@ void main() {
 
         expect(find.byKey(const Key('studio_profile_screen')), findsOneWidget);
         expect(find.text('Oddmaree'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Renders full phone number without truncation on narrow mobile viewports',
+      (tester) async {
+        tester.view.physicalSize = const Size(375, 812);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final client = MockClient((request) async {
+          if (request.url.path.contains('details')) {
+            return http.Response(
+              jsonEncode({
+                'status': 'OK',
+                'result': {
+                  'name': 'Tattoos by Jess Ward',
+                  'formatted_address': 'Beaverton, OR',
+                  'formatted_phone_number': '(503) 437-1234',
+                  'website': 'https://example.com/',
+                  'rating': 5.0,
+                  'user_ratings_total': 50,
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('Not Found', 404);
+        });
+
+        final studioPin = const StudioMapService()
+            .mapArtistsToStudios([oddmaree])
+            .single;
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              artistsWithDistanceProvider.overrideWithValue(
+                const AsyncValue.data([oddmaree]),
+              ),
+            ],
+            child: MaterialApp(
+              home: StudioProfileScreen(
+                studio: studioPin,
+                placesService: GooglePlacesService(
+                  client: client,
+                  apiKey: 'test_key',
+                ),
+                authService: AuthService(
+                  mockUser: DevMockUser(
+                    uid: 'client_1',
+                    isAnonymous: false,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('(503) 437-1234'), findsOneWidget);
+        expect(find.text('Website'), findsOneWidget);
+        expect(find.text('Directions'), findsOneWidget);
+
+        final phoneParagraph = tester.renderObject<RenderParagraph>(
+          find.text('(503) 437-1234'),
+        );
+        expect(phoneParagraph.didExceedMaxLines, isFalse);
+
+        final websiteBox = tester.getSize(
+          find.byKey(const Key('studio_info_website_row')),
+        );
+        final phoneBox = tester.getSize(
+          find.byKey(const Key('studio_info_phone_row')),
+        );
+        expect(phoneBox.width, greaterThan(websiteBox.width));
       },
     );
   });

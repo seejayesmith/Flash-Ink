@@ -81,7 +81,7 @@ class _EarlyAccessOutreachSheetState extends State<EarlyAccessOutreachSheet> {
         maxHeight: MediaQuery.of(context).size.height * 0.88,
       ),
       child: AdaptiveGlassContainer.bottomSheet(
-        glassEnabled: false,
+        glassEnabled: true,
         androidSurfaceColor: const Color(0xFF141616),
         selectedBorderColor: const Color(0xFFEEC200),
         unselectedBorderColor: const Color(0xFFEEC200),

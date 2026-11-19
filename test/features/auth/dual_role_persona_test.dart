@@ -138,9 +138,12 @@ void main() {
         await tester.tap(find.text('Route As Artist'));
         await tester.pumpAndSettle();
 
-        expect(find.byType(ArtistInfoScreen), findsOneWidget);
+        final infoScreen = tester.widget<ArtistInfoScreen>(find.byType(ArtistInfoScreen));
+        expect(infoScreen.initialPhone, '+15552223333');
+        expect(infoScreen.initialEmail, 'collector@flash.ink');
         expect(find.text('@inkcollector'), findsOneWidget);
-        expect(find.text('(555) 222-3333'), findsOneWidget);
+        expect(find.byKey(const Key('artist_phone_field')), findsNothing);
+        expect(find.byKey(const Key('artist_backup_email_field')), findsNothing);
         expect(AuthService.activeAppMode, equals('artist'));
       },
     );

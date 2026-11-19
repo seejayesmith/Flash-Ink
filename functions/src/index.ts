@@ -40,6 +40,7 @@ export const completeArtistOnboarding = onCall(async (request) => {
   const uid = request.auth.uid;
   const data = (request.data || {}) as {
     name?: string;
+    username?: string;
     instagramHandle?: string;
     bio?: string;
     city?: string;
@@ -52,6 +53,49 @@ export const completeArtistOnboarding = onCall(async (request) => {
   };
 
   const artistName = (data.name || request.auth.token.name || 'Artist').trim();
+  const rawHandleInput = (
+    data.username ||
+    data.instagramHandle ||
+    data.name ||
+    ''
+  ).trim();
+  const cleanHandle = rawHandleInput.replace(/@/g, '').trim();
+  const normalizedHandle = cleanHandle.toLowerCase();
+  const isValidHandleFormat =
+    normalizedHandle.length >= 3 &&
+    normalizedHandle.length <= 30 &&
+    /^[a-z0-9_]([a-z0-9._]{1,28}[a-z0-9_])?$/.test(normalizedHandle) &&
+    !normalizedHandle.includes('..');
+
+  if (isValidHandleFormat) {
+    const handleRef = db.collection('usernames').doc(normalizedHandle);
+    await db.runTransaction(async (tx) => {
+      const handleSnap = await tx.get(handleRef);
+      if (handleSnap.exists) {
+        const ownerUid = String(handleSnap.data()?.uid || '').trim();
+        if (ownerUid.length > 0 && ownerUid !== uid) {
+          throw new HttpsError(
+            'already-exists',
+            'That username is already taken'
+          );
+        }
+      }
+      tx.set(
+        handleRef,
+        {
+          uid,
+          username: cleanHandle,
+          normalizedUsername: normalizedHandle,
+          ...(handleSnap.exists
+            ? {}
+            : { createdAt: admin.firestore.FieldValue.serverTimestamp() }),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    });
+  }
+
   const email = request.auth.token.email || '';
   const phoneNumber = (data.phoneNumber || request.auth.token.phone_number || '').trim();
   const minDeposit = typeof data.minDeposit === 'number' && data.minDeposit >= 20
@@ -183,6 +227,18 @@ export const createPaymentIntent = onCall(
 
     const currency = (data.currency || 'usd').toLowerCase();
     const clientUid = request.auth?.uid || 'guest_client';
+    const targetArtistId = (
+      data.artistId ||
+      (data.accountId && !data.accountId.startsWith('acct_') ? data.accountId : '') ||
+      ''
+    ).trim();
+
+    await assertSlotIsAvailable(
+      targetArtistId,
+      data.selectedDate,
+      data.selectedTimeSlot,
+      data.bookingId
+    );
 
     try {
       const stripe = getStripeClient();
@@ -1249,10 +1305,129 @@ function extractDateKey(raw: unknown): string | null {
   return null;
 }
 
+function normalizeSlotLabel(raw: unknown): string {
+  return String(raw || '').split('(')[0].trim().toUpperCase();
+}
+
+/**
+ * Validates that the requested artist booking slot is still open and not
+ * already booked, held, blocked, or closed before creating a PaymentIntent.
+ */
+async function assertSlotIsAvailable(
+  artistIdRaw: unknown,
+  selectedDateRaw: unknown,
+  selectedTimeSlotRaw: unknown,
+  currentBookingIdRaw?: unknown
+): Promise<void> {
+  const artistId = typeof artistIdRaw === 'string' ? artistIdRaw.trim() : '';
+  const dateKey = extractDateKey(selectedDateRaw);
+  const normalizedSlot = normalizeSlotLabel(selectedTimeSlotRaw);
+  const currentBookingId =
+    typeof currentBookingIdRaw === 'string' ? currentBookingIdRaw.trim() : '';
+
+  if (!artistId || !dateKey || !normalizedSlot) {
+    return;
+  }
+
+  const scheduleSnap = await db.collection('artist_schedules').doc(artistId).get();
+  if (scheduleSnap.exists) {
+    const schedule = (scheduleSnap.data() || {}) as Record<string, unknown>;
+    if (schedule.isBooksOpen === false) {
+      throw new HttpsError(
+        'failed-precondition',
+        "This artist's books are currently closed."
+      );
+    }
+
+    const blockedDates = Array.isArray(schedule.blockedDates)
+      ? schedule.blockedDates.map((d) => String(d).trim())
+      : [];
+    if (blockedDates.includes(dateKey)) {
+      throw new HttpsError(
+        'failed-precondition',
+        'The selected date is unavailable.'
+      );
+    }
+
+    const bookedSlots = Array.isArray(schedule.bookedSlots)
+      ? schedule.bookedSlots
+      : [];
+    for (const rawEntry of bookedSlots) {
+      if (rawEntry && typeof rawEntry === 'object') {
+        const entry = rawEntry as Record<string, unknown>;
+        const entryDate = extractDateKey(entry.date);
+        const entryTime = normalizeSlotLabel(entry.time);
+        if (entryDate === dateKey && entryTime === normalizedSlot) {
+          throw new HttpsError(
+            'already-exists',
+            'This time slot has already been booked. Please select another time slot.'
+          );
+        }
+      }
+    }
+
+    const nowMs = Date.now();
+    const heldSlots = Array.isArray(schedule.heldSlots)
+      ? schedule.heldSlots
+      : [];
+    for (const rawEntry of heldSlots) {
+      if (rawEntry && typeof rawEntry === 'object') {
+        const entry = rawEntry as Record<string, unknown>;
+        const entryDate = extractDateKey(entry.date);
+        const entryTime = normalizeSlotLabel(entry.time);
+        const expiresAtMs = entry.expiresAt
+          ? Date.parse(String(entry.expiresAt))
+          : Number.POSITIVE_INFINITY;
+        const isUnexpired = Number.isNaN(expiresAtMs) || expiresAtMs > nowMs;
+        if (entryDate === dateKey && entryTime === normalizedSlot && isUnexpired) {
+          throw new HttpsError(
+            'already-exists',
+            'This time slot is currently on a 24-hour hold. Please select another time slot.'
+          );
+        }
+      }
+    }
+  }
+
+  const [aptSnap, bookingSnap] = await Promise.all([
+    db.collection('appointments').where('artistId', '==', artistId).get(),
+    db.collection('bookings').where('artistId', '==', artistId).get(),
+  ]);
+
+  for (const doc of aptSnap.docs) {
+    const docData = doc.data();
+    const status = String(docData.status || 'confirmed').trim().toLowerCase();
+    if (EXCLUDED_APPOINTMENT_STATUSES.has(status)) continue;
+    const docDate = extractDateKey(docData.scheduledDate);
+    const docTime = normalizeSlotLabel(docData.time);
+    if (docDate === dateKey && docTime === normalizedSlot) {
+      throw new HttpsError(
+        'already-exists',
+        'This time slot has already been booked. Please select another time slot.'
+      );
+    }
+  }
+
+  for (const doc of bookingSnap.docs) {
+    if (currentBookingId && doc.id === currentBookingId) continue;
+    const docData = doc.data();
+    const status = String(docData.status || 'pending').trim().toLowerCase();
+    if (EXCLUDED_APPOINTMENT_STATUSES.has(status)) continue;
+    const docDate = extractDateKey(docData.selectedDate);
+    const docTime = normalizeSlotLabel(docData.selectedTimeSlot);
+    if (docDate === dateKey && docTime === normalizedSlot) {
+      throw new HttpsError(
+        'already-exists',
+        'This time slot has already been booked. Please select another time slot.'
+      );
+    }
+  }
+}
+
 /**
  * Recomputes anonymized `bookedSlots` (`[{date, time}]`) for an artist from
- * `/appointments` so public booking clients can enforce slot occupancy,
- * empty-day lead time, and Sun–Sat weekly caps without reading private docs.
+ * `/appointments` and `/bookings` so public booking clients can enforce slot
+ * occupancy, empty-day lead time, and Sun–Sat weekly caps without reading private docs.
  */
 async function recomputeArtistBookedSlots(artistId: string): Promise<void> {
   const cleanArtistId = artistId.trim();
@@ -1263,27 +1438,41 @@ async function recomputeArtistBookedSlots(artistId: string): Promise<void> {
   const cutoffDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const cutoffKey = cutoffDate.toISOString().slice(0, 10);
 
-  const snap = await db
-    .collection('appointments')
-    .where('artistId', '==', cleanArtistId)
-    .get();
+  const [aptSnap, bookingSnap] = await Promise.all([
+    db.collection('appointments').where('artistId', '==', cleanArtistId).get(),
+    db.collection('bookings').where('artistId', '==', cleanArtistId).get(),
+  ]);
 
   const deduped = new Map<string, AnonymizedSlotEntry>();
-  for (const doc of snap.docs) {
-    const data = doc.data();
-    const status = String(data.status || 'confirmed').trim().toLowerCase();
-    if (EXCLUDED_APPOINTMENT_STATUSES.has(status)) continue;
+  const addSlot = (
+    dateRaw: unknown,
+    timeRaw: unknown,
+    statusRaw: unknown,
+    defaultStatus: string
+  ) => {
+    const status = String(statusRaw || defaultStatus).trim().toLowerCase();
+    if (EXCLUDED_APPOINTMENT_STATUSES.has(status)) return;
 
-    const dateKey = extractDateKey(data.scheduledDate);
-    if (!dateKey || dateKey < cutoffKey) continue;
+    const dateKey = extractDateKey(dateRaw);
+    if (!dateKey || dateKey < cutoffKey) return;
 
-    const rawTime = String(data.time || '').split('(')[0].trim();
-    if (!rawTime) continue;
+    const rawTime = String(timeRaw || '').split('(')[0].trim();
+    if (!rawTime) return;
 
     const mapKey = `${dateKey}__${rawTime.toUpperCase()}`;
     if (!deduped.has(mapKey)) {
       deduped.set(mapKey, { date: dateKey, time: rawTime });
     }
+  };
+
+  for (const doc of aptSnap.docs) {
+    const data = doc.data();
+    addSlot(data.scheduledDate, data.time, data.status, 'confirmed');
+  }
+
+  for (const doc of bookingSnap.docs) {
+    const data = doc.data();
+    addSlot(data.selectedDate, data.selectedTimeSlot, data.status, 'pending');
   }
 
   const bookedSlots = Array.from(deduped.values()).sort((a, b) =>
@@ -1320,6 +1509,30 @@ async function recomputeArtistBookedSlots(artistId: string): Promise<void> {
  */
 export const syncArtistBookedSlotsOnAppointment = onDocumentWritten(
   'appointments/{appointmentId}',
+  async (event) => {
+    const beforeArtist = String(event.data?.before?.data()?.artistId || '').trim();
+    const afterArtist = String(event.data?.after?.data()?.artistId || '').trim();
+    const targetArtists = new Set<string>(
+      [beforeArtist, afterArtist].filter((id) => id.length > 0)
+    );
+    if (targetArtists.size === 0) return;
+
+    await Promise.all(
+      Array.from(targetArtists).map((artistId) =>
+        recomputeArtistBookedSlots(artistId)
+      )
+    );
+  }
+);
+
+/**
+ * 10. Firestore Trigger: Sync Anonymized Booked Slots on Booking Write
+ *
+ * Keeps `artist_schedules/{artistId}.bookedSlots` up to date whenever a client
+ * creates or updates a flash booking document in `/bookings`.
+ */
+export const syncArtistBookedSlotsOnBooking = onDocumentWritten(
+  'bookings/{bookingId}',
   async (event) => {
     const beforeArtist = String(event.data?.before?.data()?.artistId || '').trim();
     const afterArtist = String(event.data?.after?.data()?.artistId || '').trim();

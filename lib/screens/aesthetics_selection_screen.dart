@@ -14,7 +14,8 @@ import '../widgets/flash_image.dart';
 import '../widgets/flash_snack_bar.dart';
 import '../widgets/fade_page_route.dart';
 import '../services/auth_service.dart';
-import '../features/onboarding/client/client_location_screen.dart';
+import '../features/onboarding/client/client_notifications_screen.dart';
+import '../features/onboarding/shared/onboarding_step_scaffold.dart';
 import 'account_creation_screen.dart';
 import 'profile_setup_screen.dart';
 import 'main_feed_screen.dart';
@@ -151,10 +152,10 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
 
       if (mounted) {
         if (!widget.isGuest && _shouldRouteToOnboarding) {
-          Navigator.pushReplacement(
+          Navigator.push(
             context,
             FadePageRoute(
-              builder: (_) => ClientLocationScreen(
+              builder: (_) => ClientNotificationsScreen(
                 authService: _authService,
                 selectedStyles: List<String>.from(_selectedAesthetics),
               ),
@@ -187,10 +188,10 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
 
       if (mounted) {
         if (!widget.isGuest && _shouldRouteToOnboarding) {
-          Navigator.pushReplacement(
+          Navigator.push(
             context,
             FadePageRoute(
-              builder: (_) => ClientLocationScreen(
+              builder: (_) => ClientNotificationsScreen(
                 authService: _authService,
                 selectedStyles: const [],
               ),
@@ -245,6 +246,12 @@ class _AestheticsSelectionScreenState extends State<AestheticsSelectionScreen> {
             icon: const Icon(Icons.arrow_back, color: Color(0xFFF9FAFA)),
             onPressed: _handleBack,
           ),
+          title: widget.isGuest
+              ? null
+              : const SegmentedProgressPills(
+                  currentStep: 3,
+                  totalSteps: 4,
+                ),
           onSkipPressed: _isLoading ? null : _skipAesthetics,
         ),
         body: Stack(

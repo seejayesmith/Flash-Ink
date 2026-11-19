@@ -54,6 +54,11 @@ service cloud.firestore {
     //
     // Collection: core_config/{configId}
     //   - Authenticated read-only; client writes denied.
+    //
+    // Collection: usernames/{handleId}
+    //   - Global username registry enforcing unique handles across clients and artists.
+    //   - Public read (availability lookup; non-PII fields only: uid, username, normalizedUsername, role, createdAt, updatedAt).
+    //   - Create/Update/Delete restricted to handle owner (uid == request.auth.uid) with strict handle format validation (3-30 chars, a-z0-9._, no leading/trailing/consecutive periods).
     // ===============================================================
 
     // ===============================================================
@@ -74,6 +79,34 @@ service cloud.firestore {
 
     function areImmutableFieldsUnchanged(fields) {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function isValidUsernameHandle(handleId) {
+      return handleId is string
+        && handleId.size() >= 3
+        && handleId.size() <= 30
+        && handleId.matches('^[a-z0-9_]([a-z0-9._]{1,28}[a-z0-9_])?$')
+        && !handleId.matches('.*\\.\\..*');
+    }
+
+    // ===============================================================
+    // Usernames Collection (/usernames/{handleId})
+    // ===============================================================
+    match /usernames/{handleId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && isDocSizeValid()
+        && isValidUsernameHandle(handleId)
+        && request.resource.data.uid == request.auth.uid
+        && (!('normalizedUsername' in request.resource.data) || request.resource.data.normalizedUsername == handleId);
+      allow update: if isSignedIn()
+        && isDocSizeValid()
+        && isValidUsernameHandle(handleId)
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && (!('normalizedUsername' in request.resource.data) || request.resource.data.normalizedUsername == handleId);
+      allow delete: if isSignedIn()
+        && resource.data.uid == request.auth.uid;
     }
 
     // ===============================================================

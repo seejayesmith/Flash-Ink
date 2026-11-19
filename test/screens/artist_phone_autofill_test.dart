@@ -12,6 +12,13 @@ import 'package:flash_ink/screens/auth_routing.dart';
 import 'package:flash_ink/services/auth_service.dart';
 import 'package:flash_ink/widgets/phone_number_input_formatter.dart';
 
+class MockUserInfo extends Fake implements UserInfo {
+  @override
+  final String providerId;
+
+  MockUserInfo(this.providerId);
+}
+
 class MockUserWithPhone extends Fake implements User {
   @override
   final String uid;
@@ -21,13 +28,19 @@ class MockUserWithPhone extends Fake implements User {
   final String? displayName;
   @override
   final String? phoneNumber;
+  final List<String> providers;
 
   MockUserWithPhone({
     required this.uid,
     this.email,
     this.displayName,
     this.phoneNumber,
+    this.providers = const [],
   });
+
+  @override
+  List<UserInfo> get providerData =>
+      providers.map((id) => MockUserInfo(id)).toList();
 
   @override
   Future<void> updateDisplayName(String? name) async {}
@@ -122,12 +135,13 @@ void main() {
     });
   });
 
-  group('ArtistInfoScreen Phone Autofill & Verification Flow Tests', () {
-    testWidgets('Autofills phone number and displays VERIFIED badge when user has authenticated phone', (tester) async {
+  group('ArtistInfoScreen Adaptive Contact & Verification Flow Tests', () {
+    testWidgets('Phone-OTP artist hides verified phone field and prompts for optional Backup Email', (tester) async {
       final mockUser = MockUserWithPhone(
         uid: 'artist_phone_user',
         displayName: 'InkMaster',
         phoneNumber: '+15551234567',
+        providers: const ['phone'],
       );
       final fakeAuth = FakeTestAuthService(user: mockUser);
 
@@ -138,54 +152,23 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Field is autofilled and formatted
-      expect(find.text('(555) 123-4567'), findsOneWidget);
-
-      // VERIFIED badge is visible
-      expect(find.byKey(const Key('artist_phone_verified_badge')), findsOneWidget);
-      expect(find.text('VERIFIED'), findsOneWidget);
+      // Handle and optional Backup Email are shown; already-verified Phone field is hidden
+      expect(find.byKey(const Key('artist_name_handle_field')), findsOneWidget);
+      expect(find.byKey(const Key('artist_backup_email_field')), findsOneWidget);
+      expect(find.byKey(const Key('artist_phone_field')), findsNothing);
+      expect(find.text('(555) 123-4567'), findsNothing);
+      expect(
+        find.text('Enter your artist name and an optional backup email to get set up.'),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('VERIFIED badge dynamically disappears when editing phone number, reappears when restored', (tester) async {
+    testWidgets('Email artist hides email field, prompts for optional Phone Number, and skips SMS when left blank', (tester) async {
       final mockUser = MockUserWithPhone(
-        uid: 'artist_phone_user',
-        displayName: 'InkMaster',
-        phoneNumber: '+15551234567',
-      );
-      final fakeAuth = FakeTestAuthService(user: mockUser);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: ArtistInfoScreen(authService: fakeAuth),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const Key('artist_phone_verified_badge')), findsOneWidget);
-
-      // Edit phone number to a different number
-      final phoneFieldFinder = find.byType(TextFormField).at(1);
-      await tester.enterText(phoneFieldFinder, '5559998888');
-      await tester.pumpAndSettle();
-
-      // Text is formatted and VERIFIED badge disappeared
-      expect(find.text('(555) 999-8888'), findsOneWidget);
-      expect(find.byKey(const Key('artist_phone_verified_badge')), findsNothing);
-
-      // Restore original number
-      await tester.enterText(phoneFieldFinder, '5551234567');
-      await tester.pumpAndSettle();
-
-      // Badge reappears
-      expect(find.text('(555) 123-4567'), findsOneWidget);
-      expect(find.byKey(const Key('artist_phone_verified_badge')), findsOneWidget);
-    });
-
-    testWidgets('Tapping Continue with verified phone skips SMS verification and advances directly to Profile Photo', (tester) async {
-      final mockUser = MockUserWithPhone(
-        uid: 'artist_phone_user',
+        uid: 'artist_email_user',
         displayName: 'OddMaree',
-        phoneNumber: '+15551234567',
+        email: 'artist@studio.com',
+        providers: const ['password'],
       );
       final fakeAuth = FakeTestAuthService(user: mockUser);
 
@@ -196,28 +179,33 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Check terms box
+      expect(find.byKey(const Key('artist_name_handle_field')), findsOneWidget);
+      expect(find.byKey(const Key('artist_phone_field')), findsOneWidget);
+      expect(find.byKey(const Key('artist_backup_email_field')), findsNothing);
+      expect(
+        find.text('Enter your artist name and an optional phone number to get set up.'),
+        findsOneWidget,
+      );
+
+      // Agree to terms and continue with optional phone left blank
       await tester.tap(find.byType(Checkbox));
       await tester.pumpAndSettle();
 
-      // Tap CONTINUE
       await tester.tap(find.byKey(const Key('continue_artist_info_button')));
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pumpAndSettle();
 
-      // Verify AuthService.verifyPhoneNumber was NOT invoked
       expect(fakeAuth.verifyPhoneNumberCallCount, 0);
-
-      // Successfully reached ArtistProfilePhotoScreen directly
       expect(find.byType(ArtistProfilePhotoScreen), findsOneWidget);
       expect(find.byType(ArtistPhoneVerificationScreen), findsNothing);
     });
 
-    testWidgets('Tapping Continue with modified/unverified phone triggers SMS verification', (tester) async {
+    testWidgets('Email artist entering optional phone number triggers SMS verification', (tester) async {
       final mockUser = MockUserWithPhone(
-        uid: 'artist_phone_user',
+        uid: 'artist_email_user_2',
         displayName: 'OddMaree',
-        phoneNumber: '+15551234567',
+        email: 'artist@studio.com',
+        providers: const ['password'],
       );
       final fakeAuth = FakeTestAuthService(user: mockUser);
 
@@ -228,9 +216,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Change phone number
-      final phoneFieldFinder = find.byType(TextFormField).at(1);
-      await tester.enterText(phoneFieldFinder, '5559876543');
+      await tester.enterText(find.byKey(const Key('artist_phone_field')), '5559876543');
       await tester.pumpAndSettle();
 
       // Check terms box
@@ -242,7 +228,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pumpAndSettle();
 
-      // Verify AuthService.verifyPhoneNumber WAS invoked with new number
+      // Verify AuthService.verifyPhoneNumber WAS invoked with entered number
       expect(fakeAuth.verifyPhoneNumberCallCount, 1);
       expect(fakeAuth.lastPhoneNumberVerified, '+15559876543');
 
@@ -250,11 +236,72 @@ void main() {
       expect(find.byType(ArtistPhoneVerificationScreen), findsOneWidget);
     });
 
-    testWidgets('AuthRouting passes user.phoneNumber to ArtistInfoScreen initialPhone', (tester) async {
+    testWidgets('Apple sign-in artist only sees handle field and Terms checkbox and proceeds directly to Profile Photo', (tester) async {
+      final appleUser = MockUserWithPhone(
+        uid: 'artist_apple_user',
+        displayName: 'AppleInk',
+        email: 'hidden@privaterelay.appleid.com',
+        providers: const ['apple.com'],
+      );
+      final fakeAuth = FakeTestAuthService(user: appleUser);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistInfoScreen(authService: fakeAuth),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('artist_name_handle_field')), findsOneWidget);
+      expect(find.byKey(const Key('artist_phone_field')), findsNothing);
+      expect(find.byKey(const Key('artist_backup_email_field')), findsNothing);
+      expect(find.text('Enter your artist name to get set up.'), findsOneWidget);
+
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('continue_artist_info_button')));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(fakeAuth.verifyPhoneNumberCallCount, 0);
+      expect(find.byType(ArtistProfilePhotoScreen), findsOneWidget);
+    });
+
+    testWidgets('Phone-OTP artist leaving optional Backup Email blank advances directly to Profile Photo without SMS verification', (tester) async {
+      final mockUser = MockUserWithPhone(
+        uid: 'artist_phone_user',
+        displayName: 'OddMaree',
+        phoneNumber: '+15551234567',
+        providers: const ['phone'],
+      );
+      final fakeAuth = FakeTestAuthService(user: mockUser);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistInfoScreen(authService: fakeAuth),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('continue_artist_info_button')));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(fakeAuth.verifyPhoneNumberCallCount, 0);
+      expect(find.byType(ArtistProfilePhotoScreen), findsOneWidget);
+      expect(find.byType(ArtistPhoneVerificationScreen), findsNothing);
+    });
+
+    testWidgets('AuthRouting passes user.phoneNumber to ArtistInfoScreen and prompts phone user for optional Backup Email', (tester) async {
       final mockUser = MockUserWithPhone(
         uid: 'new_artist_uid',
         displayName: 'InkArtist',
         phoneNumber: '+15552223333',
+        providers: const ['phone'],
       );
       final fakeAuth = FakeTestAuthService(user: mockUser);
 
@@ -281,9 +328,10 @@ void main() {
       await tester.tap(find.text('Route'));
       await tester.pumpAndSettle();
 
-      expect(find.byType(ArtistInfoScreen), findsOneWidget);
-      expect(find.text('(555) 222-3333'), findsOneWidget);
-      expect(find.byKey(const Key('artist_phone_verified_badge')), findsOneWidget);
+      final infoScreen = tester.widget<ArtistInfoScreen>(find.byType(ArtistInfoScreen));
+      expect(infoScreen.initialPhone, '+15552223333');
+      expect(find.byKey(const Key('artist_backup_email_field')), findsOneWidget);
+      expect(find.byKey(const Key('artist_phone_field')), findsNothing);
     });
   });
 }

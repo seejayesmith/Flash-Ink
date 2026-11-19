@@ -151,5 +151,41 @@ void main() {
 
       expect(find.byKey(const Key('onboarding_cta_button')), findsNothing);
     });
+
+    testWidgets('9-step artist progress bar clears back and skip buttons on narrow phones (360px)', (tester) async {
+      bool skipTapped = false;
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OnboardingStepScaffold(
+            currentStep: 3,
+            totalSteps: 9,
+            title: 'Artist Step',
+            onBack: () {},
+            onSkip: () => skipTapped = true,
+            child: const Text('Body'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final backRect = tester.getRect(find.byKey(const Key('onboarding_back_button')));
+      final progressRect = tester.getRect(find.byKey(const Key('onboarding_progress_bar')));
+      final skipRect = tester.getRect(find.byKey(const Key('onboarding_skip_button')));
+
+      expect(progressRect.left, greaterThan(backRect.right));
+      expect(progressRect.right, lessThan(skipRect.left));
+      expect(skipRect.height, greaterThanOrEqualTo(48.0));
+
+      await tester.tap(find.byKey(const Key('onboarding_skip_button')));
+      await tester.pumpAndSettle();
+      expect(skipTapped, isTrue);
+    });
   });
 }

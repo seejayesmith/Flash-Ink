@@ -398,6 +398,7 @@ class _AccountCreationScreenState extends State<AccountCreationScreen> {
         MaterialPageRoute(
           builder: (_) => ArtistInfoScreen(
             authService: _authService,
+            signInMethod: ArtistSignInMethod.oauth,
           ),
         ),
       );

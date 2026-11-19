@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/flash_logo.dart';
 import 'role_selection_screen.dart';
@@ -106,6 +107,12 @@ class _SplashScreenState extends State<SplashScreen> {
 
           // Fetch user document from Firestore for onboarding progress
           final firestore = widget.firestore ?? FirebaseFirestore.instance;
+          try {
+            await NotificationService.syncFcmTokenForCurrentUser(
+              user: user,
+              firestore: firestore,
+            );
+          } catch (_) {}
           final doc = await firestore
               .collection('users')
               .doc(user.uid)
@@ -271,7 +278,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   FlashLogo(
-                    fontSize: 76,
+                    fontSize: 87.4,
                     shadows: [
                       Shadow(
                         color: Colors.black.withAlpha(200),
@@ -279,16 +286,6 @@ class _SplashScreenState extends State<SplashScreen> {
                         offset: const Offset(0, 4),
                       ),
                     ],
-                  ),
-                  AppGaps.gapLg,
-                  Text(
-                    'TATTOO DISCOVERY & BOOKING',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFF919696),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 3.5,
-                    ),
                   ),
                   if (_hasError) ...[
                     AppGaps.gapXl,

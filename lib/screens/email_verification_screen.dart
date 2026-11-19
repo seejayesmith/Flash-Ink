@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../config/dev_config.dart';
 import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/adaptive_glass_container.dart';
@@ -93,13 +94,16 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   }
 
   Future<void> _skipEmailVerification() async {
-    User? user;
-    try {
-      user = FirebaseAuth.instance.currentUser;
-    } catch (_) {
-      user = null;
+    if (_isLoading) return;
+    User? user = _authService.currentUser;
+    if (user == null) {
+      try {
+        user = FirebaseAuth.instance.currentUser;
+      } catch (_) {
+        user = null;
+      }
     }
-    if (user != null) {
+    if (user != null && user is! DevMockUser) {
       await AuthRouting.routeUserAfterAuth(
         context,
         user,
@@ -108,6 +112,13 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
         bypassEmailVerification: true,
       );
     } else {
+      if (user == null && kEnableDevBypass) {
+        if (widget.role == 'artist') {
+          AuthService.createDevMockArtist();
+        } else {
+          AuthService.createDevMockClient();
+        }
+      }
       if (!mounted) return;
       if (widget.role == 'artist') {
         Navigator.pushReplacement(
@@ -115,6 +126,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
           MaterialPageRoute(
             builder: (_) => ArtistInfoScreen(
               authService: _authService,
+              signInMethod: ArtistSignInMethod.email,
             ),
           ),
         );
@@ -122,7 +134,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => const ProfileSetupScreen(),
+            builder: (_) => ProfileSetupScreen(
+              authService: _authService,
+            ),
           ),
         );
       }

@@ -6,6 +6,7 @@ import 'package:firebase_core_platform_interface/test.dart';
 import 'package:flash_ink/core/mock/mock_data_config.dart';
 import 'package:flash_ink/models/artist_dashboard_data.dart';
 import 'package:flash_ink/screens/artist_dashboard/booking_request_detail_screen.dart';
+import 'package:flash_ink/widgets/adaptive_glass_container.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -45,7 +46,10 @@ void main() {
       binding.platformDispatcher.views.first.resetDevicePixelRatio();
     });
 
-    testWidgets('Proposing time slot creates 24-hour hold in repository', (tester) async {
+    testWidgets('Proposing time slot creates 24-hour hold in repository using configured slotDurationMinutes', (tester) async {
+      ArtistDashboardRepository.booksSchedule =
+          ArtistDashboardRepository.booksSchedule.copyWith(slotDurationMinutes: 240);
+
       await tester.pumpWidget(
         MaterialApp(
           home: BookingRequestDetailScreen(request: testRequest),
@@ -60,19 +64,25 @@ void main() {
       await tester.tap(proposeBtn);
       await tester.pumpAndSettle();
 
-      // Modal is open
+      // Modal is open with frosted glass overlay
       expect(find.text('Propose Session Time & Quote'), findsOneWidget);
+      final sheetGlass = tester.widget<AdaptiveGlassContainer>(
+        find.byType(AdaptiveGlassContainer).first,
+      );
+      expect(sheetGlass.glassEnabled, isTrue);
+      expect(find.byType(BackdropFilter), findsWidgets);
       final sendProposalBtn = find.text('Send Proposal & Hold Slot (24h)');
       expect(sendProposalBtn, findsOneWidget);
 
       await tester.tap(sendProposalBtn);
       await tester.pumpAndSettle();
 
-      // Verify a CustomHold was created
+      // Verify a CustomHold was created with the schedule's slotDurationMinutes
       final holds = ArtistDashboardRepository.customHolds;
       expect(holds.any((h) => h.requestId == testRequest.id), isTrue);
       final hold = holds.firstWhere((h) => h.requestId == testRequest.id);
       expect(hold.clientName, 'Jordan K.');
+      expect(hold.durationMinutes, 240);
       expect(hold.isExpired, isFalse);
     });
 

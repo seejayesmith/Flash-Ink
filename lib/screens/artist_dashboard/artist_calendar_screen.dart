@@ -5,7 +5,9 @@ import '../../models/artist.dart';
 import '../../models/artist_dashboard_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/booking_sync_service.dart';
+import '../../theme/app_radius.dart';
 import '../../theme/app_spacing.dart';
+import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/tattoo_machine_icon.dart';
@@ -25,6 +27,7 @@ class ArtistCalendarScreen extends StatefulWidget {
   final bool isEmbeddedInTab;
   final VoidCallback? onBack;
   final DateTime? initialDate;
+  final VoidCallback? onNavigateToDashboard;
 
   const ArtistCalendarScreen({
     super.key,
@@ -33,6 +36,7 @@ class ArtistCalendarScreen extends StatefulWidget {
     this.isEmbeddedInTab = false,
     this.onBack,
     this.initialDate,
+    this.onNavigateToDashboard,
   });
 
   @override
@@ -233,9 +237,8 @@ class _ArtistCalendarScreenState extends State<ArtistCalendarScreen> {
             )
           : null,
       logoKey: const Key('calendar_tattoo_machine_logo'),
-      onLogoTap: () {
-        if (canGoBack) Navigator.pop(context);
-      },
+      onLogoTap: widget.onNavigateToDashboard ??
+          (canGoBack ? () => Navigator.pop(context) : null),
       messagesKey: const Key('calendar_messages_button'),
       avatarKey: const Key('calendar_artist_avatar_button'),
       onMessagesTap: () {
@@ -1989,21 +1992,13 @@ class _ManageTimeOffSheetState extends State<_ManageTimeOffSheet> {
     final openedCount = schedule.openOverrideDates.length;
     final hasSelection = _selectedKeys.isNotEmpty;
 
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF191B1B),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: EdgeInsets.fromLTRB(
-        20,
-        16,
-        20,
-        20 + MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          child: Column(
+    return AdaptiveGlassContainer.bottomSheet(
+      glassEnabled: true,
+      androidSurfaceColor: const Color(0xFF191B1B),
+      topRadius: AppRadius.radiusSheet,
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      child: SingleChildScrollView(
+        child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2307,7 +2302,6 @@ class _ManageTimeOffSheetState extends State<_ManageTimeOffSheet> {
             ],
           ),
         ),
-      ),
     );
   }
 }

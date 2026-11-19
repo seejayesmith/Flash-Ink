@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/mock/mock_data_config.dart';
+import '../../core/utils/calendar_event_launcher.dart';
 import '../client_account_screen.dart';
 import '../../features/messages/domain/models/message_thread.dart';
 import '../../models/artist.dart';
@@ -51,6 +52,15 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
   ArtistBooksSchedule? _remoteArtistSchedule;
   ArtistBooksSchedule get _effectiveSchedule =>
       _remoteArtistSchedule ?? ArtistDashboardRepository.booksSchedule;
+
+  String get _effectiveArtistId {
+    final fromArtist = widget.artist?.id.trim() ?? '';
+    if (fromArtist.isNotEmpty) return fromArtist;
+    return widget.flash.artistId.trim();
+  }
+
+  bool _addedToCalendar = false;
+  bool _isAddingToCalendar = false;
 
   // Step 1 State: Date & Time
   late DateTime _currentMonth;
@@ -152,7 +162,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
   void _syncDefaultSelectionForSchedule({DateTime? now}) {
     final effectiveNow = now ?? DateTime.now();
     final schedule = _effectiveSchedule;
-    final artistId = widget.artist?.id;
+    final artistId = _effectiveArtistId.isNotEmpty ? _effectiveArtistId : null;
 
     DateTime candidate = DateTime(
       effectiveNow.year,
@@ -208,7 +218,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
   }
 
   Future<void> _loadRemoteArtistSchedule() async {
-    final artistId = widget.artist?.id.trim() ?? '';
+    final artistId = _effectiveArtistId;
     if (artistId.isEmpty) return;
     if (MockDataConfig.isEnabled && widget.firestore == null) return;
 
@@ -391,13 +401,40 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       _isProcessingPayment = true;
     });
 
+    if (_effectiveArtistId.isNotEmpty &&
+        (!MockDataConfig.isEnabled || widget.firestore != null)) {
+      final check = await BookingSyncService.verifySlotAvailableInCloud(
+        artistId: _effectiveArtistId,
+        date: _selectedDate,
+        timeSlot: _selectedTimeSlot,
+        firestore: widget.firestore,
+      );
+      if (!mounted) return;
+      if (!check.available) {
+        setState(() {
+          _isProcessingPayment = false;
+          if (check.schedule != null) {
+            _remoteArtistSchedule = check.schedule;
+          }
+          _syncDefaultSelectionForSchedule();
+          _currentStep = 0;
+        });
+        FlashSnackBar.showError(
+          context,
+          'That time slot was just booked. Please select another available time.',
+        );
+        return;
+      }
+    }
+
     final stripeService = StripeService();
     final paymentResult = await stripeService.presentDepositPaymentSheet(
       amountInDollars: widget.flash.deposit.toDouble(),
       flashTitle: widget.flash.title,
       customerEmail: _emailController.text.trim(),
       customerName: _nameController.text.trim(),
-      artistStripeAccountId: widget.artist?.id,
+      artistStripeAccountId:
+          _effectiveArtistId.isNotEmpty ? _effectiveArtistId : null,
       bookingId: _confirmationCode,
       selectedDate: _selectedDate.toIso8601String(),
       selectedTimeSlot: _selectedTimeSlot,
@@ -419,11 +456,9 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       } catch (_) {
         clientId = BookingSyncService.resolveCurrentUid();
       }
-      final artistId = (widget.artist?.id != null && widget.artist!.id.trim().isNotEmpty)
-          ? widget.artist!.id.trim()
-          : (widget.flash.artistId.trim().isNotEmpty
-              ? widget.flash.artistId.trim()
-              : 'artist_unknown');
+      final artistId = _effectiveArtistId.isNotEmpty
+          ? _effectiveArtistId
+          : 'artist_unknown';
 
       final clientAvatar = _clientAvatarUrl.isNotEmpty
           ? _clientAvatarUrl
@@ -470,6 +505,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         clientNotes: booking.clientNotes,
         isSilentAppointment: booking.isSilentAppointment,
         status: 'pending',
+        firestore: widget.firestore,
       );
 
       // 2. Synchronize to Artist Calendar schedule
@@ -493,6 +529,24 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         dotColor: const Color(0xFF22C55E),
       );
       ArtistDashboardRepository.addCalendarAppointment(calendarApt);
+      if (widget.firestore != null) {
+        BookingSyncService.syncAppointmentToCloud(
+          calendarApt,
+          clientId: clientId,
+          artistId: artistId,
+          status: 'confirmed',
+          firestore: widget.firestore,
+        );
+      }
+      if (_remoteArtistSchedule != null) {
+        final newEntry = ScheduleSlotEntry(
+          dateKey: ArtistBooksSchedule.dateKey(booking.selectedDate),
+          timeSlot: booking.selectedTimeSlot,
+        );
+        _remoteArtistSchedule = _remoteArtistSchedule!.copyWith(
+          bookedSlots: [..._remoteArtistSchedule!.bookedSlots, newEntry],
+        );
+      }
 
       // 3. Synchronize to Client Upcoming Appointments list
       final clientApt = ClientAppointment(
@@ -521,6 +575,12 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       // 4. Synchronize confirmed flash booking receipt thread to Messages inbox
       final receiptText =
           'Flash piece "${widget.flash.title}" claimed for ${_formatDate(booking.selectedDate)} at ${booking.selectedTimeSlot}. Deposit of \$${booking.depositAmount} received.';
+      final appointmentStartDateTime =
+          ArtistBooksSchedule.parseSlotDateTime(
+                booking.selectedDate,
+                booking.selectedTimeSlot,
+              ) ??
+              booking.selectedDate;
       final receiptThread = MessageThread(
         id: 'thread_booking_${booking.id}',
         artistId: artistId,
@@ -545,7 +605,16 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
             isFromArtist: false,
             type: ChatMessageType.receipt,
             receiptAmount: booking.depositAmount.toDouble(),
-            appointmentDate: booking.selectedDate,
+            appointmentDate: appointmentStartDateTime,
+            appointmentTimeSlot: booking.selectedTimeSlot,
+            appointmentDurationMinutes:
+                ArtistDashboardRepository.parseDurationMinutes(
+              widget.flash.estimatedTime,
+            ),
+            artistName: _artistName,
+            studioLocation: _artistLocation,
+            flashTitle: widget.flash.title,
+            placement: booking.placement,
             flashImageUrl: widget.flash.imageUrl,
           ),
         ],
@@ -949,12 +1018,14 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
                     }
 
                     final cellDate = DateTime(_currentMonth.year, _currentMonth.month, dayNum);
+                    final artistId =
+                        _effectiveArtistId.isNotEmpty ? _effectiveArtistId : null;
                     final isPast = cellDate.isBefore(today);
                     final isBookableDate = !isPast &&
                         ArtistDashboardRepository.isDateBookable(
                           date: cellDate,
                           schedule: _effectiveSchedule,
-                          artistId: widget.artist?.id,
+                          artistId: artistId,
                         );
                     final isDisabled = !isBookableDate;
                     final isSelected = cellDate.year == _selectedDate.year &&
@@ -974,14 +1045,14 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
                                       date: cellDate,
                                       timeSlot: _selectedTimeSlot,
                                       schedule: _effectiveSchedule,
-                                      artistId: widget.artist?.id,
+                                      artistId: artistId,
                                     )) {
                                   final firstOpen = slots.firstWhere(
                                     (s) => ArtistDashboardRepository.isSlotBookable(
                                       date: cellDate,
                                       timeSlot: s.time,
                                       schedule: _effectiveSchedule,
-                                      artistId: widget.artist?.id,
+                                      artistId: artistId,
                                     ),
                                     orElse: () => slots.first,
                                   );
@@ -1043,6 +1114,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     }
 
     final now = DateTime.now();
+    final artistId = _effectiveArtistId.isNotEmpty ? _effectiveArtistId : null;
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -1051,7 +1123,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           date: _selectedDate,
           timeSlot: slot.time,
           schedule: schedule,
-          artistId: widget.artist?.id,
+          artistId: artistId,
         );
         final isHeld = !isBooked &&
             ArtistDashboardRepository.hasActiveHoldForSlot(
@@ -1064,7 +1136,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           date: _selectedDate,
           timeSlot: slot.time,
           schedule: schedule,
-          artistId: widget.artist?.id,
+          artistId: artistId,
           now: now,
         );
         final isDisabled = isBooked || isHeld || !isAvailable;
@@ -1690,6 +1762,34 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     );
   }
 
+  Future<void> _handleAddToCalendar() async {
+    if (_isAddingToCalendar) return;
+    setState(() => _isAddingToCalendar = true);
+
+    final event = CalendarEventLauncher.buildTattooAppointmentEvent(
+      date: _selectedDate,
+      timeSlot: _selectedTimeSlot,
+      durationLabel: widget.flash.estimatedTime,
+      flashTitle: widget.flash.title,
+      artistName: _artistName,
+      studioName: widget.artist?.studioType,
+      studioAddress: _artistLocation,
+      placement: _selectedPlacement,
+      depositAmount: widget.flash.deposit,
+      totalPrice: widget.flash.price,
+      notes: _notesController.text.trim(),
+    );
+
+    final added = await CalendarEventLauncher.addEventToCalendar(context, event);
+    if (!mounted) return;
+    setState(() {
+      _isAddingToCalendar = false;
+      if (added) {
+        _addedToCalendar = true;
+      }
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // STEP 4: CONFIRMATION & PREP GUIDE
   // ---------------------------------------------------------------------------
@@ -1820,27 +1920,50 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
 
         // Add to calendar action button
         OutlinedButton.icon(
-          onPressed: () {
-            FlashSnackBar.showSuccess(
-              context,
-              'Appointment saved to your device calendar!',
-              duration: const Duration(seconds: 2),
-            );
-          },
-          icon: const Icon(Icons.calendar_month, color: Color(0xFFEEC200), size: 18),
+          key: const Key('confirmation_add_to_calendar_button'),
+          onPressed: _isAddingToCalendar ? null : _handleAddToCalendar,
+          icon: _isAddingToCalendar
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFFEEC200),
+                  ),
+                )
+              : Icon(
+                  _addedToCalendar
+                      ? Icons.check_circle_rounded
+                      : Icons.calendar_month,
+                  color: _addedToCalendar
+                      ? const Color(0xFF4ADE80)
+                      : const Color(0xFFEEC200),
+                  size: 18,
+                ),
           label: Text(
-            'Add to Calendar',
+            _addedToCalendar ? 'Added to Calendar' : 'Add to Calendar',
             style: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFFEEC200),
+              color: _addedToCalendar
+                  ? const Color(0xFF4ADE80)
+                  : const Color(0xFFEEC200),
               fontSize: 13,
               fontWeight: FontWeight.bold,
               letterSpacing: 0.8,
             ),
           ),
           style: OutlinedButton.styleFrom(
-            side: const BorderSide(color: Color(0xFFEEC200)),
+            backgroundColor: _addedToCalendar
+                ? const Color(0x1F4ADE80)
+                : Colors.transparent,
+            side: BorderSide(
+              color: _addedToCalendar
+                  ? const Color(0xFF4ADE80)
+                  : const Color(0xFFEEC200),
+            ),
             minimumSize: const Size.fromHeight(44),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.radiusMd)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.radiusMd),
+            ),
           ),
         ),
         const SizedBox(height: 20),

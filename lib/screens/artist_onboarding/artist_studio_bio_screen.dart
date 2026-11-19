@@ -283,6 +283,30 @@ class _ArtistStudioBioScreenState extends State<ArtistStudioBioScreen> {
     );
   }
 
+  void _skipStudioBio() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final bio = _bioController.text.trim();
+    final StudioInformation? studio = (_selectedStudio != null && !_isManualEntry)
+        ? _selectedStudio!.copyWith(
+            isPrivateStudio: _isPrivateStudio,
+            studioType: _selectedStudioType,
+          )
+        : null;
+    Navigator.of(context).push(
+      FadePageRoute(
+        builder: (_) => ArtistPoliciesScreen(
+          artistName: widget.artistName,
+          photoBytes: widget.photoBytes,
+          photoUrl: widget.photoUrl,
+          instagramHandle: widget.instagramHandle,
+          authService: widget.authService,
+          studioInformation: studio,
+          artistBio: bio.isNotEmpty ? bio : null,
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _debounceTimer?.cancel();
@@ -309,6 +333,9 @@ class _ArtistStudioBioScreenState extends State<ArtistStudioBioScreen> {
       ctaText: 'Continue',
       isCtaEnabled: _isContinueEnabled,
       onCtaPressed: _handleContinue,
+      onSkip: _skipStudioBio,
+      skipKey: const Key('skip_studio_bio_button'),
+      skipText: 'Skip',
       onBack: () {
         FocusManager.instance.primaryFocus?.unfocus();
         Navigator.of(context).pop();

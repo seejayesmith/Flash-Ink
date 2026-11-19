@@ -652,6 +652,27 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
     );
   }
 
+  void _skipPolicies() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final activePolicies = _policies.where((p) => p.isEnabled).toList();
+    Navigator.of(context).push(
+      FadePageRoute(
+        builder: (_) => ArtistSetPriceScreen(
+          artistName: widget.artistName,
+          photoBytes: widget.photoBytes,
+          photoUrl: widget.photoUrl,
+          instagramHandle: widget.instagramHandle ?? '',
+          authService: widget.authService,
+          studioInformation: widget.studioInformation,
+          artistBio: widget.artistBio,
+          policies: activePolicies.isNotEmpty
+              ? activePolicies
+              : _defaultStandardPolicies,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return OnboardingStepScaffold(
@@ -662,6 +683,9 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
       ctaText: 'Continue',
       isCtaEnabled: _hasActivePolicy,
       onCtaPressed: _handleContinue,
+      onSkip: _skipPolicies,
+      skipKey: const Key('skip_policies_button'),
+      skipText: 'Skip',
       onBack: () {
         FocusManager.instance.primaryFocus?.unfocus();
         Navigator.of(context).pop();

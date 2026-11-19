@@ -120,6 +120,13 @@ class StripeService {
         final data = result.data;
         effectiveClientSecret = data['clientSecret']?.toString();
         intentId = data['id']?.toString();
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'already-exists' || e.code == 'failed-precondition') {
+          return StripePaymentResponse(
+            status: StripePaymentStatus.failed,
+            errorMessage: e.message ?? 'This time slot is no longer available.',
+          );
+        }
       } catch (_) {
         // Cloud Function call unavailable or not yet deployed; try optional local backend URL
       }

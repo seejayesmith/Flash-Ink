@@ -96,10 +96,12 @@ class _ArtistPhoneVerificationScreenState extends State<ArtistPhoneVerificationS
     final pendingEmail = widget.backupEmail?.trim() ?? '';
     if (pendingEmail.isNotEmpty) {
       try {
-        await _authService.sendBackupEmailVerification(
-          pendingEmail,
-          isArtist: true,
-        );
+        await _authService
+            .sendBackupEmailVerification(
+              pendingEmail,
+              isArtist: true,
+            )
+            .timeout(const Duration(seconds: 4));
       } catch (_) {}
       if (!mounted) return;
       FocusManager.instance.primaryFocus?.unfocus();

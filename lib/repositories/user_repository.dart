@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/utils/distance_calculator.dart';
 import '../models/user.dart';
+import '../services/username_service.dart';
 
 /// Live Firestore repository for Client and Artist user profiles (`/users/{uid}`).
 ///
@@ -115,6 +116,16 @@ class UserRepository {
 
     final docRef = db.collection('users').doc(uid);
     final existing = await docRef.get();
+    final existingUsername = (existing.data()?['username'] ?? '').toString();
+
+    String? resolvedUsername = username;
+    if (resolvedUsername != null && resolvedUsername.trim().isNotEmpty) {
+      resolvedUsername = await UsernameService(firestore: db).claimUsername(
+        uid: uid,
+        rawUsername: resolvedUsername,
+        previousUsername: existingUsername,
+      );
+    }
 
     final payload = <String, dynamic>{
       'uid': uid,
@@ -122,7 +133,7 @@ class UserRepository {
       if (!existing.exists) 'createdAt': FieldValue.serverTimestamp(),
       'email': ?email,
       'displayName': ?displayName,
-      'username': ?username,
+      'username': ?resolvedUsername,
       'photoUrl': ?photoUrl,
       'photoURL': ?photoUrl,
       'aesthetics': ?aesthetics,
@@ -163,6 +174,21 @@ class UserRepository {
 
     final docRef = db.collection('users').doc(uid);
     final existing = await docRef.get();
+    final existingUsername = (existing.data()?['username'] ?? '').toString();
+
+    if (sanitized.containsKey('username')) {
+      final rawUsername = (sanitized['username'] ?? '').toString().trim();
+      if (rawUsername.isNotEmpty) {
+        final claimedUsername =
+            await UsernameService(firestore: db).claimUsername(
+          uid: uid,
+          rawUsername: rawUsername,
+          previousUsername: existingUsername,
+        );
+        sanitized['username'] = claimedUsername;
+      }
+    }
+
     if (existing.exists) {
       // 'role' is immutable on update in firestore.rules.
       sanitized.remove('role');

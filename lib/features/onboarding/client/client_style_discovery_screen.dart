@@ -11,7 +11,7 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/adaptive_glass_container.dart';
 import '../../../widgets/fade_page_route.dart';
 import '../shared/onboarding_step_scaffold.dart';
-import 'client_location_screen.dart';
+import 'client_notifications_screen.dart';
 
 /// Client Onboarding Step 1: Style Discovery Tags
 class ClientStyleDiscoveryScreen extends StatefulWidget {
@@ -102,7 +102,7 @@ class _ClientStyleDiscoveryScreenState extends State<ClientStyleDiscoveryScreen>
         Navigator.push(
           context,
           FadePageRoute(
-            builder: (_) => ClientLocationScreen(
+            builder: (_) => ClientNotificationsScreen(
               authService: _authService,
               selectedStyles: chosen,
             ),
@@ -115,8 +115,8 @@ class _ClientStyleDiscoveryScreenState extends State<ClientStyleDiscoveryScreen>
   @override
   Widget build(BuildContext context) {
     return OnboardingStepScaffold(
-      currentStep: 1,
-      totalSteps: 3,
+      currentStep: 3,
+      totalSteps: 4,
       title: 'Discover your style',
       subtitle: 'Pick the styles you love. We\'ll tailor your feed and artist recommendations.',
       ctaText: 'Continue',

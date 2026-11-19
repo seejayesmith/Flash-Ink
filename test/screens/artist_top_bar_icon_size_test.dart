@@ -9,9 +9,12 @@ import 'package:flash_ink/core/mock/mock_data_config.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_dashboard_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_books_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_calendar_screen.dart';
+import 'package:flash_ink/screens/artist_dashboard/artist_collections_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_earnings_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
-import 'package:flash_ink/widgets/tattoo_machine_icon.dart';
+import 'package:flash_ink/widgets/artist_top_bar.dart';
+import 'package:flash_ink/widgets/flash_mark_icon.dart';
+import 'package:flash_ink/widgets/user_avatar.dart';
 
 class MockUser extends Fake implements User {
   @override
@@ -29,6 +32,28 @@ class FakeAuthService extends AuthService {
   User? get currentUser => _user;
 }
 
+FlashMarkIcon _findFlashMarkByKey(
+  WidgetTester tester,
+  Key key, {
+  Finder? scope,
+}) {
+  final keyFinder = (scope != null
+          ? find.descendant(of: scope, matching: find.byKey(key))
+          : find.byKey(key))
+      .hitTestable();
+  expect(keyFinder, findsOneWidget);
+  final widget = tester.widget(keyFinder);
+  if (widget is FlashMarkIcon) {
+    return widget;
+  }
+  final descendant = find.descendant(
+    of: keyFinder,
+    matching: find.byType(FlashMarkIcon),
+  );
+  expect(descendant, findsOneWidget);
+  return tester.widget<FlashMarkIcon>(descendant);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setupFirebaseCoreMocks();
@@ -37,7 +62,7 @@ void main() {
     await Firebase.initializeApp();
   });
 
-  group('Artist Top Left TattooMachineIcon Size Tests', () {
+  group('Artist Top Left FlashMarkIcon Size & Navigation Tests', () {
     setUp(() {
       MockDataConfig.debugOverride = true;
     });
@@ -46,7 +71,9 @@ void main() {
       MockDataConfig.resetDebugOverride();
     });
 
-    testWidgets('ArtistDashboardScreen tab 0 has TattooMachineIcon with size 43', (tester) async {
+    testWidgets(
+        'ArtistDashboardScreen tab 0 has FlashMarkIcon matching avatar height and shifted right',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: ArtistDashboardScreen(
@@ -56,13 +83,32 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final iconFinder = find.byKey(const Key('tattoo_machine_logo'));
-      expect(iconFinder, findsOneWidget);
-      final TattooMachineIcon icon = tester.widget(iconFinder);
-      expect(icon.size, equals(43));
+      final icon = _findFlashMarkByKey(
+        tester,
+        const Key('tattoo_machine_logo'),
+      );
+      expect(icon.size, equals(36));
+
+      final topBarFinder = find.ancestor(
+        of: find.byKey(const Key('tattoo_machine_logo')).hitTestable(),
+        matching: find.byType(ArtistTopBar),
+      );
+      final topBarRect = tester.getRect(topBarFinder);
+      final markRect = tester.getRect(find.byType(FlashMarkIcon).hitTestable());
+      final avatarRect = tester.getRect(
+        find.descendant(
+          of: topBarFinder,
+          matching: find.byType(UserAvatar),
+        ),
+      );
+
+      expect(markRect.height, equals(avatarRect.height));
+      expect(markRect.left - topBarRect.left, equals(16.0));
     });
 
-    testWidgets('ArtistDashboardScreen messages tab has top action bar with TattooMachineIcon size 43 and avatar', (tester) async {
+    testWidgets(
+        'ArtistDashboardScreen messages screen has FlashMarkIcon size 36 and tapping it returns to dashboard tab 0',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: ArtistDashboardScreen(
@@ -72,21 +118,34 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Tap messages tab (index 2)
-      final messagesTabFinder = find.byIcon(Icons.chat_bubble_outline_rounded);
-      expect(messagesTabFinder, findsOneWidget);
-      await tester.tap(messagesTabFinder);
+      await tester.tap(find.byKey(const Key('top_action_messages_button')));
       await tester.pumpAndSettle();
 
-      final messagesLogoFinder = find.byKey(const Key('messages_tattoo_machine_logo'));
-      expect(messagesLogoFinder, findsOneWidget);
-      final TattooMachineIcon icon = tester.widget(messagesLogoFinder);
-      expect(icon.size, equals(43));
+      final icon = _findFlashMarkByKey(
+        tester,
+        const Key('messages_tattoo_machine_logo'),
+      );
+      expect(icon.size, equals(36));
+      expect(
+        find.byKey(const Key('messages_artist_avatar_button')),
+        findsOneWidget,
+      );
 
-      expect(find.byKey(const Key('messages_artist_avatar_button')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('messages_tattoo_machine_logo')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('messages_tattoo_machine_logo')),
+        findsNothing,
+      );
+      expect(
+        tester.widget<IndexedStack>(find.byType(IndexedStack)).index,
+        equals(0),
+      );
     });
 
-    testWidgets('ArtistCalendarScreen has TattooMachineIcon with size 43', (tester) async {
+    testWidgets('ArtistCalendarScreen has FlashMarkIcon with size 36',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: ArtistCalendarScreen(
@@ -97,13 +156,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final iconFinder = find.byKey(const Key('calendar_tattoo_machine_logo'));
-      expect(iconFinder, findsOneWidget);
-      final TattooMachineIcon icon = tester.widget(find.descendant(of: iconFinder, matching: find.byType(TattooMachineIcon)));
-      expect(icon.size, equals(43));
+      final icon = _findFlashMarkByKey(
+        tester,
+        const Key('calendar_tattoo_machine_logo'),
+      );
+      expect(icon.size, equals(36));
     });
 
-    testWidgets('ArtistBooksScreen has TattooMachineIcon with size 43', (tester) async {
+    testWidgets('ArtistBooksScreen has FlashMarkIcon with size 36',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -116,13 +177,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final iconFinder = find.byKey(const Key('tattoo_machine_logo'));
-      expect(iconFinder, findsOneWidget);
-      final TattooMachineIcon icon = tester.widget(iconFinder);
-      expect(icon.size, equals(43));
+      final icon = _findFlashMarkByKey(
+        tester,
+        const Key('tattoo_machine_logo'),
+      );
+      expect(icon.size, equals(36));
     });
 
-    testWidgets('ArtistEarningsScreen has TattooMachineIcon with size 43', (tester) async {
+    testWidgets('ArtistEarningsScreen has FlashMarkIcon with size 36',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: ArtistEarningsScreen(
@@ -133,10 +196,58 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final iconFinder = find.byKey(const Key('earnings_tattoo_logo'));
-      expect(iconFinder, findsOneWidget);
-      final TattooMachineIcon icon = tester.widget(iconFinder);
-      expect(icon.size, equals(43));
+      final icon = _findFlashMarkByKey(
+        tester,
+        const Key('earnings_tattoo_logo'),
+      );
+      expect(icon.size, equals(36));
+    });
+
+    testWidgets(
+        'Tapping top-left FlashMarkIcon on Calendar, Collections, Books, and Earnings tabs navigates to Dashboard tab 0',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistDashboardScreen(
+            authService: FakeAuthService(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final tabsToCheck = <(int, Key, Type)>[
+        (1, const Key('calendar_tattoo_machine_logo'), ArtistCalendarScreen),
+        (2, const Key('collections_tattoo_machine_logo'), ArtistCollectionsScreen),
+        (3, const Key('tattoo_machine_logo'), ArtistBooksScreen),
+        (4, const Key('earnings_tattoo_logo'), ArtistEarningsScreen),
+      ];
+
+      for (final (tabIndex, logoKey, screenType) in tabsToCheck) {
+        await tester.tap(find.byKey(Key('nav_item_$tabIndex')));
+        await tester.pumpAndSettle();
+
+        final stack = tester.widget<IndexedStack>(find.byType(IndexedStack));
+        expect(stack.index, equals(tabIndex));
+
+        final screenFinder = find.byType(screenType);
+        final icon = _findFlashMarkByKey(
+          tester,
+          logoKey,
+          scope: screenFinder,
+        );
+        expect(icon.size, equals(36));
+
+        final target = find.descendant(
+          of: screenFinder,
+          matching: find.byKey(logoKey),
+        );
+        await tester.tap(target);
+        await tester.pumpAndSettle();
+
+        final updatedStack =
+            tester.widget<IndexedStack>(find.byType(IndexedStack));
+        expect(updatedStack.index, equals(0));
+      }
     });
   });
 }

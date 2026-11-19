@@ -270,9 +270,9 @@ void main() {
       expect(find.byType(SegmentedProgressPills), findsOneWidget);
       expect(find.byType(ArtistStepperHeader), findsNothing);
       expect(find.text('Artist Profile'), findsOneWidget);
-      expect(find.text('Enter your artist name and contact number to get set up.'), findsOneWidget);
+      expect(find.text('Enter your artist name and an optional phone number to get set up.'), findsOneWidget);
       expect(find.text('Name or Artist Handle'), findsOneWidget);
-      expect(find.text('Phone Number'), findsOneWidget);
+      expect(find.text('Phone Number (Optional)'), findsOneWidget);
       expect(find.text('I agree to the Terms of Service and Privacy Policy.'), findsOneWidget);
       expect(find.text('Continue'), findsOneWidget);
       expect(find.byType(TattooBackgroundWrapper), findsOneWidget);
@@ -299,7 +299,7 @@ void main() {
       expect(find.text('@yourhandle'), findsOneWidget);
     });
 
-    testWidgets('ArtistInfoScreen form validation blocks submit when empty', (tester) async {
+    testWidgets('ArtistInfoScreen form validation blocks submit when handle is empty and validates optional phone when entered', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: ArtistInfoScreen(
@@ -309,16 +309,23 @@ void main() {
         ),
       );
 
-      // Clear the text field to ensure it is empty
-      await tester.enterText(find.byType(TextFormField).first, '');
+      // Clear the handle field to ensure it is empty
+      await tester.enterText(find.byKey(const Key('artist_name_handle_field')), '');
       await tester.pump();
 
-      // Tap CONTINUE without filling fields
+      // Tap CONTINUE without filling handle (optional phone left blank should NOT error)
       await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
 
       expect(find.text('Please enter your name or artist handle'), findsOneWidget);
-      expect(find.text('Please enter your phone number for SMS verification'), findsOneWidget);
+      expect(find.text('Please enter a valid 10-digit phone number'), findsNothing);
+
+      // Enter an incomplete optional phone number -> validation catches it
+      await tester.enterText(find.byKey(const Key('artist_phone_field')), '55512');
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Please enter a valid 10-digit phone number'), findsOneWidget);
     });
 
     testWidgets('ArtistInfoScreen renders top-right Skip button and navigates to ArtistProfilePhotoScreen', (tester) async {
@@ -960,5 +967,76 @@ void main() {
       expect(pills.currentStep, equals(9));
       expect(pills.totalSteps, equals(9));
     });
+  });
+
+  group('End-to-End Artist Onboarding Dev Skip Suite', () {
+    testWidgets(
+      'Skipping every single page from AccountCreationScreen(artist) through all 9 artist steps reaches ArtistDashboardScreen cleanly',
+      (tester) async {
+        AuthService.clearDevMockUser();
+        addTearDown(AuthService.clearDevMockUser);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: AccountCreationScreen(role: 'artist'),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 0. AccountCreationScreen -> ArtistInfoScreen
+        expect(find.byType(AccountCreationScreen), findsOneWidget);
+        await tester.tap(find.byKey(const Key('skip_account_creation_button')));
+        await tester.pumpAndSettle();
+        expect(find.byType(ArtistInfoScreen), findsOneWidget);
+        expect(AuthService.devMockUser, isNotNull);
+
+        // 1. ArtistInfoScreen -> ArtistProfilePhotoScreen
+        await tester.tap(find.byKey(const Key('skip_artist_info_button')));
+        await tester.pumpAndSettle();
+        expect(find.byType(ArtistProfilePhotoScreen), findsOneWidget);
+
+        // 2. ArtistProfilePhotoScreen -> ArtistStudioBioScreen
+        await tester.tap(find.byType(SkipPillButton));
+        await tester.pumpAndSettle();
+        expect(find.byType(ArtistStudioBioScreen), findsOneWidget);
+
+        // 3. ArtistStudioBioScreen -> ArtistPoliciesScreen (works even with empty studio & disabled CTA)
+        expect(find.byKey(const Key('skip_studio_bio_button')), findsOneWidget);
+        await tester.tap(find.byKey(const Key('skip_studio_bio_button')));
+        await tester.pumpAndSettle();
+        expect(find.byType(ArtistPoliciesScreen), findsOneWidget);
+
+        // 4. ArtistPoliciesScreen -> ArtistSetPriceScreen
+        expect(find.byKey(const Key('skip_policies_button')), findsOneWidget);
+        await tester.tap(find.byKey(const Key('skip_policies_button')));
+        await tester.pumpAndSettle();
+        expect(find.byType(ArtistSetPriceScreen), findsOneWidget);
+
+        // 5. ArtistSetPriceScreen -> ArtistFlashUploadScreen
+        await tester.tap(find.byKey(const Key('skip_price_button')));
+        await tester.pumpAndSettle();
+        expect(find.byType(ArtistFlashUploadScreen), findsOneWidget);
+
+        // 6. ArtistFlashUploadScreen -> ArtistIdentityTagsScreen
+        await tester.tap(find.byKey(const Key('skip_flash_button')));
+        await tester.pumpAndSettle();
+        expect(find.byType(ArtistIdentityTagsScreen), findsOneWidget);
+
+        // 7. ArtistIdentityTagsScreen -> ArtistChooseStyleScreen
+        await tester.tap(find.byKey(const Key('skip_identity_tags_button')));
+        await tester.pumpAndSettle();
+        expect(find.byType(ArtistChooseStyleScreen), findsOneWidget);
+
+        // 8. ArtistChooseStyleScreen -> ArtistShareLinkScreen
+        await tester.tap(find.byKey(const Key('skip_styles_button')));
+        await tester.pumpAndSettle();
+        expect(find.byType(ArtistShareLinkScreen), findsOneWidget);
+
+        // 9. ArtistShareLinkScreen -> ArtistDashboardScreen (immediate with DevMockUser)
+        await tester.tap(find.byKey(const Key('skip_share_link_button')));
+        await tester.pumpAndSettle();
+        expect(find.byType(ArtistDashboardScreen), findsOneWidget);
+      },
+    );
   });
 }

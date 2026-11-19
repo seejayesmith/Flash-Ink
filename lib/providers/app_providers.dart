@@ -13,6 +13,7 @@ import '../repositories/artist_repository.dart';
 import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
 import '../services/location_service.dart';
+import '../services/username_service.dart';
 
 /// Controls whether quarantined mock fixtures are injected (strictly `false` by default).
 final mockModeProvider = Provider<bool>((ref) {
@@ -75,6 +76,12 @@ final userRepositoryProvider = Provider<UserRepository>((ref) {
 final artistRepositoryProvider = Provider<ArtistRepository>((ref) {
   final firestore = ref.watch(firebaseFirestoreProvider);
   return ArtistRepository(firestore: firestore);
+});
+
+/// Live [UsernameService] bound to [firebaseFirestoreProvider].
+final usernameServiceProvider = Provider<UsernameService>((ref) {
+  final firestore = ref.watch(firebaseFirestoreProvider);
+  return UsernameService(firestore: firestore);
 });
 
 /// Real-time `/users/{uid}` profile stream for the active authenticated user.

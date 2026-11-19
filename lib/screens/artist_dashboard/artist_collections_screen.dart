@@ -40,6 +40,7 @@ class ArtistCollectionsScreen extends StatefulWidget {
   final FirebaseStorage? storage;
   final bool isEmbeddedInTab;
   final VoidCallback? onNavigateToAccount;
+  final VoidCallback? onNavigateToDashboard;
 
   const ArtistCollectionsScreen({
     super.key,
@@ -49,6 +50,7 @@ class ArtistCollectionsScreen extends StatefulWidget {
     this.storage,
     this.isEmbeddedInTab = true,
     this.onNavigateToAccount,
+    this.onNavigateToDashboard,
   });
 
   @override
@@ -330,7 +332,7 @@ class _ArtistCollectionsScreenState extends State<ArtistCollectionsScreen> {
         final isClaimed = artwork.status == FlashStatus.claimed;
 
         return AdaptiveGlassContainer.bottomSheet(
-          glassEnabled: false,
+          glassEnabled: true,
           androidSurfaceColor: const Color(0xFF1E2121),
           topRadius: AppRadius.radiusSheet,
           child: SafeArea(
@@ -536,6 +538,7 @@ class _ArtistCollectionsScreenState extends State<ArtistCollectionsScreen> {
 
     return ArtistTopBar(
       logoKey: const Key('collections_tattoo_machine_logo'),
+      onLogoTap: widget.onNavigateToDashboard,
       messagesKey: const Key('top_action_messages_button'),
       avatarKey: const Key('collections_artist_avatar_button'),
       onMessagesTap: _navigateToMessages,

@@ -288,6 +288,11 @@ class SegmentedProgressPills extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isCompact = totalSteps > 5;
+    final double activeWidth = isCompact ? 20.0 : 32.0;
+    final double inactiveWidth = isCompact ? 10.0 : 20.0;
+    final double segmentGap = isCompact ? 4.0 : 6.0;
+
     return Row(
       key: const Key('onboarding_progress_bar'),
       mainAxisSize: MainAxisSize.min,
@@ -300,8 +305,8 @@ class SegmentedProgressPills extends StatelessWidget {
           key: Key('onboarding_step_indicator_$stepNumber'),
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeInOut,
-          margin: EdgeInsets.only(right: index < totalSteps - 1 ? 6.0 : 0.0),
-          width: isCurrent ? 32.0 : 20.0,
+          margin: EdgeInsets.only(right: index < totalSteps - 1 ? segmentGap : 0.0),
+          width: isCurrent ? activeWidth : inactiveWidth,
           height: 4.0,
           decoration: BoxDecoration(
             color: isActive ? AppTheme.gold : const Color(0xFF2E3232),

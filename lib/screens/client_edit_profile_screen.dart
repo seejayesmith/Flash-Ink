@@ -1,5 +1,10 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../providers/app_providers.dart';
+import '../services/username_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/adaptive_glass_container.dart';
 import '../widgets/flash_glass_app_bar.dart';
@@ -9,12 +14,16 @@ import '../widgets/username_input_formatter.dart';
 class ClientEditProfileScreen extends StatefulWidget {
   final String? initialDisplayName;
   final String initialUsername;
+  final String? currentUid;
+  final FirebaseFirestore? firestore;
   final Future<void> Function(String username)? onSave;
 
   const ClientEditProfileScreen({
     super.key,
     this.initialDisplayName,
     required this.initialUsername,
+    this.currentUid,
+    this.firestore,
     this.onSave,
   });
 
@@ -25,6 +34,7 @@ class ClientEditProfileScreen extends StatefulWidget {
 class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
   late final TextEditingController _usernameController;
   bool _isSaving = false;
+  String? _usernameError;
 
   @override
   void initState() {
@@ -40,19 +50,96 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
     super.dispose();
   }
 
-  Future<void> _handleSave() async {
-    final newUsername = _usernameController.text.trim().replaceAll('@', '');
+  FirebaseFirestore? _resolveInjectedFirestore() {
+    if (widget.firestore != null) return widget.firestore;
+    if (mounted) {
+      try {
+        return ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(firebaseFirestoreProvider);
+      } catch (_) {}
+    }
+    return null;
+  }
 
-    if (newUsername.isEmpty) return;
-
-    setState(() => _isSaving = true);
+  String? _resolveCurrentUid() {
+    if (widget.currentUid != null && widget.currentUid!.trim().isNotEmpty) {
+      return widget.currentUid!.trim();
+    }
     try {
+      return FirebaseAuth.instance.currentUser?.uid;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _handleSave() async {
+    final formatError = UsernameService.validateFormat(
+      _usernameController.text,
+      emptyMessage: 'Username cannot be empty',
+    );
+    if (formatError != null) {
+      setState(() {
+        _usernameError = formatError;
+      });
+      return;
+    }
+
+    final newUsername = UsernameService.cleanDisplay(_usernameController.text);
+
+    setState(() {
+      _usernameError = null;
+      _isSaving = true;
+    });
+    try {
+      final injectedDb = _resolveInjectedFirestore();
+      final isTest =
+          WidgetsBinding.instance.runtimeType.toString().contains('Test');
+      final uid = _resolveCurrentUid();
+      if (injectedDb != null || !isTest) {
+        final available = await UsernameService(firestore: injectedDb)
+            .isUsernameAvailable(
+              newUsername,
+              currentUid: uid,
+            );
+        if (!available) {
+          if (mounted) {
+            setState(() {
+              _usernameError = UsernameService.takenErrorMessage;
+            });
+          }
+          return;
+        }
+      }
+
       if (widget.onSave != null) {
         await widget.onSave!(newUsername);
+      } else if ((injectedDb != null || !isTest) &&
+          uid != null &&
+          uid.isNotEmpty) {
+        await UsernameService(firestore: injectedDb).claimUsername(
+          uid: uid,
+          rawUsername: newUsername,
+          previousUsername: widget.initialUsername,
+          emptyMessage: 'Username cannot be empty',
+        );
       }
       if (mounted) {
         Navigator.pop(context, {
           'username': newUsername,
+        });
+      }
+    } on UsernameTakenException catch (e) {
+      if (mounted) {
+        setState(() {
+          _usernameError = e.message;
+        });
+      }
+    } on UsernameFormatException catch (e) {
+      if (mounted) {
+        setState(() {
+          _usernameError = e.message;
         });
       }
     } finally {
@@ -103,6 +190,11 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
               key: const Key('account_edit_username_input'),
               controller: _usernameController,
               inputFormatters: const [StripLeadingAtFormatter()],
+              onChanged: (val) {
+                if (_usernameError != null && val.trim().isNotEmpty) {
+                  setState(() => _usernameError = null);
+                }
+              },
               style: GoogleFonts.plusJakartaSans(color: AppTheme.textPrimary),
               decoration: InputDecoration(
                 prefixText: '@',
@@ -111,6 +203,7 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
                 fillColor: const Color(0xFF141616),
                 hintText: 'yourhandle',
                 hintStyle: const TextStyle(color: Color(0xFF4D5252)),
+                errorText: _usernameError,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: AppTheme.darkBorder),

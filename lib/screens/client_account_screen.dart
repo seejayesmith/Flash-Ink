@@ -10,6 +10,7 @@ import '../providers/app_providers.dart';
 import '../repositories/artist_repository.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
+import '../services/username_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/flash_snack_bar.dart';
@@ -98,18 +99,21 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
     } catch (_) {}
   }
 
-  FirebaseFirestore _resolveFirestore() {
+  FirebaseFirestore? _resolveInjectedFirestore() {
     if (widget.firestore != null) return widget.firestore!;
     if (mounted) {
       try {
-        final injected = ProviderScope.containerOf(
+        return ProviderScope.containerOf(
           context,
           listen: false,
         ).read(firebaseFirestoreProvider);
-        if (injected != null) return injected;
       } catch (_) {}
     }
-    return FirebaseFirestore.instance;
+    return null;
+  }
+
+  FirebaseFirestore _resolveFirestore() {
+    return _resolveInjectedFirestore() ?? FirebaseFirestore.instance;
   }
 
   Future<void> _updateNotificationPreference(String key, bool value) async {
@@ -461,9 +465,12 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
         'uid': uid,
         ...data,
       };
+      final injectedDb = _resolveInjectedFirestore();
       final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
-      final timeoutDuration = isTest ? const Duration(milliseconds: 500) : const Duration(seconds: 10);
-      await FirebaseFirestore.instance
+      final timeoutDuration = (!isTest || injectedDb != null)
+          ? const Duration(seconds: 10)
+          : const Duration(milliseconds: 500);
+      await _resolveFirestore()
           .collection('users')
           .doc(uid)
           .set(payload, SetOptions(merge: true))
@@ -673,19 +680,47 @@ class _ClientAccountScreenState extends State<ClientAccountScreen> {
   }
 
   Future<void> _showEditProfileDialog() async {
+    final injectedDb = _resolveInjectedFirestore();
+    final currentUser = _authService.currentUser;
+    final previousUsername = _username;
     final result = await Navigator.push<Map<String, String>>(
       context,
       MaterialPageRoute(
         builder: (_) => ClientEditProfileScreen(
           initialUsername: _username,
+          currentUid: currentUser?.uid,
+          firestore: injectedDb,
           onSave: (newUsername) async {
-            setState(() {
-              _username = newUsername;
-            });
             final user = _authService.currentUser;
             if (user != null) {
+              final isTest =
+                  WidgetsBinding.instance.runtimeType.toString().contains('Test');
+              if (injectedDb != null || !isTest) {
+                await UsernameService(firestore: injectedDb).claimUsername(
+                  uid: user.uid,
+                  rawUsername: newUsername,
+                  previousUsername: previousUsername,
+                  emptyMessage: 'Username cannot be empty',
+                );
+              }
               await _updateFirestoreUser(user.uid, {
                 'username': newUsername,
+              });
+              if (_hasArtistProfile) {
+                try {
+                  await _resolveFirestore()
+                      .collection('artists')
+                      .doc(user.uid)
+                      .set({
+                    'username': newUsername,
+                    'instagramHandle': '@$newUsername',
+                  }, SetOptions(merge: true));
+                } catch (_) {}
+              }
+            }
+            if (mounted) {
+              setState(() {
+                _username = newUsername;
               });
             }
           },

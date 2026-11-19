@@ -107,6 +107,12 @@ void main() {
       expect(find.text('Accepting New Appointments'), findsOneWidget);
       expect(find.byKey(const Key('books_status_switch')), findsOneWidget);
 
+      // Hierarchy group headers
+      expect(find.byKey(const Key('always_open_defaults_header')), findsOneWidget);
+      expect(find.text('ALWAYS OPEN DEFAULTS'), findsOneWidget);
+      expect(find.byKey(const Key('global_studio_rules_header')), findsOneWidget);
+      expect(find.text('GLOBAL STUDIO RULES'), findsOneWidget);
+
       // Booking window
       expect(find.text('BOOKING WINDOW'), findsOneWidget);
       expect(find.byKey(const Key('booking_window_picker_button')), findsOneWidget);
@@ -121,6 +127,8 @@ void main() {
 
       // Hours & slot sizing
       expect(find.text('HOURS & SLOT SIZING'), findsOneWidget);
+      expect(find.byKey(const Key('hours_all_modes_badge')), findsOneWidget);
+      expect(find.text('All Modes'), findsOneWidget);
       expect(find.byKey(const Key('books_start_time_button')), findsOneWidget);
       expect(find.byKey(const Key('books_end_time_button')), findsOneWidget);
       expect(find.text('DEFAULT SLOT DURATION'), findsOneWidget);

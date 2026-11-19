@@ -35,6 +35,7 @@ class ArtistBooksScreen extends StatefulWidget {
   final bool isEmbeddedInTab;
   final VoidCallback? onBack;
   final VoidCallback? onNavigateToCalendar;
+  final VoidCallback? onNavigateToDashboard;
 
   const ArtistBooksScreen({
     super.key,
@@ -43,6 +44,7 @@ class ArtistBooksScreen extends StatefulWidget {
     this.isEmbeddedInTab = false,
     this.onBack,
     this.onNavigateToCalendar,
+    this.onNavigateToDashboard,
   });
 
   @override
@@ -321,21 +323,35 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
             _buildHeaderTitleRow(),
             const SizedBox(height: 20),
             _buildStatusHeroCard(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 18),
+            _buildSectionGroupHeader(
+              key: const Key('always_open_defaults_header'),
+              title: 'ALWAYS OPEN DEFAULTS',
+              subtitle:
+                  'Bookable date range, recurring weekdays & limits (also Drop templates)',
+            ),
+            const SizedBox(height: 8),
             _buildBookingWindowCard(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 14),
             _buildWorkingDaysCard(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 14),
             _buildAvailabilityRulesCard(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 18),
+            _buildSectionGroupHeader(
+              key: const Key('global_studio_rules_header'),
+              title: 'GLOBAL STUDIO RULES',
+              subtitle:
+                  'Applies across both Always Open and Book Drops',
+            ),
+            const SizedBox(height: 8),
             _buildWorkingHoursAndBufferCard(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
             _buildBookingTypesCard(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
             _buildLocationCard(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
             _buildWaitlistSectionCard(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
             _buildSaveButton(),
           ],
         ),
@@ -398,6 +414,7 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
             )
           : null,
       logoKey: const Key('tattoo_machine_logo'),
+      onLogoTap: widget.onNavigateToDashboard,
       messagesKey: const Key('books_messages_button'),
       avatarKey: const Key('books_artist_avatar_button'),
       onMessagesTap: () {
@@ -915,6 +932,40 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
   }
 
 
+  Widget _buildSectionGroupHeader({
+    required Key key,
+    required String title,
+    required String subtitle,
+  }) {
+    return Padding(
+      key: key,
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFFEEC200),
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.1,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFF8C9191),
+              fontSize: 11.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Booking window date range card
   Widget _buildBookingWindowCard() {
     return Container(
@@ -930,15 +981,31 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'BOOKING WINDOW',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF8C9191),
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.0,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'BOOKING WINDOW',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF8C9191),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Dates clients can book appointments',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF6B7272),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
               ),
+              const SizedBox(width: 8),
               GestureDetector(
                 key: const Key('booking_window_picker_button'),
                 onTap: _pickDateRange,
@@ -1431,14 +1498,53 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'HOURS & SLOT SIZING',
-            style: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFF8C9191),
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.0,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'HOURS & SLOT SIZING',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF8C9191),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Powers time slots, 24h holds, and daily open hours',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF6B7272),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                key: const Key('hours_all_modes_badge'),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEC200).withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: const Color(0xFFEEC200).withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Text(
+                  'All Modes',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFFEEC200),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 14),
           Row(

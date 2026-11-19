@@ -89,7 +89,7 @@ class _ArtistWaitlistScreenState extends State<ArtistWaitlistScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) {
         return AdaptiveGlassContainer.bottomSheet(
-          glassEnabled: false,
+          glassEnabled: true,
           androidSurfaceColor: const Color(0xFF161818),
           topRadius: AppRadius.radiusSheet,
           child: Padding(

@@ -7,10 +7,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import '../config/dev_config.dart';
+import '../features/onboarding/shared/onboarding_step_scaffold.dart';
 import '../providers/app_providers.dart';
 import '../repositories/artist_repository.dart';
 import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
+import '../services/username_service.dart';
 import '../theme/app_buttons.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
@@ -70,8 +72,9 @@ ClientBackupContactMode? _resolveBackupContactMode(AuthService authService) {
 
 class ProfileSetupScreen extends StatefulWidget {
   final AuthService? authService;
+  final FirebaseFirestore? firestore;
 
-  const ProfileSetupScreen({super.key, this.authService});
+  const ProfileSetupScreen({super.key, this.authService, this.firestore});
 
   @override
   State<ProfileSetupScreen> createState() => _ProfileSetupScreenState();
@@ -200,15 +203,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         }
 
         try {
-          FirebaseFirestore? injectedDb;
-          if (mounted) {
-            try {
-              injectedDb = ProviderScope.containerOf(
-                context,
-                listen: false,
-              ).read(firebaseFirestoreProvider);
-            } catch (_) {}
-          }
+          final injectedDb = _resolveInjectedFirestore();
           final isTest =
               WidgetsBinding.instance.runtimeType.toString().contains('Test');
           final timeoutDuration = (!isTest || injectedDb != null)
@@ -229,6 +224,24 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
               timeout: timeoutDuration,
             );
           }
+        } on UsernameTakenException catch (e) {
+          if (mounted) {
+            setState(() {
+              _usernameError = e.message;
+              _currentPage = 0;
+            });
+            FlashSnackBar.showError(context, e.message);
+          }
+          return;
+        } on UsernameFormatException catch (e) {
+          if (mounted) {
+            setState(() {
+              _usernameError = e.message;
+              _currentPage = 0;
+            });
+            FlashSnackBar.showError(context, e.message);
+          }
+          return;
         } catch (_) {}
       }
 
@@ -260,30 +273,89 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     }
   }
 
-  void _nextStep() {
+  FirebaseFirestore? _resolveInjectedFirestore() {
+    if (widget.firestore != null) return widget.firestore;
+    if (mounted) {
+      try {
+        return ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(firebaseFirestoreProvider);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  Future<void> _nextStep() async {
     FocusScope.of(context).unfocus();
-    final rawUsername = _usernameController.text.trim().replaceAll('@', '');
-    if (rawUsername.isEmpty) {
-      setState(() => _usernameError = 'Please enter a username');
+    final formatError = UsernameService.validateFormat(
+      _usernameController.text,
+      emptyMessage: 'Please enter a username',
+    );
+    if (formatError != null) {
+      setState(() => _usernameError = formatError);
       return;
     }
+
+    final injectedDb = _resolveInjectedFirestore();
+    final isTest =
+        WidgetsBinding.instance.runtimeType.toString().contains('Test');
+    if (injectedDb != null || !isTest) {
+      User? user = _authService.currentUser;
+      if (user == null) {
+        try {
+          user = FirebaseAuth.instance.currentUser;
+        } catch (_) {}
+      }
+      final available = await UsernameService(firestore: injectedDb)
+          .isUsernameAvailable(
+            _usernameController.text,
+            currentUid: user?.uid,
+          );
+      if (!mounted) return;
+      if (!available) {
+        setState(() => _usernameError = UsernameService.takenErrorMessage);
+        return;
+      }
+    }
+
     setState(() {
       _usernameError = null;
       _currentPage = 1;
     });
   }
 
-  void _skipUsername() {
+  Future<void> _skipUsername() async {
     FocusScope.of(context).unfocus();
     final raw = _usernameController.text.trim().replaceAll('@', '');
     if (raw.isEmpty) {
-      final user = _authService.currentUser ?? FirebaseAuth.instance.currentUser;
+      User? user = _authService.currentUser;
+      if (user == null) {
+        try {
+          user = FirebaseAuth.instance.currentUser;
+        } catch (_) {}
+      }
       String autoHandle = 'user';
       if (user?.email != null && user!.email!.contains('@')) {
-        final prefix = user.email!.split('@').first.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '');
+        final prefix = user.email!
+            .split('@')
+            .first
+            .replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '');
         if (prefix.isNotEmpty) autoHandle = prefix;
       } else if (user?.uid != null) {
-        autoHandle = 'user_${user!.uid.substring(0, user.uid.length.clamp(0, 6))}';
+        autoHandle =
+            'user_${user!.uid.substring(0, user.uid.length.clamp(0, 6))}';
+      }
+      final injectedDb = _resolveInjectedFirestore();
+      final isTest =
+          WidgetsBinding.instance.runtimeType.toString().contains('Test');
+      if (injectedDb != null || !isTest) {
+        autoHandle = await UsernameService(firestore: injectedDb)
+            .resolveUniqueAutoHandle(
+              baseHandle: autoHandle,
+              uid: user?.uid,
+            );
+        if (!mounted) return;
       }
       _usernameController.text = '@$autoHandle';
     }
@@ -446,41 +518,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   )
                 : null,
             showBackButton: _currentPage > 0,
-            title: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Step ${_currentPage + 1} of 4',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: AppTheme.navInactive,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: 180,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadius.dragHandle),
-                    child: TweenAnimationBuilder<double>(
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeInOut,
-                      tween: Tween<double>(
-                        begin: (_currentPage + 1) / 4.0,
-                        end: (_currentPage + 1) / 4.0,
-                      ),
-                      builder: (context, value, _) {
-                        return LinearProgressIndicator(
-                          value: value,
-                          backgroundColor: const Color(0xFF262929),
-                          valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.gold),
-                          minHeight: 4,
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ],
+            title: SegmentedProgressPills(
+              currentStep: _currentPage + 1,
+              totalSteps: 4,
             ),
             actions: [
               if (_currentPage == 0)

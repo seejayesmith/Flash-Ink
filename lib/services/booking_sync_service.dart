@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -195,6 +197,7 @@ class BookingSyncService {
     String? clientNotes,
     bool isSilentAppointment = false,
     String status = 'pending',
+    FirebaseFirestore? firestore,
   }) async {
     final nowIso = DateTime.now().toIso8601String();
     final safeClientAvatar = (clientAvatar != null &&
@@ -229,9 +232,10 @@ class BookingSyncService {
 
     syncedPayloads.add({'collection': 'bookings', 'data': payload});
 
-    if (!enableCloudWrites) return;
+    if (!enableCloudWrites && firestore == null) return;
     try {
-      await FirebaseFirestore.instance
+      final db = firestore ?? FirebaseFirestore.instance;
+      await db
           .collection('bookings')
           .doc(bookingId)
           .set(payload, SetOptions(merge: true));
@@ -246,6 +250,7 @@ class BookingSyncService {
     String? clientId,
     String? artistId,
     String status = 'confirmed',
+    FirebaseFirestore? firestore,
   }) async {
     final effectiveClientId = (clientId != null && clientId.trim().isNotEmpty)
         ? clientId.trim()
@@ -286,12 +291,34 @@ class BookingSyncService {
 
     syncedPayloads.add({'collection': 'appointments', 'data': payload});
 
-    if (!enableCloudWrites) return;
+    if (!enableCloudWrites && firestore == null) return;
     try {
-      await FirebaseFirestore.instance
+      final db = firestore ?? FirebaseFirestore.instance;
+      await db
           .collection('appointments')
           .doc(appointment.id)
           .set(payload, SetOptions(merge: true));
+
+      final isActiveBooking = status == 'confirmed' || status == 'rescheduled';
+      final canWriteSchedule =
+          firestore != null || resolveCurrentUid('') == effectiveArtistId;
+      if (isActiveBooking &&
+          canWriteSchedule &&
+          appointment.scheduledDate != null &&
+          appointment.time.trim().isNotEmpty &&
+          effectiveArtistId.isNotEmpty) {
+        final slotEntry = ScheduleSlotEntry(
+          dateKey: ArtistBooksSchedule.dateKey(appointment.scheduledDate!),
+          timeSlot: appointment.time.split('(').first.trim(),
+        );
+        try {
+          await db.collection('artist_schedules').doc(effectiveArtistId).set({
+            'artistId': effectiveArtistId,
+            'bookedSlots': FieldValue.arrayUnion([slotEntry.toMap()]),
+            'updatedAt': DateTime.now().toIso8601String(),
+          }, SetOptions(merge: true));
+        } catch (_) {}
+      }
     } catch (e) {
       debugPrint('[BookingSyncService] Offline/local fallback for appointment ${appointment.id}: $e');
     }
@@ -462,6 +489,118 @@ class BookingSyncService {
     return null;
   }
 
+  /// Re-fetches the artist's cloud schedule and active bookings/appointments
+  /// immediately before deposit checkout to catch concurrent slot conflicts.
+  static Future<({bool available, ArtistBooksSchedule? schedule})>
+      verifySlotAvailableInCloud({
+    required String artistId,
+    required DateTime date,
+    required String timeSlot,
+    FirebaseFirestore? firestore,
+  }) async {
+    final cleanArtistId = artistId.trim();
+    if (cleanArtistId.isEmpty) {
+      return (available: true, schedule: null);
+    }
+
+    FirebaseFirestore? db = firestore;
+    if (db == null) {
+      try {
+        db = FirebaseFirestore.instance;
+      } catch (_) {
+        return (available: true, schedule: null);
+      }
+    }
+
+    final fetched = await fetchArtistScheduleFromCloud(
+      cleanArtistId,
+      firestore: db,
+    );
+
+    final extraBooked = <ScheduleSlotEntry>[];
+    const excludedStatuses = {
+      'cancelled',
+      'canceled',
+      'declined',
+      'passed',
+    };
+
+    void collectSlot(dynamic rawDate, dynamic rawTime, dynamic rawStatus) {
+      final status = (rawStatus ?? 'confirmed').toString().trim().toLowerCase();
+      if (excludedStatuses.contains(status)) return;
+      DateTime? parsedDate;
+      if (rawDate is Timestamp) {
+        parsedDate = rawDate.toDate();
+      } else if (rawDate is String) {
+        parsedDate = DateTime.tryParse(rawDate);
+      }
+      if (parsedDate == null) return;
+      final rawTimeStr = (rawTime ?? '').toString().split('(').first.trim();
+      if (rawTimeStr.isEmpty) return;
+      extraBooked.add(
+        ScheduleSlotEntry(
+          dateKey: ArtistBooksSchedule.dateKey(parsedDate),
+          timeSlot: rawTimeStr,
+        ),
+      );
+    }
+
+    try {
+      final aptSnap = await db
+          .collection('appointments')
+          .where('artistId', isEqualTo: cleanArtistId)
+          .get();
+      for (final doc in aptSnap.docs) {
+        final data = doc.data();
+        collectSlot(data['scheduledDate'], data['time'], data['status']);
+      }
+    } catch (_) {}
+
+    try {
+      final bookingSnap = await db
+          .collection('bookings')
+          .where('artistId', isEqualTo: cleanArtistId)
+          .get();
+      for (final doc in bookingSnap.docs) {
+        final data = doc.data();
+        collectSlot(
+          data['selectedDate'],
+          data['selectedTimeSlot'],
+          data['status'],
+        );
+      }
+    } catch (_) {}
+
+    ArtistBooksSchedule effectiveSchedule =
+        fetched ?? ArtistDashboardRepository.booksSchedule;
+    if (extraBooked.isNotEmpty) {
+      final merged = <String, ScheduleSlotEntry>{
+        for (final e in effectiveSchedule.bookedSlots)
+          '${e.dateKey}__${ArtistBooksSchedule.normalizeTimeLabel(e.timeSlot)}':
+              e,
+        for (final e in extraBooked)
+          '${e.dateKey}__${ArtistBooksSchedule.normalizeTimeLabel(e.timeSlot)}':
+              e,
+      };
+      effectiveSchedule = effectiveSchedule.copyWith(
+        bookedSlots: merged.values.toList(),
+      );
+    }
+
+    final isAvailable = ArtistDashboardRepository.isSlotBookable(
+      date: date,
+      timeSlot: timeSlot,
+      schedule: effectiveSchedule,
+      artistId: cleanArtistId,
+    );
+    return (
+      available: isAvailable,
+      schedule: fetched != null || extraBooked.isNotEmpty
+          ? effectiveSchedule
+          : null,
+    );
+  }
+
   /// Persists the artist's VIP [WaitlistEntry] roster in Cloud Firestore (`artist_schedules`
   /// and `artists` collections).
   static Future<void> syncWaitlistToCloud(
@@ -613,6 +752,58 @@ class BookingSyncService {
     }
   }
 
+  static List<BookingRequest> _parsePendingCustomRequests(
+    QuerySnapshot<Map<String, dynamic>> snap,
+  ) {
+    return snap.docs
+        .where((doc) {
+          final st = (doc.data()['status'] ?? 'pending').toString();
+          return st == 'pending' || st == 'pending_artist_approval';
+        })
+        .map((doc) => BookingRequest.fromMap(doc.data(), doc.id))
+        .toList();
+  }
+
+  /// Subscribes to real-time updates of pending custom piece requests for [artistId]
+  /// in Cloud Firestore (`custom_requests` collection) when running in live mode.
+  static StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+      listenToArtistCustomRequests(
+    String artistId, {
+    FirebaseFirestore? firestore,
+  }) {
+    final cleanArtistId = artistId.trim();
+    if (cleanArtistId.isEmpty || MockDataConfig.isEnabled) return null;
+
+    FirebaseFirestore? db = firestore;
+    if (db == null) {
+      try {
+        db = FirebaseFirestore.instance;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    try {
+      return db
+          .collection('custom_requests')
+          .where('artistId', isEqualTo: cleanArtistId)
+          .snapshots()
+          .listen(
+        (snap) {
+          ArtistDashboardRepository.pendingRequests =
+              _parsePendingCustomRequests(snap);
+        },
+        onError: (Object error) {
+          debugPrint(
+            '[BookingSyncService] Custom requests stream error for $cleanArtistId: $error',
+          );
+        },
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Hydrates live artist appointments, custom requests, book schedule, waitlist, and chat threads
   /// from Cloud Firestore when running in live mode (`!MockDataConfig.isEnabled`).
   static Future<void> hydrateArtistDataFromCloud(
@@ -683,13 +874,7 @@ class BookingSyncService {
           .collection('custom_requests')
           .where('artistId', isEqualTo: cleanArtistId)
           .get();
-      final remoteReqs = reqSnap.docs
-          .where((doc) {
-            final st = (doc.data()['status'] ?? 'pending').toString();
-            return st == 'pending' || st == 'pending_artist_approval';
-          })
-          .map((doc) => BookingRequest.fromMap(doc.data(), doc.id))
-          .toList();
+      final remoteReqs = _parsePendingCustomRequests(reqSnap);
       if (remoteReqs.isNotEmpty) {
         final merged = <String, BookingRequest>{
           for (final r in ArtistDashboardRepository.livePendingRequests) r.id: r,

@@ -51,7 +51,7 @@ class _BooksOpenOptionsModalState extends State<BooksOpenOptionsModal> {
   @override
   Widget build(BuildContext context) {
     return AdaptiveGlassContainer.bottomSheet(
-      glassEnabled: false,
+      glassEnabled: true,
       androidSurfaceColor: const Color(0xFF161818),
       selectedBorderColor: const Color(0xFFEEC200),
       unselectedBorderColor: const Color(0xFFEEC200),

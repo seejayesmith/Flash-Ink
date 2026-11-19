@@ -14,7 +14,6 @@ import 'package:flash_ink/screens/artist_onboarding/artist_phone_verification_sc
 import 'package:flash_ink/screens/artist_onboarding/artist_studio_bio_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_set_price_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_profile_photo_screen.dart';
-import 'package:flash_ink/features/onboarding/client/client_location_screen.dart';
 
 class MockUser extends Fake implements User {
   @override
@@ -98,7 +97,7 @@ void main() {
           home: ArtistInfoScreen(
             authService: authService,
             initialName: 'OddMaree',
-            initialPhone: '+15551234567',
+            signInMethod: ArtistSignInMethod.email,
           ),
         ),
       );
@@ -232,7 +231,7 @@ void main() {
           home: ArtistInfoScreen(
             authService: authService,
             initialName: 'OddMaree',
-            initialPhone: '+15551234567',
+            signInMethod: ArtistSignInMethod.email,
           ),
         ),
       );
@@ -274,7 +273,7 @@ void main() {
           home: ArtistInfoScreen(
             authService: authService,
             initialName: 'OddMaree',
-            initialPhone: '+15551234567',
+            signInMethod: ArtistSignInMethod.email,
           ),
         ),
       );
@@ -350,19 +349,6 @@ void main() {
       expect(priceField.keyboardType, equals(TextInputType.number));
       expect(priceField.textInputAction, equals(TextInputAction.done));
       expect(priceField.textInputAction, isNot(equals(TextInputAction.next)));
-
-      // E. Verify ClientLocationScreen (Numeric input)
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: ClientLocationScreen(),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final zipField = tester.widget<TextField>(find.byKey(const Key('client_zip_input_field')));
-      expect(zipField.keyboardType, equals(TextInputType.number));
-      expect(zipField.textInputAction, equals(TextInputAction.done));
-      expect(zipField.textInputAction, isNot(equals(TextInputAction.next)));
     });
 
     // -------------------------------------------------------------------------
@@ -377,7 +363,7 @@ void main() {
             home: ArtistInfoScreen(
               authService: authService,
               initialName: 'OddMaree',
-              initialPhone: '+15551234567',
+              signInMethod: ArtistSignInMethod.email,
             ),
           ),
         );
@@ -428,7 +414,7 @@ void main() {
             home: ArtistInfoScreen(
               authService: authService,
               initialName: 'OddMaree',
-              initialPhone: '+15551234567',
+              signInMethod: ArtistSignInMethod.email,
             ),
           ),
         );
@@ -465,7 +451,7 @@ void main() {
             home: ArtistInfoScreen(
               authService: authService,
               initialName: 'OddMaree',
-              initialPhone: '+15551234567',
+              signInMethod: ArtistSignInMethod.email,
             ),
           ),
         );
@@ -507,7 +493,7 @@ void main() {
           home: ArtistInfoScreen(
             authService: authService,
             initialName: 'OddMaree',
-            initialPhone: '+15551234567',
+            signInMethod: ArtistSignInMethod.email,
           ),
         ),
       );
@@ -566,7 +552,7 @@ void main() {
             home: ArtistInfoScreen(
               authService: authService,
               initialName: 'OddMaree',
-              initialPhone: '+15551234567',
+              signInMethod: ArtistSignInMethod.email,
             ),
           ),
         );

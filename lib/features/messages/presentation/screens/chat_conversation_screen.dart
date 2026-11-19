@@ -639,7 +639,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                   itemBuilder: (context, index) {
                   final msg = _messages[index];
                   if (msg.type == ChatMessageType.receipt) {
-                    return BookingReceiptMessageTile(message: msg);
+                    return BookingReceiptMessageTile(
+                      message: msg,
+                      thread: _thread,
+                    );
                   }
 
                   final isClient = !msg.isFromArtist;
@@ -743,6 +746,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                   Expanded(
                     child: Container(
                       height: 42,
+                      alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: AppTheme.cardBackground,
                         borderRadius: BorderRadius.circular(AppRadius.radiusFull),
@@ -751,6 +755,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                       child: TextField(
                         controller: _textController,
                         focusNode: _messageFocusNode,
+                        textAlignVertical: TextAlignVertical.center,
                         textInputAction: TextInputAction.send,
                         onTapOutside: (_) => _dismissKeyboard(),
                         style: GoogleFonts.plusJakartaSans(
@@ -758,13 +763,17 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                           fontSize: 13,
                         ),
                         decoration: InputDecoration(
+                          isDense: true,
                           hintText: 'Type a message to $headerTitle...',
                           hintStyle: GoogleFonts.plusJakartaSans(
                             color: AppTheme.navInactive,
                             fontSize: 12,
                           ),
                           border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
                         ),
                         onSubmitted: (_) => _sendMessage(),
                       ),

@@ -53,6 +53,14 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>This app requires access to your camera to take a profile picture.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Flash.Ink needs calendar access to add your confirmed tattoo appointments to your calendar.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Flash.Ink needs calendar access to add your confirmed tattoo appointments to your calendar.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>Flash.Ink needs calendar access to add your confirmed tattoo appointments to your calendar.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Flash.Ink uses contacts access when autocompleting studio locations in the calendar sheet.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Flash.Ink uses your location to discover nearby tattoo artists and calculate studio distances.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

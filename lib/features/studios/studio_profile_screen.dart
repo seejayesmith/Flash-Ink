@@ -946,14 +946,16 @@ class _StudioProfileContentState extends ConsumerState<_StudioProfileContent> {
                           ),
                         ),
                         if (tagline.isNotEmpty) ...[
-                          Text(
-                            ' • $tagline',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.plusJakartaSans(
-                              color: const Color(0xFF9EA3A3),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w400,
+                          Flexible(
+                            child: Text(
+                              ' • $tagline',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: const Color(0xFF9EA3A3),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                              ),
                             ),
                           ),
                         ],
@@ -1104,55 +1106,62 @@ class _StudioProfileContentState extends ConsumerState<_StudioProfileContent> {
               const SizedBox(height: 14),
 
               // 3-Pill Quick Actions Row (Website, Phone, Directions)
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildQuickActionPill(
-                      key: const Key('studio_info_website_row'),
-                      icon: Icons.language_rounded,
-                      label: websiteDomain.isNotEmpty ? 'Website' : 'Website',
-                      onTap: () {
-                        if (websiteUri != null && websiteUri.isNotEmpty) {
-                          _copyValue(websiteUri, 'Website');
-                        } else {
-                          FlashSnackBar.showInfo(
-                            context,
-                            'No website listed for this tattoo shop yet.',
-                          );
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildQuickActionPill(
-                      key: const Key('studio_info_phone_row'),
-                      icon: Icons.phone_rounded,
-                      label: phoneNumber != null && phoneNumber.isNotEmpty
-                          ? phoneNumber
-                          : 'Call Shop',
-                      onTap: () {
-                        if (phoneNumber != null && phoneNumber.isNotEmpty) {
-                          _copyValue(phoneNumber, 'Phone number');
-                        } else {
-                          FlashSnackBar.showInfo(
-                            context,
-                            'No phone number listed for this tattoo shop yet.',
-                          );
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildQuickActionPill(
-                      key: const Key('studio_directions_button'),
-                      icon: Icons.near_me_rounded,
-                      label: 'Directions',
-                      onTap: () => _handleDirections(effectiveStudio),
-                    ),
-                  ),
-                ],
+              Builder(
+                builder: (context) {
+                  final hasPhoneNumber =
+                      phoneNumber != null && phoneNumber.isNotEmpty;
+                  return Row(
+                    children: [
+                      Expanded(
+                        flex: hasPhoneNumber ? 5 : 1,
+                        child: _buildQuickActionPill(
+                          key: const Key('studio_info_website_row'),
+                          icon: Icons.language_rounded,
+                          label: 'Website',
+                          onTap: () {
+                            if (websiteUri != null && websiteUri.isNotEmpty) {
+                              _copyValue(websiteUri, 'Website');
+                            } else {
+                              FlashSnackBar.showInfo(
+                                context,
+                                'No website listed for this tattoo shop yet.',
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: hasPhoneNumber ? 8 : 1,
+                        child: _buildQuickActionPill(
+                          key: const Key('studio_info_phone_row'),
+                          icon: Icons.phone_rounded,
+                          label: hasPhoneNumber ? phoneNumber : 'Call Shop',
+                          onTap: () {
+                            if (hasPhoneNumber) {
+                              _copyValue(phoneNumber, 'Phone number');
+                            } else {
+                              FlashSnackBar.showInfo(
+                                context,
+                                'No phone number listed for this tattoo shop yet.',
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: hasPhoneNumber ? 6 : 1,
+                        child: _buildQuickActionPill(
+                          key: const Key('studio_directions_button'),
+                          icon: Icons.near_me_rounded,
+                          label: 'Directions',
+                          onTap: () => _handleDirections(effectiveStudio),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ],
           ),
@@ -1194,14 +1203,17 @@ class _StudioProfileContentState extends ConsumerState<_StudioProfileContent> {
               ),
               const SizedBox(width: 6),
               Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.plusJakartaSans(
-                    color: AppTheme.textPrimary,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.center,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AppTheme.textPrimary,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),

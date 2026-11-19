@@ -177,7 +177,7 @@ class _AddWaitlistEntrySheetState extends State<AddWaitlistEntrySheet> {
         maxHeight: MediaQuery.of(context).size.height * 0.92,
       ),
       child: AdaptiveGlassContainer.bottomSheet(
-        glassEnabled: false,
+        glassEnabled: true,
         androidSurfaceColor: const Color(0xFF141616),
         selectedBorderColor: const Color(0xFFEEC200),
         unselectedBorderColor: const Color(0xFFEEC200),

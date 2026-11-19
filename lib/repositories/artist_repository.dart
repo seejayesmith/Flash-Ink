@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../core/utils/distance_calculator.dart';
 import '../models/artist.dart';
 import '../models/studio_information.dart';
+import '../services/username_service.dart';
 
 /// Live Firestore repository for Artist onboarding persistence and real-time
 /// Client discovery (`/artists/{uid}`).
@@ -310,6 +311,20 @@ class ArtistRepository {
         (existingData?['username'] as String?)?.trim().isNotEmpty == true;
     final bool hasExistingBio =
         (existingData?['bio'] as String?)?.trim().isNotEmpty == true;
+
+    final candidateHandle = resolvedArtist.username.trim().isNotEmpty
+        ? resolvedArtist.username.trim()
+        : UsernameService.cleanDisplay(normalizedHandle);
+    if (candidateHandle.isNotEmpty &&
+        UsernameService.validateFormat(candidateHandle) == null) {
+      await UsernameService(firestore: db).claimUsername(
+        uid: uid,
+        rawUsername: candidateHandle,
+        previousUsername:
+            (existingArtistData?['username'] ?? existingData?['username'] ?? '')
+                .toString(),
+      );
+    }
 
     final batch = db.batch();
 

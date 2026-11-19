@@ -213,7 +213,7 @@ class _ArtistUploadFlashScreenState extends State<ArtistUploadFlashScreen> {
       backgroundColor: Colors.transparent,
       builder: (bottomSheetContext) {
         return AdaptiveGlassContainer.bottomSheet(
-          glassEnabled: false,
+          glassEnabled: true,
           androidSurfaceColor: const Color(0xFF1E2121),
           topRadius: AppRadius.radiusSheet,
           child: SafeArea(

@@ -231,6 +231,13 @@ class NotificationService {
         }
       } catch (_) {}
     });
+
+    try {
+      await syncFcmTokenForCurrentUser(
+        firestore: firestore,
+        messaging: fcm,
+      );
+    } catch (_) {}
   }
 
   static Future<void> _handleForegroundMessage(
@@ -289,6 +296,36 @@ class NotificationService {
     }
   }
 
+  /// Syncs the device FCM token for [user] (or `FirebaseAuth.instance.currentUser`)
+  /// when signed into a non-anonymous account.
+  static Future<String?> syncFcmTokenForCurrentUser({
+    User? user,
+    FirebaseFirestore? firestore,
+    FirebaseMessaging? messaging,
+    String? tokenOverride,
+  }) async {
+    User? targetUser = user;
+    if (targetUser == null) {
+      try {
+        targetUser = FirebaseAuth.instance.currentUser;
+      } catch (_) {
+        return null;
+      }
+    }
+    if (targetUser == null ||
+        targetUser.isAnonymous ||
+        targetUser.uid.trim().isEmpty) {
+      return null;
+    }
+
+    return syncFcmTokenForUser(
+      targetUser.uid,
+      firestore: firestore,
+      messaging: messaging,
+      tokenOverride: tokenOverride,
+    );
+  }
+
   /// Fetches the current device FCM token (or uses [tokenOverride]) and stores it
   /// in `users/{uid}.fcmTokens`.
   static Future<String?> syncFcmTokenForUser(
@@ -299,7 +336,7 @@ class NotificationService {
   }) async {
     final cleanUid = uid.trim();
     if (cleanUid.isEmpty) return null;
-    if (_isWidgetTest && firestore == null && tokenOverride == null) {
+    if (_isWidgetTest && messaging == null && tokenOverride == null) {
       return null;
     }
 
@@ -330,7 +367,7 @@ class NotificationService {
   }) async {
     final cleanUid = uid.trim();
     if (cleanUid.isEmpty) return;
-    if (_isWidgetTest && firestore == null && tokenOverride == null) {
+    if (_isWidgetTest && messaging == null && tokenOverride == null) {
       return;
     }
 

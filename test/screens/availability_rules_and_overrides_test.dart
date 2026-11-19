@@ -119,6 +119,62 @@ void main() {
       expect(clearedCap.maxWorkingDaysPerWeek, isNull);
     });
 
+    test('bookingWindowStart and bookingWindowEnd restrict bookable dates unless force-opened', () {
+      final fixedNow = DateTime(2026, 12, 1, 9, 0);
+      ArtistDashboardRepository.calendarAppointments.clear();
+      ArtistDashboardRepository.customHolds = [];
+      ArtistDashboardRepository.booksSchedule = ArtistBooksSchedule(
+        bookingWindowStart: DateTime(2026, 12, 5),
+        bookingWindowEnd: DateTime(2026, 12, 12),
+        workingDays: const {1, 2, 3, 4, 5, 6, 7},
+        openOverrideDates: const {'2026-12-15'},
+      );
+
+      expect(
+        ArtistDashboardRepository.isDateBookable(
+          date: DateTime(2026, 12, 4),
+          now: fixedNow,
+        ),
+        isFalse,
+      );
+      expect(
+        ArtistDashboardRepository.isSlotBookable(
+          date: DateTime(2026, 12, 4),
+          timeSlot: '1:30 PM',
+          now: fixedNow,
+        ),
+        isFalse,
+      );
+      expect(
+        ArtistDashboardRepository.isDateBookable(
+          date: DateTime(2026, 12, 5),
+          now: fixedNow,
+        ),
+        isTrue,
+      );
+      expect(
+        ArtistDashboardRepository.isDateBookable(
+          date: DateTime(2026, 12, 12),
+          now: fixedNow,
+        ),
+        isTrue,
+      );
+      expect(
+        ArtistDashboardRepository.isDateBookable(
+          date: DateTime(2026, 12, 13),
+          now: fixedNow,
+        ),
+        isFalse,
+      );
+      expect(
+        ArtistDashboardRepository.isDateBookable(
+          date: DateTime(2026, 12, 15),
+          now: fixedNow,
+        ),
+        isTrue,
+      );
+    });
+
     test('empty-day minimum lead time blocks empty early days but keeps already-booked days open', () {
       // Fixed clock: Tue Dec 1, 2026 at 2:00 PM; 24h cutoff = Wed Dec 2, 2026 2:00 PM
       final fixedNow = DateTime(2026, 12, 1, 14, 0);
@@ -467,6 +523,107 @@ void main() {
       expect(find.text('3:00 PM (Held)'), findsOneWidget);
       expect(find.text('10:00 AM'), findsOneWidget);
     });
+
+    testWidgets('hydrates remote artist schedule using flash.artistId when widget.artist is null', (tester) async {
+      MockDataConfig.debugOverride = false;
+      final fakeDb = FakeFirebaseFirestore();
+      const artistId = 'artist_flash_only_1';
+      final flash = buildTestFlash(artistId: artistId);
+
+      final now = DateTime.now();
+      final targetDate = DateTime(now.year, now.month, now.day + 2);
+      final targetKey = ArtistBooksSchedule.dateKey(targetDate);
+
+      await fakeDb.collection('artist_schedules').doc(artistId).set({
+        'isBooksOpen': true,
+        'bookingWindowStart': DateTime(now.year, now.month, 1).toIso8601String(),
+        'bookingWindowEnd': DateTime(now.year, now.month + 3, 1).toIso8601String(),
+        'workingDays': [targetDate.weekday],
+        'bookedSlots': [
+          {'date': targetKey, 'time': '1:30 PM'},
+        ],
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FlashBookingScreen(
+            flash: flash,
+            artist: null,
+            firestore: fakeDb,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('1:30 PM (Booked)'), findsOneWidget);
+    });
+
+    testWidgets('pre-payment double-booking check rejects slot booked concurrently in Firestore', (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      MockDataConfig.debugOverride = true;
+      final fakeDb = FakeFirebaseFirestore();
+      final artist = buildTestArtist(id: 'artist_race_1');
+      final flash = buildTestFlash(artistId: artist.id);
+
+      final now = DateTime.now();
+      final targetDate = DateTime(now.year, now.month, now.day + 2);
+      final targetKey = ArtistBooksSchedule.dateKey(targetDate);
+
+      await fakeDb.collection('artist_schedules').doc(artist.id).set({
+        'isBooksOpen': true,
+        'bookingWindowStart': DateTime(now.year, now.month, 1).toIso8601String(),
+        'bookingWindowEnd': DateTime(now.year, now.month + 3, 1).toIso8601String(),
+        'workingDays': [targetDate.weekday],
+        'bookedSlots': [],
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FlashBookingScreen(
+            flash: flash,
+            artist: artist,
+            firestore: fakeDb,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Explicitly select 10:00 AM, then advance Step 1 -> Step 2 -> Step 3
+      await tester.tap(find.text('10:00 AM'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue to Details'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue to Payment'));
+      await tester.pumpAndSettle();
+
+      // Simulate another collector claiming 10:00 AM before this checkout completes
+      await fakeDb.collection('bookings').doc('concurrent_booking_1').set({
+        'artistId': artist.id,
+        'clientId': 'other_client',
+        'selectedDate': targetDate.toIso8601String(),
+        'selectedTimeSlot': '10:00 AM',
+        'status': 'pending',
+      });
+      await fakeDb.collection('artist_schedules').doc(artist.id).set({
+        'bookedSlots': [
+          {'date': targetKey, 'time': '10:00 AM'},
+        ],
+      }, SetOptions(merge: true));
+
+      await tester.tap(find.text('Pay \$80 Deposit & Confirm'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Flash Claimed & Booked!'), findsNothing);
+      expect(find.text('SELECT DATE'), findsOneWidget);
+      expect(find.text('10:00 AM (Booked)'), findsOneWidget);
+      expect(
+        find.text('That time slot was just booked. Please select another available time.'),
+        findsOneWidget,
+      );
+    });
   });
 
   group('ArtistBooksScreen Open All Days, Shortcut & Availability Rules UI', () {
@@ -558,7 +715,7 @@ void main() {
       await tester.tap(find.byKey(const Key('lead_time_chip_0')));
       await tester.ensureVisible(find.byKey(const Key('weekly_cap_chip_none')));
       await tester.tap(find.byKey(const Key('weekly_cap_chip_none')));
-      await tester.drag(find.byType(SingleChildScrollView).first, const Offset(0, -400));
+      await tester.drag(find.byType(SingleChildScrollView).first, const Offset(0, -500));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('save_books_schedule_button')));
       await tester.pumpAndSettle();

@@ -57,8 +57,8 @@ class BooksStatusCard extends StatelessWidget {
     // Color definitions
     Color accentColor;
     String statusBadge;
-    String title;
-    String description;
+    String? title;
+    String? description;
     String primaryButtonText;
     VoidCallback? onPrimaryTap;
     String? secondaryButtonText;
@@ -67,8 +67,6 @@ class BooksStatusCard extends StatelessWidget {
     if (isPaused) {
       accentColor = const Color(0xFFF97316); // Orange
       statusBadge = 'INQUIRIES PAUSED';
-      title = 'Inquiries Currently Paused';
-      description = 'Clients can view your portfolio, but cannot submit new requests. Existing sessions remain confirmed.';
       primaryButtonText = 'Resume Books';
       onPrimaryTap = () {
         ArtistDashboardRepository.resumeInquiries();
@@ -131,8 +129,6 @@ class BooksStatusCard extends StatelessWidget {
     } else if (isAlwaysOpen) {
       accentColor = const Color(0xFF22C55E); // Green
       statusBadge = 'BOOKS OPEN';
-      title = 'Accepting New Appointments';
-      description = 'Clients can view available calendar dates up to 3 months ahead and submit inquiries.';
       primaryButtonText = pendingRequestsCount > 0
           ? 'Review Requests ($pendingRequestsCount)'
           : 'View Schedule';
@@ -146,17 +142,14 @@ class BooksStatusCard extends StatelessWidget {
       // Closed / Waitlist mode
       accentColor = const Color(0xFF8C9191); // Neutral grey
       statusBadge = 'BOOKS CLOSED';
-      title = 'Currently Closed to Inquiries';
-      description = waitingCount > 0
-          ? '$waitingCount contacts on your VIP waitlist eager for your next booking drop.'
-          : 'Clients can browse your portfolio and join your waitlist for future booking drops.';
       primaryButtonText = 'Plan a Book Drop';
       onPrimaryTap = onPlanDrop;
     }
 
+    final bool hasDetails = title != null || description != null;
+
     return Container(
       key: const Key('books_status_card'),
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: const Color(0xFF1A1C1C),
         borderRadius: BorderRadius.circular(AppRadius.radiusLg),
@@ -173,125 +166,141 @@ class BooksStatusCard extends StatelessWidget {
             ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Top Row: Status badge & Switch/Settings
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Row(
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(AppRadius.radiusLg),
+        child: InkWell(
+          onTap: onOpenSettings,
+          borderRadius: BorderRadius.circular(AppRadius.radiusLg),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Row: Status badge & Chevron/Switch
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: accentColor,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: accentColor.withAlpha(160),
-                            blurRadius: 6,
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: accentColor,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: accentColor.withAlpha(160),
+                                  blurRadius: 6,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              statusBadge,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: accentColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        statusBadge,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.plusJakartaSans(
-                          color: accentColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.2,
+                    Row(
+                      children: [
+                        if (onOpenSettings != null) ...[
+                          const Icon(
+                            Icons.chevron_right_rounded,
+                            key: Key('books_status_chevron'),
+                            color: Color(0xFF8C9191),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        // Main switch for backwards-compatible test assertions
+                        FlashSwitch(
+                          key: const Key('books_status_switch'),
+                          value: schedule.isBooksOpen && !isPaused,
+                          onChanged: (val) {
+                            if (!val) {
+                              ArtistDashboardRepository.closeBooks();
+                            } else {
+                              ArtistDashboardRepository.openBooksPublicly();
+                            }
+                            onStatusChanged?.call();
+                          },
                         ),
+                      ],
+                    ),
+                  ],
+                ),
+                if (hasDetails) ...[
+                  const SizedBox(height: 12),
+                  if (title != null)
+                    Text(
+                      title,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                  ],
-                ),
-              ),
-              Row(
-                children: [
-                  if (onOpenSettings != null) ...[
-                    IconButton(
-                      icon: const Icon(Icons.settings_outlined, color: Color(0xFF8C9191), size: 18),
-                      visualDensity: VisualDensity.compact,
-                      tooltip: 'Schedule Settings',
-                      onPressed: onOpenSettings,
+                  if (title != null && description != null) const SizedBox(height: 4),
+                  if (description != null)
+                    Text(
+                      description,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFFB0B6B6),
+                        fontSize: 12.5,
+                        height: 1.4,
+                      ),
                     ),
-                    const SizedBox(width: 4),
-                  ],
-                  // Main switch for backwards-compatible test assertions
-                  FlashSwitch(
-                    key: const Key('books_status_switch'),
-                    value: schedule.isBooksOpen && !isPaused,
-                    onChanged: (val) {
-                      if (!val) {
-                        ArtistDashboardRepository.closeBooks();
-                      } else {
-                        ArtistDashboardRepository.openBooksPublicly();
-                      }
-                      onStatusChanged?.call();
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: GoogleFonts.plusJakartaSans(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            description,
-            style: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFFB0B6B6),
-              fontSize: 12.5,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 16),
+                  const SizedBox(height: 16),
+                ] else
+                  const SizedBox(height: 16),
 
-          // Action Buttons
-          Row(
-            children: [
-              Expanded(
-                child: AppButtons.primaryCTA(
-                  key: const Key('books_status_primary_cta'),
-                  onPressed: onPrimaryTap ?? () {},
-                  text: primaryButtonText,
-                  backgroundColor: accentColor,
-                  foregroundColor: accentColor == const Color(0xFFEEC200) ||
-                          accentColor == const Color(0xFF22C55E)
-                      ? const Color(0xFF121414)
-                      : Colors.white,
-                ),
-              ),
-              if (secondaryButtonText != null) ...[
-                const SizedBox(width: 10),
-                Expanded(
-                  child: AppButtons.secondaryCTA(
-                    key: const Key('books_status_secondary_cta'),
-                    onPressed: onSecondaryTap ?? () {},
-                    text: secondaryButtonText,
-                    borderColor: const Color(0xFF383C3C),
-                    foregroundColor: Colors.white,
-                  ),
+                // Action Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppButtons.primaryCTA(
+                        key: const Key('books_status_primary_cta'),
+                        onPressed: onPrimaryTap ?? () {},
+                        text: primaryButtonText,
+                        backgroundColor: accentColor,
+                        foregroundColor: accentColor == const Color(0xFFEEC200) ||
+                                accentColor == const Color(0xFF22C55E)
+                            ? const Color(0xFF121414)
+                            : Colors.white,
+                      ),
+                    ),
+                    if (secondaryButtonText != null) ...[
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: AppButtons.secondaryCTA(
+                          key: const Key('books_status_secondary_cta'),
+                          onPressed: onSecondaryTap ?? () {},
+                          text: secondaryButtonText,
+                          borderColor: const Color(0xFF383C3C),
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
-            ],
+            ),
           ),
-        ],
+        ),
       ),
     );
   }

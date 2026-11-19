@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_core_platform_interface/test.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:flash_ink/features/onboarding/shared/onboarding_step_scaffold.dart';
 import 'package:flash_ink/screens/profile_setup_screen.dart';
 import 'package:flash_ink/widgets/adaptive_glass_container.dart';
 
@@ -165,9 +166,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Verify Step 1 of 4 and progress bar on username step
-      expect(find.text('Step 1 of 4'), findsOneWidget);
-      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      // Verify segmented pill indicator (Step 1 of 4) matching artist onboarding
+      expect(find.byType(SegmentedProgressPills), findsOneWidget);
+      var pills = tester.widget<SegmentedProgressPills>(
+        find.byType(SegmentedProgressPills),
+      );
+      expect(pills.currentStep, equals(1));
+      expect(pills.totalSteps, equals(4));
+      expect(find.byType(LinearProgressIndicator), findsNothing);
 
       // Focus username input field
       await tester.tap(find.byType(TextField));
@@ -179,8 +185,12 @@ void main() {
       await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
 
-      // Verify on photo step
-      expect(find.text('Step 2 of 4'), findsOneWidget);
+      // Verify on photo step (Step 2 of 4)
+      pills = tester.widget<SegmentedProgressPills>(
+        find.byType(SegmentedProgressPills),
+      );
+      expect(pills.currentStep, equals(2));
+      expect(pills.totalSteps, equals(4));
       expect(find.text('Add a profile photo'), findsOneWidget);
       expect(find.text('Show the community who you are!\nYou can always change this later.'), findsOneWidget);
 

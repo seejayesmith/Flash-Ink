@@ -20,11 +20,13 @@ import '../widgets/vip_waitlist_invitation_card.dart';
 class MessagesScreen extends StatefulWidget {
   final List<MessageThread>? mockThreads;
   final bool? showBackButton;
+  final VoidCallback? onBack;
 
   const MessagesScreen({
     super.key,
     this.mockThreads,
     this.showBackButton,
+    this.onBack,
   });
 
   @override
@@ -106,7 +108,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final filtered = _filteredThreads;
     final shouldShowBackButton =
-        widget.showBackButton ?? Navigator.canPop(context);
+        widget.showBackButton ??
+        (widget.onBack != null || Navigator.canPop(context));
 
     return PopScope(
       onPopInvokedWithResult: (didPop, _) => _dismissKeyboard(),
@@ -122,7 +125,11 @@ class _MessagesScreenState extends State<MessagesScreen> {
                         key: const Key('messages_back_button'),
                         onPressed: () {
                           _dismissKeyboard();
-                          Navigator.maybePop(context);
+                          if (widget.onBack != null) {
+                            widget.onBack!();
+                          } else {
+                            Navigator.maybePop(context);
+                          }
                         },
                         icon: const Icon(
                         Icons.arrow_back_ios_new,

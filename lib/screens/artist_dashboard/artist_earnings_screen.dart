@@ -35,6 +35,7 @@ class ArtistEarningsScreen extends StatefulWidget {
   final bool isEmbeddedInTab;
   final VoidCallback? onBack;
   final ArtistEarningsData? earningsData;
+  final VoidCallback? onNavigateToDashboard;
 
   const ArtistEarningsScreen({
     super.key,
@@ -43,6 +44,7 @@ class ArtistEarningsScreen extends StatefulWidget {
     this.isEmbeddedInTab = false,
     this.onBack,
     this.earningsData,
+    this.onNavigateToDashboard,
   });
 
   @override
@@ -139,7 +141,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return AdaptiveGlassContainer.bottomSheet(
-          glassEnabled: false,
+          glassEnabled: true,
           androidSurfaceColor: const Color(0xFF1A1D1D),
           topRadius: AppRadius.radiusSheet,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -298,7 +300,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return AdaptiveGlassContainer.bottomSheet(
-          glassEnabled: false,
+          glassEnabled: true,
           androidSurfaceColor: const Color(0xFF1A1D1D),
           topRadius: AppRadius.radiusSheet,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -446,7 +448,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return AdaptiveGlassContainer.bottomSheet(
-          glassEnabled: false,
+          glassEnabled: true,
           androidSurfaceColor: const Color(0xFF1A1D1D),
           topRadius: AppRadius.radiusSheet,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -1118,6 +1120,7 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
             )
           : null,
       logoKey: const Key('earnings_tattoo_logo'),
+      onLogoTap: widget.onNavigateToDashboard,
       messagesKey: const Key('earnings_messages_button'),
       avatarKey: const Key('earnings_avatar_button'),
       onMessagesTap: () {

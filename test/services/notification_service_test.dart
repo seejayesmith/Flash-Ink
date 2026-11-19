@@ -28,11 +28,12 @@ class _TestUser extends Fake implements User {
   @override
   final String? phoneNumber = null;
   @override
-  final bool isAnonymous = false;
+  final bool isAnonymous;
 
   _TestUser({
     required this.uid,
     this.displayName = 'Test User',
+    this.isAnonymous = false,
   });
 }
 
@@ -103,6 +104,42 @@ void main() {
         List<String>.from(snap.data()?['fcmTokens'] as List),
         ['token_xyz'],
       );
+    });
+
+    test(
+        'syncFcmTokenForCurrentUser syncs for signed-in user and skips null/anonymous users',
+        () async {
+      final fakeDb = FakeFirebaseFirestore();
+
+      final signedInToken = await NotificationService.syncFcmTokenForCurrentUser(
+        user: _TestUser(uid: 'signed_in_uid'),
+        firestore: fakeDb,
+        tokenOverride: 'cold_start_token',
+      );
+      expect(signedInToken, 'cold_start_token');
+
+      final signedInSnap =
+          await fakeDb.collection('users').doc('signed_in_uid').get();
+      expect(
+        List<String>.from(signedInSnap.data()?['fcmTokens'] as List),
+        ['cold_start_token'],
+      );
+
+      final anonToken = await NotificationService.syncFcmTokenForCurrentUser(
+        user: _TestUser(uid: 'anon_uid', isAnonymous: true),
+        firestore: fakeDb,
+        tokenOverride: 'anon_token',
+      );
+      expect(anonToken, isNull);
+      final anonSnap = await fakeDb.collection('users').doc('anon_uid').get();
+      expect(anonSnap.exists, isFalse);
+
+      final nullToken = await NotificationService.syncFcmTokenForCurrentUser(
+        user: null,
+        firestore: fakeDb,
+        tokenOverride: 'null_token',
+      );
+      expect(nullToken, isNull);
     });
 
     test('updatePreference and loadPreferences persist and restore values',

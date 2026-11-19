@@ -93,6 +93,8 @@ void main() {
 
       expect(find.byType(EmailAuthScreen), findsNothing);
       expect(find.byType(ArtistInfoScreen), findsOneWidget);
+      expect(find.byKey(const Key('artist_phone_field')), findsOneWidget);
+      expect(find.byKey(const Key('artist_backup_email_field')), findsNothing);
     });
 
     testWidgets('EmailVerificationScreen (client): Has SkipPillButton and skips to ProfileSetupScreen', (tester) async {
@@ -157,6 +159,31 @@ void main() {
 
       expect(find.byType(PhoneVerificationScreen), findsNothing);
       expect(find.byType(ProfileSetupScreen), findsOneWidget);
+    });
+
+    testWidgets('PhoneVerificationScreen (artist): Has SkipPillButton and skips to ArtistInfoScreen', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PhoneVerificationScreen(
+            phoneNumber: '+15551234567',
+            verificationId: 'vid_test',
+            role: 'artist',
+            authService: TestMockAuthService(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SkipPillButton), findsOneWidget);
+      expect(find.text('Skip'), findsOneWidget);
+
+      await tester.tap(find.byType(SkipPillButton));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PhoneVerificationScreen), findsNothing);
+      expect(find.byType(ArtistInfoScreen), findsOneWidget);
+      expect(find.byKey(const Key('artist_backup_email_field')), findsOneWidget);
+      expect(find.byKey(const Key('artist_phone_field')), findsNothing);
     });
 
     testWidgets('ArtistPhoneVerificationScreen (artist): Has SkipPillButton and skips to ArtistProfilePhotoScreen', (tester) async {
@@ -259,6 +286,9 @@ void main() {
 
       expect(find.byType(AccountCreationScreen), findsNothing);
       expect(find.byType(ArtistInfoScreen), findsOneWidget);
+      expect(find.byKey(const Key('artist_name_handle_field')), findsOneWidget);
+      expect(find.byKey(const Key('artist_phone_field')), findsNothing);
+      expect(find.byKey(const Key('artist_backup_email_field')), findsNothing);
     });
 
     testWidgets('ArtistInfoScreen: Has SkipPillButton and skips to ArtistProfilePhotoScreen', (tester) async {

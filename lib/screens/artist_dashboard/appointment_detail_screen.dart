@@ -79,7 +79,7 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return AdaptiveGlassContainer.bottomSheet(
-              glassEnabled: false,
+              glassEnabled: true,
               androidSurfaceColor: const Color(0xFF1A1C1E),
               topRadius: AppRadius.radiusSheet,
               padding: EdgeInsets.only(
@@ -227,7 +227,7 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return AdaptiveGlassContainer.bottomSheet(
-          glassEnabled: false,
+          glassEnabled: true,
           androidSurfaceColor: const Color(0xFF1A1C1E),
           topRadius: AppRadius.radiusSheet,
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),

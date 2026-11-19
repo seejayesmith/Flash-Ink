@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../features/onboarding/shared/onboarding_step_scaffold.dart';
 import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
@@ -403,6 +404,10 @@ class _ClientBackupContactScreenState extends State<ClientBackupContactScreen> {
       backgroundColor: const Color(0xFF121414),
       extendBodyBehindAppBar: true,
       appBar: FlashGlassAppBar(
+        title: const SegmentedProgressPills(
+          currentStep: 2,
+          totalSteps: 4,
+        ),
         onSkipPressed: _isLoading ? null : _skipToAesthetics,
         skipButtonKey: const Key('client_backup_appbar_skip_button'),
       ),

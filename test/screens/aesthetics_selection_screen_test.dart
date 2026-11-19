@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_core_platform_interface/test.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:flash_ink/features/onboarding/shared/onboarding_step_scaffold.dart';
 import 'package:flash_ink/screens/aesthetics_selection_screen.dart';
 import 'package:flash_ink/screens/main_feed_screen.dart';
 import 'package:flash_ink/widgets/adaptive_glass_container.dart';
@@ -243,6 +244,34 @@ void main() {
         // Verifies navigation to MainFeedScreen
         expect(find.byType(AestheticsSelectionScreen), findsNothing);
         expect(find.byType(MainFeedScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Renders segmented page indicator (Step 3 of 4) for client onboarding and hides it for guests',
+      (WidgetTester tester) async {
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: AestheticsSelectionScreen(isGuest: false),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SegmentedProgressPills), findsOneWidget);
+        final pills = tester.widget<SegmentedProgressPills>(
+          find.byType(SegmentedProgressPills),
+        );
+        expect(pills.currentStep, equals(3));
+        expect(pills.totalSteps, equals(4));
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: AestheticsSelectionScreen(isGuest: true),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SegmentedProgressPills), findsNothing);
       },
     );
   });

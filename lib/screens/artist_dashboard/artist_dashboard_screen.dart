@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,6 +29,7 @@ import 'artist_earnings_screen.dart';
 import 'booking_request_detail_screen.dart';
 import 'books_status_card.dart';
 import 'create_book_drop_screen.dart';
+import 'pending_custom_requests_screen.dart';
 
 /// The central Artist Dashboard screen shown after completing account onboarding
 /// or when returning to the app as an authenticated artist.
@@ -54,6 +57,8 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   List<BookingRequest> get _pendingRequests => ArtistDashboardRepository.pendingRequests;
   ArtistDashboardStats get _stats => ArtistDashboardRepository.stats;
   final Set<String> _expandedAppointmentIds = {};
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _customRequestsSub;
+  String? _subscribedCustomRequestsArtistId;
 
   @override
   void initState() {
@@ -103,6 +108,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
       final uid = widget.artist?.id ?? authUid;
       if (uid != null && uid.isNotEmpty) {
         BookingSyncService.hydrateArtistDataFromCloud(uid);
+        _startCustomRequestsListener(uid);
       }
 
       if (authUid == null || authUid.isEmpty) return;
@@ -164,8 +170,20 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
     }
   }
 
+  void _startCustomRequestsListener(String artistId) {
+    final cleanId = artistId.trim();
+    if (cleanId.isEmpty || _subscribedCustomRequestsArtistId == cleanId) {
+      return;
+    }
+    _customRequestsSub?.cancel();
+    _subscribedCustomRequestsArtistId = cleanId;
+    _customRequestsSub =
+        BookingSyncService.listenToArtistCustomRequests(cleanId);
+  }
+
   @override
   void dispose() {
+    _customRequestsSub?.cancel();
     NotificationService.lastTappedPayload.removeListener(_onNotificationTapped);
     ArtistDashboardRepository.pendingRequestsNotifier.removeListener(_onRepositoryUpdated);
     super.dispose();
@@ -222,8 +240,8 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
   String _formatCurrentDate() {
     final now = DateTime.now();
     const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     final month = months[now.month - 1];
     final day = now.day;
@@ -279,18 +297,44 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
     }
   }
 
+  void _navigateToDashboardTab() {
+    _dismissKeyboard();
+    if (mounted) {
+      setState(() => _selectedTabIndex = 0);
+    }
+  }
+
   Future<void> _navigateToMessagesScreen() async {
     _dismissKeyboard();
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => Scaffold(
+        builder: (routeContext) => Scaffold(
           backgroundColor: const Color(0xFF121414),
-          body: _buildMessagesPlaceholder(showTopBar: true),
+          body: _buildMessagesPlaceholder(
+            showTopBar: true,
+            onLogoTap: () {
+              Navigator.of(routeContext).maybePop();
+              _navigateToDashboardTab();
+            },
+          ),
         ),
       ),
     );
     _dismissKeyboard();
+  }
+
+  Future<void> _navigateToPendingCustomRequests() async {
+    _dismissKeyboard();
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const PendingCustomRequestsScreen(),
+      ),
+    );
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Widget _buildCollectionsTab() {
@@ -298,6 +342,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
       artist: _resolvedArtist,
       authService: _authService,
       onNavigateToAccount: _navigateToAccountScreen,
+      onNavigateToDashboard: _navigateToDashboardTab,
     );
   }
 
@@ -368,12 +413,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
               onReviewRequests: () {
                 final requests = ArtistDashboardRepository.pendingRequests;
                 if (requests.isNotEmpty) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => BookingRequestDetailScreen(request: requests.first),
-                    ),
-                  ).then((_) => setState(() {}));
+                  _navigateToPendingCustomRequests();
                 } else {
                   setState(() => _selectedTabIndex = 1); // Switch to Calendar / Schedule tab
                 }
@@ -401,17 +441,19 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
     );
   }
 
-  /// Top action bar with tattoo machine icon on the left, Messages icon button,
+  /// Top action bar with brand "F" mark on the left, Messages icon button,
   /// and artist avatar on the right.
   Widget _buildTopActionBar({
     Key logoKey = const Key('tattoo_machine_logo'),
     Key avatarKey = const Key('artist_avatar_button'),
     Key messagesKey = const Key('top_action_messages_button'),
+    VoidCallback? onLogoTap,
   }) {
     return ArtistTopBar(
       logoKey: logoKey,
       avatarKey: avatarKey,
       messagesKey: messagesKey,
+      onLogoTap: onLogoTap,
       onMessagesTap: _navigateToMessagesScreen,
       onAvatarTap: _navigateToAccountScreen,
       avatarChild: _buildAvatarWidget(radius: 18),
@@ -442,9 +484,10 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
         const SizedBox(width: 12),
         Text(
           _formatCurrentDate(),
+          key: const Key('dashboard_current_date'),
           style: GoogleFonts.plusJakartaSans(
             color: const Color(0xFFEEC200),
-            fontSize: 14,
+            fontSize: 20,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -452,26 +495,30 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
     );
   }
 
-  /// Two side-by-side metric cards: Bookings this week and New requests
+  /// Two side-by-side metric cards: Bookings this week and Pending custom requests
   Widget _buildMetricsRow() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildMetricCard(
-            key: const Key('metric_bookings_this_week'),
-            count: '${_stats.bookingsThisWeek}',
-            label: 'BOOKINGS THIS WEEK',
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _buildMetricCard(
+              key: const Key('metric_bookings_this_week'),
+              count: '${_stats.bookingsThisWeek}',
+              label: 'BOOKINGS THIS WEEK',
+            ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildMetricCard(
-            key: const Key('metric_new_requests'),
-            count: '${_stats.newRequests}',
-            label: 'NEW REQUESTS',
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildMetricCard(
+              key: const Key('metric_new_requests'),
+              count: '${_stats.newRequests}',
+              label: 'Pending custom requests',
+              onTap: _navigateToPendingCustomRequests,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -479,8 +526,9 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
     required Key key,
     required String count,
     required String label,
+    VoidCallback? onTap,
   }) {
-    return Container(
+    final card = Container(
       key: key,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
@@ -513,6 +561,15 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
             ),
           ),
         ],
+      ),
+    );
+    if (onTap == null) return card;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: card,
       ),
     );
   }
@@ -1296,13 +1353,32 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            Text(
-              countText,
-              style: GoogleFonts.plusJakartaSans(
-                color: AppTheme.navInactiveAlt,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  countText,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppTheme.navInactiveAlt,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                GestureDetector(
+                  key: const Key('pending_requests_view_all_button'),
+                  onTap: _navigateToPendingCustomRequests,
+                  child: Text(
+                    'VIEW ALL',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFEEC200),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1452,6 +1528,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
       artist: _resolvedArtist,
       authService: _authService,
       isEmbeddedInTab: true,
+      onNavigateToDashboard: _navigateToDashboardTab,
     );
   }
 
@@ -1464,7 +1541,10 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
     return '${diff.inDays}d ago';
   }
 
-  Widget _buildMessagesPlaceholder({bool showTopBar = true}) {
+  Widget _buildMessagesPlaceholder({
+    bool showTopBar = true,
+    VoidCallback? onLogoTap,
+  }) {
     final useMock = MockDataConfig.isEnabled;
 
     return ValueListenableBuilder<int>(
@@ -1489,6 +1569,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
                   _buildTopActionBar(
                     logoKey: const Key('messages_tattoo_machine_logo'),
                     avatarKey: const Key('messages_artist_avatar_button'),
+                    onLogoTap: onLogoTap,
                   ),
                   const SizedBox(height: 20),
                 ],
@@ -1685,6 +1766,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
       authService: _authService,
       isEmbeddedInTab: true,
       onNavigateToCalendar: () => setState(() => _selectedTabIndex = 1),
+      onNavigateToDashboard: _navigateToDashboardTab,
     );
   }
 
@@ -1694,6 +1776,7 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
       artist: _resolvedArtist,
       authService: _authService,
       isEmbeddedInTab: true,
+      onNavigateToDashboard: _navigateToDashboardTab,
     );
   }
 }

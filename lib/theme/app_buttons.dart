@@ -13,6 +13,9 @@ class AppButtons {
     IconData? icon,
     required bool isLoading,
     required Color foregroundColor,
+    double fontSize = 14,
+    FontWeight fontWeight = FontWeight.w700,
+    double letterSpacing = 0.8,
   }) {
     if (isLoading) {
       return SizedBox(
@@ -30,9 +33,9 @@ class AppButtons {
       maxLines: 1,
       softWrap: false,
       style: GoogleFonts.plusJakartaSans(
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.8,
-        fontSize: 14,
+        fontWeight: fontWeight,
+        letterSpacing: letterSpacing,
+        fontSize: fontSize,
         height: 1.2,
       ),
     );
@@ -94,8 +97,9 @@ class AppButtons {
     );
   }
 
-  /// A standard secondary/outlined Call-To-Action wrapper sharing identical
-  /// pill geometry (44 dp) and typography with the primary CTA.
+  /// A standard secondary/outlined Call-To-Action wrapper sharing pill
+  /// geometry (44 dp) with a slightly lighter, more balanced typographic weight
+  /// so side-by-side and secondary actions sit cleanly below primary CTAs.
   static Widget secondaryCTA({
     Key? key,
     required VoidCallback? onPressed,
@@ -106,6 +110,9 @@ class AppButtons {
     Color foregroundColor = const Color(0xFFEEC200),
     Color backgroundColor = Colors.transparent,
     double width = double.infinity,
+    double fontSize = 13.0,
+    FontWeight fontWeight = FontWeight.w600,
+    double letterSpacing = 0.25,
   }) {
     final style = OutlinedButton.styleFrom(
       backgroundColor: backgroundColor,
@@ -128,6 +135,9 @@ class AppButtons {
         icon: icon,
         isLoading: isLoading,
         foregroundColor: foregroundColor,
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        letterSpacing: letterSpacing,
       ),
     );
   }

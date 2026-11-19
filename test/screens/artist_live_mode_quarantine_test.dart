@@ -299,6 +299,49 @@ void main() {
       expect(MessageThread.activeThreads.first.clientName, 'Zoe Kravitz');
     });
 
+    test('listenToArtistCustomRequests updates pendingRequests and stats.newRequests in real time', () async {
+      final fakeFirestore = FakeFirebaseFirestore();
+      const artistId = 'artist_nova_stream';
+
+      final sub = BookingSyncService.listenToArtistCustomRequests(
+        artistId,
+        firestore: fakeFirestore,
+      );
+      expect(sub, isNotNull);
+
+      await Future<void>.delayed(Duration.zero);
+      expect(ArtistDashboardRepository.pendingRequests, isEmpty);
+      expect(ArtistDashboardRepository.stats.newRequests, 0);
+
+      // Client submits a new pending custom piece request
+      await fakeFirestore.collection('custom_requests').doc('req_stream_1').set({
+        'id': 'req_stream_1',
+        'artistId': artistId,
+        'clientId': 'client_1',
+        'clientName': 'Maya Lin',
+        'conceptDescription': 'Botanical moth on sternum',
+        'placement': 'Sternum',
+        'status': 'pending',
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(ArtistDashboardRepository.pendingRequests.length, 1);
+      expect(ArtistDashboardRepository.stats.newRequests, 1);
+      expect(ArtistDashboardRepository.pendingRequests.first.clientName, 'Maya Lin');
+
+      // Request transitions to accepted -> removed from pending custom requests
+      await fakeFirestore
+          .collection('custom_requests')
+          .doc('req_stream_1')
+          .update({'status': 'accepted'});
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(ArtistDashboardRepository.pendingRequests, isEmpty);
+      expect(ArtistDashboardRepository.stats.newRequests, 0);
+
+      await sub?.cancel();
+    });
+
     testWidgets('Artist.fromMap in live mode does not inject MockFixtures.defaultFunFacts or XYZ placeholders', (tester) async {
       final liveArtist = Artist.fromMap({
         'id': 'artist_nova_1',

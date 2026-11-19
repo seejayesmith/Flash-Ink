@@ -166,6 +166,7 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
         MaterialPageRoute(
           builder: (_) => ArtistInfoScreen(
             authService: _authService,
+            signInMethod: ArtistSignInMethod.phone,
           ),
         ),
       );

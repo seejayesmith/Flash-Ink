@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../config/dev_config.dart';
 import '../features/auth/presentation/screens/account_recovery_hub_screen.dart';
 import '../features/auth/presentation/screens/auth_lockout_screen.dart';
 import '../features/auth/presentation/sheets/account_collision_sheet.dart';
@@ -13,6 +14,7 @@ import '../widgets/flash_glass_app_bar.dart';
 import '../widgets/flash_snack_bar.dart';
 import '../widgets/fade_page_route.dart';
 import '../widgets/pinned_bottom_action_scaffold.dart';
+import 'artist_onboarding/artist_info_screen.dart';
 import 'auth_routing.dart';
 import 'profile_setup_screen.dart';
 import 'role_selection_screen.dart';
@@ -61,6 +63,16 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
         user,
         defaultRole: widget.role,
         authService: _authService,
+      );
+    } else if (widget.role == 'artist') {
+      Navigator.pushReplacement(
+        context,
+        FadePageRoute(
+          builder: (_) => ArtistInfoScreen(
+            authService: _authService,
+            signInMethod: ArtistSignInMethod.phone,
+          ),
+        ),
       );
     } else {
       Navigator.pushReplacement(
@@ -242,6 +254,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
   }
 
   Future<void> _handleSkip() async {
+    if (_isLoading) return;
     setState(() => _isLoading = true);
     try {
       final uid = _authService.currentUser?.uid;
@@ -250,13 +263,41 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
           uid: uid,
           phoneNumber: widget.phoneNumber,
         );
+      } else if (kEnableDevBypass) {
+        if (widget.role == 'artist') {
+          AuthService.createDevMockArtist();
+        } else {
+          AuthService.createDevMockClient();
+        }
       }
     } catch (_) {
       // Allow skip even if status update fails
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
-        await _routeVerifiedUser(_authService.currentUser);
+        final currentUser = _authService.currentUser;
+        if (currentUser is DevMockUser) {
+          if (widget.role == 'artist') {
+            Navigator.pushReplacement(
+              context,
+              FadePageRoute(
+                builder: (_) => ArtistInfoScreen(
+                  authService: _authService,
+                  signInMethod: ArtistSignInMethod.phone,
+                ),
+              ),
+            );
+          } else {
+            Navigator.pushReplacement(
+              context,
+              FadePageRoute(
+                builder: (_) => ProfileSetupScreen(authService: _authService),
+              ),
+            );
+          }
+        } else {
+          await _routeVerifiedUser(currentUser);
+        }
       }
     }
   }

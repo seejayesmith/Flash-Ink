@@ -731,6 +731,23 @@ class ArtistBooksSchedule {
   bool isDateForceOpened(DateTime date) =>
       openOverrideDates.contains(dateKey(date));
 
+  /// Returns true if [date] falls inside `[bookingWindowStart, bookingWindowEnd]` (inclusive).
+  bool isWithinBookingWindow(DateTime date) {
+    final dayOnly = DateTime(date.year, date.month, date.day);
+    final startOnly = DateTime(
+      bookingWindowStart.year,
+      bookingWindowStart.month,
+      bookingWindowStart.day,
+    );
+    final endOnly = DateTime(
+      bookingWindowEnd.year,
+      bookingWindowEnd.month,
+      bookingWindowEnd.day,
+    );
+    if (endOnly.isBefore(startOnly)) return true;
+    return !dayOnly.isBefore(startOnly) && !dayOnly.isAfter(endOnly);
+  }
+
   /// Returns true if books are open and [date] is either force-opened or an
   /// unblocked configured working weekday.
   bool isWorkingDay(DateTime date) {
@@ -1471,6 +1488,9 @@ class ArtistDashboardRepository {
 
     if (effectiveMode == BookingMode.alwaysOpen) {
       if (!s.isWorkingDay(dayOnly)) return false;
+      if (!s.isDateForceOpened(dayOnly) && !s.isWithinBookingWindow(dayOnly)) {
+        return false;
+      }
       if (isClosedByWeeklyCap(
         dayOnly,
         schedule: s,
@@ -1521,6 +1541,9 @@ class ArtistDashboardRepository {
 
     if (effectiveMode == BookingMode.alwaysOpen) {
       if (!s.isWorkingDay(dayOnly)) return false;
+      if (!s.isDateForceOpened(dayOnly) && !s.isWithinBookingWindow(dayOnly)) {
+        return false;
+      }
       if (isClosedByWeeklyCap(
         dayOnly,
         schedule: s,
@@ -2015,7 +2038,7 @@ class ArtistDashboardRepository {
 
   static ArtistDashboardStats _mockStats = ArtistDashboardStats(
     bookingsThisWeek: 12,
-    newRequests: 2,
+    newRequests: _defaultPendingRequests.length,
     pendingCount: _defaultPendingRequests.length,
   );
   static ArtistDashboardStats? _liveStatsOverride;
@@ -2024,14 +2047,14 @@ class ArtistDashboardRepository {
     if (MockDataConfig.isEnabled) {
       return ArtistDashboardStats(
         bookingsThisWeek: _mockStats.bookingsThisWeek,
-        newRequests: _mockStats.newRequests,
+        newRequests: _mockPendingRequests.length,
         pendingCount: _mockPendingRequests.length,
       );
     }
     if (_liveStatsOverride != null) {
       return ArtistDashboardStats(
         bookingsThisWeek: _liveStatsOverride!.bookingsThisWeek,
-        newRequests: _liveStatsOverride!.newRequests,
+        newRequests: livePendingRequests.length,
         pendingCount: livePendingRequests.length,
       );
     }
@@ -2059,7 +2082,7 @@ class ArtistDashboardRepository {
     _mockCalendarAppointments = List.from(_defaultCalendarAppointments);
     _mockStats = ArtistDashboardStats(
       bookingsThisWeek: 12,
-      newRequests: 2,
+      newRequests: _mockPendingRequests.length,
       pendingCount: _mockPendingRequests.length,
     );
     _mockBooksSchedule = ArtistBooksSchedule(
@@ -2297,6 +2320,9 @@ class ArtistDashboardRepository {
     ClientAppointment.addUpcomingAppointment(clientApt);
 
     // 6. Post booking receipt message to client/artist message thread
+    final receiptDateTime =
+        ArtistBooksSchedule.parseSlotDateTime(effectiveDate, effectiveTimeSlot) ??
+            effectiveDate;
     final receiptMessage = ChatMessage(
       id: 'receipt_${request.id}',
       senderId: 'system',
@@ -2306,7 +2332,13 @@ class ArtistDashboardRepository {
       isFromArtist: true,
       type: ChatMessageType.receipt,
       receiptAmount: effectiveDeposit.toDouble(),
-      appointmentDate: effectiveDate,
+      appointmentDate: receiptDateTime,
+      appointmentTimeSlot: effectiveTimeSlot,
+      appointmentDurationMinutes: booksSchedule.slotDurationMinutes,
+      artistName: request.artistName,
+      studioLocation: effectiveStudio,
+      flashTitle: 'Custom: ${request.category}',
+      placement: request.placement,
       flashImageUrl: request.sketchImageUrl.isNotEmpty
           ? request.sketchImageUrl
           : 'assets/images/flash_traditional_panther.jpg',

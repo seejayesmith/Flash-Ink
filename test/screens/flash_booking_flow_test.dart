@@ -1,10 +1,13 @@
+import 'package:add_2_calendar/add_2_calendar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flash_ink/core/mock/mock_data_config.dart';
-import 'package:flash_ink/models/artist.dart';
-import 'package:flash_ink/models/artist_dashboard_data.dart';
+import 'package:flash_ink/core/utils/calendar_event_launcher.dart';
 import 'package:flash_ink/features/appointments/domain/models/appointment_item.dart';
 import 'package:flash_ink/features/messages/domain/models/message_thread.dart';
+import 'package:flash_ink/features/messages/presentation/widgets/booking_receipt_message_tile.dart';
+import 'package:flash_ink/models/artist.dart';
+import 'package:flash_ink/models/artist_dashboard_data.dart';
 import 'package:flash_ink/screens/artist_dashboard/appointment_detail_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/booking_request_detail_screen.dart';
 import 'package:flash_ink/screens/booking/flash_booking_screen.dart';
@@ -21,6 +24,7 @@ void main() {
     });
 
     tearDown(() {
+      CalendarEventLauncher.resetDebugOverrides();
       ArtistDashboardRepository.resetMockData();
       MockDataConfig.resetDebugOverride();
     });
@@ -633,6 +637,166 @@ void main() {
 
       // Successfully reaches Step 4 Confirmation
       expect(find.text('Flash Claimed & Booked!'), findsOneWidget);
+    });
+
+    test('CalendarEventLauncher builds event with real session details, parsed start time, and duration', () {
+      final event = CalendarEventLauncher.buildTattooAppointmentEvent(
+        date: DateTime(2026, 12, 10),
+        timeSlot: '2:30 PM',
+        durationLabel: '3.0 hrs',
+        flashTitle: 'Obsidian Serpent',
+        artistName: 'Maree Raven',
+        studioName: 'Obsidian Atelier',
+        studioAddress: '123 Ink St, Portland, OR',
+        placement: 'Forearm',
+        depositAmount: 80,
+        totalPrice: 280,
+      );
+
+      expect(event.title, 'Tattoo Session: Obsidian Serpent with Maree Raven');
+      expect(event.location, 'Obsidian Atelier — 123 Ink St, Portland, OR');
+      expect(event.startDate, DateTime(2026, 12, 10, 14, 30));
+      expect(event.endDate, DateTime(2026, 12, 10, 17, 30));
+      expect(event.description, contains('Piece: Obsidian Serpent'));
+      expect(event.description, contains('Artist: Maree Raven'));
+      expect(event.description, contains('Placement: Forearm'));
+      expect(event.description, contains('Deposit Paid: \$80'));
+      expect(event.description, contains('Remaining Balance at Studio: \$200'));
+    });
+
+    testWidgets('Step 4 Confirmation: tapping Add to Calendar saves real event and shows Added to Calendar confirmation',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      Event? capturedEvent;
+      CalendarEventLauncher.debugAddEventCallback = (event) async {
+        capturedEvent = event;
+        return true;
+      };
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: FlashBookingScreen(
+            flash: testFlash,
+            artist: testArtist,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('3:00 PM'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue to Details'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue to Payment'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pay \$75 Deposit & Confirm'));
+      await tester.pump(const Duration(milliseconds: 1000));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add to Calendar'), findsOneWidget);
+
+      await tester.ensureVisible(
+        find.byKey(const Key('confirmation_add_to_calendar_button')),
+      );
+      await tester.tap(
+        find.byKey(const Key('confirmation_add_to_calendar_button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(capturedEvent, isNotNull);
+      expect(
+        capturedEvent!.title,
+        'Tattoo Session: Obsidian Serpent & Peony with Maree Raven',
+      );
+      expect(capturedEvent!.location, 'Private Studio — Downtown Arts District, LA');
+      expect(capturedEvent!.startDate.hour, 15);
+      expect(capturedEvent!.startDate.minute, 0);
+      expect(
+        capturedEvent!.endDate.difference(capturedEvent!.startDate),
+        const Duration(minutes: 180),
+      );
+
+      expect(
+        find.text('Appointment saved to your device calendar!'),
+        findsOneWidget,
+      );
+      expect(find.text('Added to Calendar'), findsOneWidget);
+      expect(find.text('Add to Calendar'), findsNothing);
+      expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+    });
+
+    testWidgets('BookingReceiptMessageTile shows visual confirmation on save and preserves Add to Calendar on cancel',
+        (tester) async {
+      Event? capturedEvent;
+      bool shouldSucceed = false;
+      CalendarEventLauncher.debugAddEventCallback = (event) async {
+        capturedEvent = event;
+        return shouldSucceed;
+      };
+
+      final msg = ChatMessage(
+        id: 'receipt_cal_test_1',
+        senderId: 'system',
+        senderName: 'System',
+        text: 'Deposit Paid',
+        timestamp: DateTime(2026, 12, 1, 10, 0),
+        isFromArtist: true,
+        type: ChatMessageType.receipt,
+        receiptAmount: 75.0,
+        appointmentDate: DateTime(2026, 12, 18),
+        appointmentTimeSlot: '1:30 PM',
+        appointmentDurationMinutes: 150,
+        artistName: 'Sera Fox',
+        studioLocation: 'Foxglove Studio, Seattle',
+        flashTitle: 'Midnight Fox',
+        placement: 'Calf',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: BookingReceiptMessageTile(message: msg),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Dec 18, 2026 • 1:30 PM'), findsOneWidget);
+      expect(find.text('Add to Calendar'), findsOneWidget);
+
+      // Cancelled / denied by user -> stays 'Add to Calendar', no success snackbar
+      await tester.tap(find.byKey(const Key('receipt_add_to_calendar_button')));
+      await tester.pumpAndSettle();
+
+      expect(capturedEvent, isNotNull);
+      expect(find.text('Add to Calendar'), findsOneWidget);
+      expect(find.text('Added to Calendar'), findsNothing);
+      expect(
+        find.text('Appointment saved to your device calendar!'),
+        findsNothing,
+      );
+
+      // Confirmed save -> snackbar + button transitions to 'Added to Calendar'
+      shouldSucceed = true;
+      await tester.tap(find.byKey(const Key('receipt_add_to_calendar_button')));
+      await tester.pumpAndSettle();
+
+      expect(capturedEvent!.title, 'Tattoo Session: Midnight Fox with Sera Fox');
+      expect(capturedEvent!.location, 'Foxglove Studio, Seattle');
+      expect(capturedEvent!.startDate, DateTime(2026, 12, 18, 13, 30));
+      expect(
+        capturedEvent!.endDate.difference(capturedEvent!.startDate),
+        const Duration(minutes: 150),
+      );
+      expect(
+        find.text('Appointment saved to your device calendar!'),
+        findsOneWidget,
+      );
+      expect(find.text('Added to Calendar'), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
     });
   });
 }

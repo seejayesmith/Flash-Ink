@@ -19,7 +19,7 @@ import '../../widgets/tattoo_background_wrapper.dart';
 import '../../features/onboarding/shared/onboarding_step_scaffold.dart';
 import '../artist_dashboard/artist_dashboard_screen.dart';
 
-class ArtistShareLinkScreen extends StatelessWidget {
+class ArtistShareLinkScreen extends StatefulWidget {
   final String artistName;
   final Uint8List? photoBytes;
   final String? photoUrl;
@@ -51,198 +51,145 @@ class ArtistShareLinkScreen extends StatelessWidget {
     this.policies,
   });
 
+  @override
+  State<ArtistShareLinkScreen> createState() => _ArtistShareLinkScreenState();
+}
+
+class _ArtistShareLinkScreenState extends State<ArtistShareLinkScreen> {
+  bool _isCompleting = false;
+
   String get _displayHandle {
-    if (instagramHandle != null && instagramHandle!.trim().isNotEmpty) {
-      return instagramHandle!.startsWith('@') ? instagramHandle! : '@$instagramHandle';
+    if (widget.instagramHandle != null && widget.instagramHandle!.trim().isNotEmpty) {
+      return widget.instagramHandle!.startsWith('@')
+          ? widget.instagramHandle!
+          : '@${widget.instagramHandle}';
     }
-    return artistName.isNotEmpty
-        ? '@${artistName.toLowerCase().replaceAll(RegExp(r'\s+'), '')}'
+    return widget.artistName.isNotEmpty
+        ? '@${widget.artistName.toLowerCase().replaceAll(RegExp(r'\s+'), '')}'
         : '@OddMaree';
   }
 
   String get _artistBio {
-    if (artistBio != null && artistBio!.trim().isNotEmpty) {
-      return artistBio!.trim();
+    if (widget.artistBio != null && widget.artistBio!.trim().isNotEmpty) {
+      return widget.artistBio!.trim();
     }
     return 'Resident artist specializing in flash & custom illustrative blackwork.';
   }
 
-  Future<void> _finishOnboarding(BuildContext context) =>
-      _completeOnboarding(context);
+  Future<void> _finishOnboarding() => _completeOnboarding();
 
-  Future<void> _completeOnboarding(BuildContext context) async {
-    final effectiveAuth = authService ?? AuthService();
-    User? user = effectiveAuth.currentUser;
-    if (user == null) {
-      try {
-        user = FirebaseAuth.instance.currentUser;
-      } catch (_) {}
-    }
+  Future<void> _completeOnboarding() async {
+    if (_isCompleting) return;
+    setState(() => _isCompleting = true);
 
-    FirebaseFirestore? providerFirestore;
     try {
-      providerFirestore = ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(firebaseFirestoreProvider);
-    } catch (_) {}
-
-    final resolvedFirestore = firestore ?? providerFirestore;
-    final hasInjectedFirestore = resolvedFirestore != null;
-    final isWidgetTest =
-        WidgetsBinding.instance.runtimeType.toString().contains('Test');
-
-    final deposit = minDeposit ?? 100;
-    final cleanDisplayName = artistName.trim().isNotEmpty
-        ? artistName.trim().replaceFirst(RegExp(r'^@'), '')
-        : 'Artist';
-    final cleanUsername = _displayHandle.replaceFirst(RegExp(r'^@'), '');
-    String? authPhotoUrl;
-    try {
-      authPhotoUrl = user?.photoURL;
-    } catch (_) {}
-    final candidatePhotoUrl = (photoUrl != null && photoUrl!.trim().isNotEmpty)
-        ? photoUrl!.trim()
-        : (authPhotoUrl?.trim() ?? '');
-    final safePhotoUrl =
-        (candidatePhotoUrl.isNotEmpty && !candidatePhotoUrl.startsWith('local://'))
-            ? candidatePhotoUrl
-            : '';
-    final effectiveLocation =
-        studioInformation?.displayLocation.isNotEmpty == true
-            ? studioInformation!.displayLocation
-            : 'Portland, OR';
-    final effectivePolicies = (policies != null && policies!.isNotEmpty)
-        ? policies!
-        : MockFixtures.defaultStudioPolicies;
-
-    final hydratedStudio = await ArtistRepository.ensureStudioCoordinates(
-      studioInformation: studioInformation,
-      fallbackLocation: effectiveLocation,
-      studioName: studioInformation?.name,
-      isPrivateStudio: studioInformation?.isPrivateStudio ?? false,
-    );
-
-    final uid = user?.uid ?? 'artist_${DateTime.now().millisecondsSinceEpoch}';
-    String userEmail = '';
-    String userPhone = '';
-    try {
-      userEmail = user?.email ?? '';
-    } catch (_) {}
-    try {
-      userPhone = user?.phoneNumber ?? '';
-    } catch (_) {}
-
-    Artist persistedArtist;
-    final repo = ArtistRepository(
-      firestore: (!isWidgetTest || hasInjectedFirestore)
-          ? resolvedFirestore
-          : null,
-    );
-
-    if (user != null && (!isWidgetTest || hasInjectedFirestore)) {
-      try {
-        persistedArtist = await repo
-            .saveArtistOnboarding(
-              uid: uid,
-              displayName: cleanDisplayName,
-              username: cleanUsername,
-              instagramHandle: _displayHandle,
-              email: userEmail,
-              phoneNumber: userPhone,
-              avatarUrl: safePhotoUrl,
-              bio: _artistBio,
-              styles: styleTags,
-              identityTags: identityTags,
-              studioInformation: hydratedStudio,
-              fallbackLocation: effectiveLocation,
-              minDeposit: deposit,
-              isBooksOpen: true,
-              flashArtworks: flashArtworks,
-              policies: effectivePolicies,
-            )
-            .timeout(const Duration(seconds: 10));
-
-        await ArtistRepository.invokeCompleteArtistOnboarding(
-          name: cleanDisplayName,
-          instagramHandle: _displayHandle,
-          bio: _artistBio,
-          city: effectiveLocation,
-          studioType: hydratedStudio.studioType,
-          minDeposit: deposit,
-          tags: <String>{...styleTags, ...identityTags}.toList(),
-          phoneNumber: userPhone,
-          avatarUrl: persistedArtist.avatarUrl,
-        );
+      final effectiveAuth = widget.authService ?? AuthService();
+      User? user = effectiveAuth.currentUser;
+      if (user == null) {
         try {
-          await FirebaseAuth.instance.currentUser?.getIdToken(true);
+          user = FirebaseAuth.instance.currentUser;
         } catch (_) {}
-        try {
-          await user.getIdToken(true).timeout(const Duration(seconds: 4));
-        } catch (_) {}
-      } catch (_) {
-        persistedArtist = Artist(
-          id: uid,
-          name: cleanDisplayName,
-          username: cleanUsername,
-          instagramHandle: _displayHandle,
-          studioName: hydratedStudio.name,
-          avatarUrl: safePhotoUrl,
-          location: hydratedStudio.displayLocation.isNotEmpty
-              ? hydratedStudio.displayLocation
-              : effectiveLocation,
-          studioType: hydratedStudio.studioType,
-          isPrivateStudio: hydratedStudio.isPrivateStudio,
-          latitude: hydratedStudio.discoveryCoordinates?.latitude,
-          longitude: hydratedStudio.discoveryCoordinates?.longitude,
-          profileCompleted: true,
-          rating: 5.0,
-          availablePieces: flashArtworks.where((f) => !f.isClaimed).length,
-          minDeposit: deposit,
-          tags: <String>{...styleTags, ...identityTags}.toList(),
-          flashArtworks: flashArtworks,
-          images: flashArtworks
-              .map((f) => f.imageUrl)
-              .where((u) => u.isNotEmpty && !u.startsWith('local://'))
-              .toList(),
-          bio: _artistBio,
-          policies: effectivePolicies,
-          studioInformation: hydratedStudio,
-        );
       }
-    } else {
-      // Widget test without FakeFirebaseFirestore: attempt brief write then proceed smoothly
-      persistedArtist = Artist(
-        id: uid,
-        name: cleanDisplayName,
-        username: cleanUsername,
-        instagramHandle: _displayHandle,
-        studioName: hydratedStudio.name,
-        avatarUrl: safePhotoUrl,
-        location: hydratedStudio.displayLocation.isNotEmpty
-            ? hydratedStudio.displayLocation
-            : effectiveLocation,
-        studioType: hydratedStudio.studioType,
-        isPrivateStudio: hydratedStudio.isPrivateStudio,
-        latitude: hydratedStudio.discoveryCoordinates?.latitude,
-        longitude: hydratedStudio.discoveryCoordinates?.longitude,
-        profileCompleted: true,
-        rating: 5.0,
-        availablePieces: flashArtworks.where((f) => !f.isClaimed).length,
-        minDeposit: deposit,
-        tags: <String>{...styleTags, ...identityTags}.toList(),
-        flashArtworks: flashArtworks,
-        images: flashArtworks
-            .map((f) => f.imageUrl)
-            .where((u) => u.isNotEmpty && !u.startsWith('local://'))
-            .toList(),
-        bio: _artistBio,
-        policies: effectivePolicies,
-        studioInformation: hydratedStudio,
+
+      FirebaseFirestore? providerFirestore;
+      try {
+        providerFirestore = ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(firebaseFirestoreProvider);
+      } catch (_) {}
+
+      final resolvedFirestore = widget.firestore ?? providerFirestore;
+      final hasInjectedFirestore = resolvedFirestore != null;
+      final isWidgetTest =
+          WidgetsBinding.instance.runtimeType.toString().contains('Test');
+      final isDevMockSession = user is DevMockUser;
+
+      final deposit = widget.minDeposit ?? 100;
+      final cleanDisplayName = widget.artistName.trim().isNotEmpty
+          ? widget.artistName.trim().replaceFirst(RegExp(r'^@'), '')
+          : 'Artist';
+      final cleanUsername = _displayHandle.replaceFirst(RegExp(r'^@'), '');
+      String? authPhotoUrl;
+      try {
+        authPhotoUrl = user?.photoURL;
+      } catch (_) {}
+      final candidatePhotoUrl =
+          (widget.photoUrl != null && widget.photoUrl!.trim().isNotEmpty)
+              ? widget.photoUrl!.trim()
+              : (authPhotoUrl?.trim() ?? '');
+      final safePhotoUrl =
+          (candidatePhotoUrl.isNotEmpty && !candidatePhotoUrl.startsWith('local://'))
+              ? candidatePhotoUrl
+              : '';
+      final effectiveLocation =
+          widget.studioInformation?.displayLocation.isNotEmpty == true
+              ? widget.studioInformation!.displayLocation
+              : 'Portland, OR';
+      final effectivePolicies =
+          (widget.policies != null && widget.policies!.isNotEmpty)
+              ? widget.policies!
+              : MockFixtures.defaultStudioPolicies;
+
+      final hydratedStudio = await ArtistRepository.ensureStudioCoordinates(
+        studioInformation: widget.studioInformation,
+        fallbackLocation: effectiveLocation,
+        studioName: widget.studioInformation?.name,
+        isPrivateStudio: widget.studioInformation?.isPrivateStudio ?? false,
       );
-      if (user != null) {
+
+      final uid = user?.uid ?? 'artist_${DateTime.now().millisecondsSinceEpoch}';
+      String userEmail = '';
+      String userPhone = '';
+      try {
+        userEmail = user?.email ?? '';
+      } catch (_) {}
+      try {
+        userPhone = user?.phoneNumber ?? '';
+      } catch (_) {}
+
+      Artist buildLocalArtist() => Artist(
+            id: uid,
+            name: cleanDisplayName,
+            username: cleanUsername,
+            instagramHandle: _displayHandle,
+            studioName: hydratedStudio.name,
+            avatarUrl: safePhotoUrl,
+            location: hydratedStudio.displayLocation.isNotEmpty
+                ? hydratedStudio.displayLocation
+                : effectiveLocation,
+            studioType: hydratedStudio.studioType,
+            isPrivateStudio: hydratedStudio.isPrivateStudio,
+            latitude: hydratedStudio.discoveryCoordinates?.latitude,
+            longitude: hydratedStudio.discoveryCoordinates?.longitude,
+            profileCompleted: true,
+            rating: 5.0,
+            availablePieces:
+                widget.flashArtworks.where((f) => !f.isClaimed).length,
+            minDeposit: deposit,
+            tags: <String>{...widget.styleTags, ...widget.identityTags}.toList(),
+            flashArtworks: widget.flashArtworks,
+            images: widget.flashArtworks
+                .map((f) => f.imageUrl)
+                .where((u) => u.isNotEmpty && !u.startsWith('local://'))
+                .toList(),
+            bio: _artistBio,
+            policies: effectivePolicies,
+            studioInformation: hydratedStudio,
+          );
+
+      Artist persistedArtist;
+      final repo = ArtistRepository(
+        firestore: (!isWidgetTest || hasInjectedFirestore)
+            ? resolvedFirestore
+            : null,
+      );
+
+      if (user != null &&
+          (!isDevMockSession || hasInjectedFirestore) &&
+          (!isWidgetTest || hasInjectedFirestore)) {
         try {
-          await ArtistRepository()
+          persistedArtist = await repo
               .saveArtistOnboarding(
                 uid: uid,
                 displayName: cleanDisplayName,
@@ -252,32 +199,66 @@ class ArtistShareLinkScreen extends StatelessWidget {
                 phoneNumber: userPhone,
                 avatarUrl: safePhotoUrl,
                 bio: _artistBio,
-                styles: styleTags,
-                identityTags: identityTags,
+                styles: widget.styleTags,
+                identityTags: widget.identityTags,
                 studioInformation: hydratedStudio,
                 fallbackLocation: effectiveLocation,
                 minDeposit: deposit,
                 isBooksOpen: true,
-                flashArtworks: flashArtworks,
+                flashArtworks: widget.flashArtworks,
                 policies: effectivePolicies,
               )
-              .timeout(const Duration(milliseconds: 200));
-        } catch (_) {}
+              .timeout(const Duration(seconds: 8));
+        } catch (_) {
+          persistedArtist = buildLocalArtist();
+        }
+      } else {
+        // Dev bypass session (DevMockUser) or widget test without FakeFirebaseFirestore:
+        // proceed directly without blocking on live Firestore/Cloud Functions.
+        persistedArtist = buildLocalArtist();
+        if (user != null && !isDevMockSession) {
+          try {
+            await ArtistRepository()
+                .saveArtistOnboarding(
+                  uid: uid,
+                  displayName: cleanDisplayName,
+                  username: cleanUsername,
+                  instagramHandle: _displayHandle,
+                  email: userEmail,
+                  phoneNumber: userPhone,
+                  avatarUrl: safePhotoUrl,
+                  bio: _artistBio,
+                  styles: widget.styleTags,
+                  identityTags: widget.identityTags,
+                  studioInformation: hydratedStudio,
+                  fallbackLocation: effectiveLocation,
+                  minDeposit: deposit,
+                  isBooksOpen: true,
+                  flashArtworks: widget.flashArtworks,
+                  policies: effectivePolicies,
+                )
+                .timeout(const Duration(milliseconds: 200));
+          } catch (_) {}
+        }
       }
-    }
 
-    if (context.mounted) {
-      FocusManager.instance.primaryFocus?.unfocus();
-      Navigator.pushAndRemoveUntil(
-        context,
-        FadePageRoute(
-          builder: (_) => ArtistDashboardScreen(
-            artist: persistedArtist,
-            authService: effectiveAuth,
+      if (mounted) {
+        FocusManager.instance.primaryFocus?.unfocus();
+        Navigator.pushAndRemoveUntil(
+          context,
+          FadePageRoute(
+            builder: (_) => ArtistDashboardScreen(
+              artist: persistedArtist,
+              authService: effectiveAuth,
+            ),
           ),
-        ),
-        (route) => false,
-      );
+          (route) => false,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isCompleting = false);
+      }
     }
   }
 
@@ -346,13 +327,14 @@ class ArtistShareLinkScreen extends StatelessWidget {
               Navigator.pop(context);
             }
           : null,
-      onSkip: () => _finishOnboarding(context),
+      onSkip: _finishOnboarding,
       skipKey: const Key('skip_share_link_button'),
       skipText: 'Skip',
       title: 'Tell em where to\nfind you',
       ctaText: 'Done',
       ctaKey: const Key('done_share_button'),
-      onCtaPressed: () => _finishOnboarding(context),
+      isCtaLoading: _isCompleting,
+      onCtaPressed: _isCompleting ? null : _finishOnboarding,
       backgroundOverlay: const TattooBackgroundWrapper(child: SizedBox.expand()),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

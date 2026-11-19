@@ -56,13 +56,18 @@ class _MainFeedContent extends ConsumerStatefulWidget {
 }
 
 class _MainFeedContentState extends ConsumerState<_MainFeedContent> {
+  static const int _messagesTabIndex = 3;
+
   late int _activeTabIndex;
+  late int _previousTabIndex;
   String? _lastHydratedUid;
 
   @override
   void initState() {
     super.initState();
     _activeTabIndex = widget.initialIndex;
+    _previousTabIndex =
+        widget.initialIndex == _messagesTabIndex ? 0 : widget.initialIndex;
     MessageThread.unreadUpdateNotifier.addListener(_onUnreadUpdate);
     NotificationService.lastTappedPayload.addListener(_onNotificationTapped);
     if (NotificationService.lastTappedPayload.value != null) {
@@ -120,9 +125,19 @@ class _MainFeedContentState extends ConsumerState<_MainFeedContent> {
   }
 
   void _navigateToTab(int index) {
+    if (index == _activeTabIndex) return;
     setState(() {
+      if (_activeTabIndex != _messagesTabIndex) {
+        _previousTabIndex = _activeTabIndex;
+      }
       _activeTabIndex = index;
     });
+  }
+
+  void _navigateBackFromMessages() {
+    final targetIndex =
+        _previousTabIndex == _messagesTabIndex ? 0 : _previousTabIndex;
+    _navigateToTab(targetIndex);
   }
 
   @override
@@ -161,18 +176,17 @@ class _MainFeedContentState extends ConsumerState<_MainFeedContent> {
       AppointmentsScreen(
         onExploreTap: () => _navigateToTab(1), // Switch to Explore tab
       ),
-      const MessagesScreen(),
+      MessagesScreen(
+        showBackButton: true,
+        onBack: _navigateBackFromMessages,
+      ),
     ];
 
     return ScaffoldWithNavBar(
       pages: pages,
       items: navItems,
       currentIndex: _activeTabIndex,
-      onDestinationSelected: (index) {
-        setState(() {
-          _activeTabIndex = index;
-        });
-      },
+      onDestinationSelected: _navigateToTab,
     );
   }
 }

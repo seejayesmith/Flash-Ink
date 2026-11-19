@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import '../features/messages/domain/models/message_thread.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_theme.dart';
-import 'tattoo_machine_icon.dart';
+import 'flash_mark_icon.dart';
 
 /// Standardized top action bar for Artist screens.
 ///
 /// Features:
-/// - Standardized left-side [TattooMachineIcon] (size 43, brand gold) or optional back button.
+/// - Standardized left-side [FlashMarkIcon] (size 36, matching avatar height) or optional back button.
 /// - Dynamic messages button with a numeric unread count badge (hidden when 0).
 /// - Profile avatar with gold border.
 class ArtistTopBar extends StatelessWidget {
@@ -50,16 +50,26 @@ class ArtistTopBar extends StatelessWidget {
                 (onLogoTap != null
                     ? GestureDetector(
                         key: logoKey,
+                        behavior: HitTestBehavior.opaque,
                         onTap: onLogoTap,
-                        child: const TattooMachineIcon(
-                          size: 43,
-                          color: Color(0xFFEEC200),
+                        child: const SizedBox(
+                          width: 56,
+                          height: 43,
+                          child: Padding(
+                            padding: EdgeInsets.only(left: 16),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: FlashMarkIcon(size: 36),
+                            ),
+                          ),
                         ),
                       )
-                    : TattooMachineIcon(
-                        key: logoKey,
-                        size: 43,
-                        color: const Color(0xFFEEC200),
+                    : Padding(
+                        padding: const EdgeInsets.only(left: 16),
+                        child: FlashMarkIcon(
+                          key: logoKey,
+                          size: 36,
+                        ),
                       )),
             Row(
               mainAxisSize: MainAxisSize.min,

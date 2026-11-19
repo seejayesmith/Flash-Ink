@@ -16,6 +16,12 @@ class ChatMessage {
   final ChatMessageType type;
   final double? receiptAmount;
   final DateTime? appointmentDate;
+  final String? appointmentTimeSlot;
+  final int? appointmentDurationMinutes;
+  final String? artistName;
+  final String? studioLocation;
+  final String? flashTitle;
+  final String? placement;
   final String? flashImageUrl;
   final String? attachmentUrl;
   final String? attachmentName;
@@ -32,6 +38,12 @@ class ChatMessage {
     this.type = ChatMessageType.text,
     this.receiptAmount,
     this.appointmentDate,
+    this.appointmentTimeSlot,
+    this.appointmentDurationMinutes,
+    this.artistName,
+    this.studioLocation,
+    this.flashTitle,
+    this.placement,
     this.flashImageUrl,
     this.attachmentUrl,
     this.attachmentName,
@@ -62,6 +74,13 @@ class ChatMessage {
       'type': type.name,
       if (receiptAmount != null) 'receiptAmount': receiptAmount,
       if (appointmentDate != null) 'appointmentDate': appointmentDate!.toIso8601String(),
+      if (appointmentTimeSlot != null) 'appointmentTimeSlot': appointmentTimeSlot,
+      if (appointmentDurationMinutes != null)
+        'appointmentDurationMinutes': appointmentDurationMinutes,
+      if (artistName != null) 'artistName': artistName,
+      if (studioLocation != null) 'studioLocation': studioLocation,
+      if (flashTitle != null) 'flashTitle': flashTitle,
+      if (placement != null) 'placement': placement,
       if (flashImageUrl != null) 'flashImageUrl': flashImageUrl,
       if (attachmentUrl != null) 'attachmentUrl': attachmentUrl,
       if (attachmentName != null) 'attachmentName': attachmentName,
@@ -94,6 +113,13 @@ class ChatMessage {
       appointmentDate: map['appointmentDate'] is String
           ? DateTime.tryParse(map['appointmentDate'] as String)
           : null,
+      appointmentTimeSlot: map['appointmentTimeSlot']?.toString(),
+      appointmentDurationMinutes:
+          (map['appointmentDurationMinutes'] as num?)?.toInt(),
+      artistName: map['artistName']?.toString(),
+      studioLocation: map['studioLocation']?.toString(),
+      flashTitle: map['flashTitle']?.toString(),
+      placement: map['placement']?.toString(),
       flashImageUrl: map['flashImageUrl']?.toString(),
       attachmentUrl: map['attachmentUrl']?.toString(),
       attachmentName: map['attachmentName']?.toString(),

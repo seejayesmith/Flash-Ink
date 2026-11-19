@@ -11,6 +11,7 @@ import '../../providers/app_providers.dart';
 import '../../repositories/artist_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/username_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/flash_switch.dart';
@@ -52,18 +53,21 @@ class ArtistAccountScreen extends StatefulWidget {
 class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
   late final AuthService _authService = widget.authService ?? AuthService();
 
-  FirebaseFirestore _resolveFirestore() {
+  FirebaseFirestore? _resolveInjectedFirestore() {
     if (widget.firestore != null) return widget.firestore!;
     if (mounted) {
       try {
-        final injected = ProviderScope.containerOf(
+        return ProviderScope.containerOf(
           context,
           listen: false,
         ).read(firebaseFirestoreProvider);
-        if (injected != null) return injected;
       } catch (_) {}
     }
-    return FirebaseFirestore.instance;
+    return null;
+  }
+
+  FirebaseFirestore _resolveFirestore() {
+    return _resolveInjectedFirestore() ?? FirebaseFirestore.instance;
   }
 
   Future<void> _handleSwitchToClientMode() async {
@@ -424,18 +428,41 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
     required String username,
     required String bio,
     required String location,
+    String? previousUsername,
   }) async {
     final user = _authService.currentUser;
     if (user != null) {
+      final injectedDb = _resolveInjectedFirestore();
+      final isTest =
+          WidgetsBinding.instance.runtimeType.toString().contains('Test');
+      if (injectedDb != null || !isTest) {
+        await UsernameService(firestore: injectedDb).claimUsername(
+          uid: user.uid,
+          rawUsername: username,
+          previousUsername: previousUsername ?? _username,
+          emptyMessage: 'Username cannot be empty',
+        );
+      }
       try {
         final db = _resolveFirestore();
         await db.collection('artists').doc(user.uid).set({
           'id': user.uid,
           'name': name,
           'username': username,
+          'instagramHandle': '@$username',
           'bio': bio,
           'location': location,
         }, SetOptions(merge: true)).timeout(const Duration(milliseconds: 600));
+        final userSnap = await db
+            .collection('users')
+            .doc(user.uid)
+            .get()
+            .timeout(const Duration(milliseconds: 600));
+        if (userSnap.exists) {
+          await db.collection('users').doc(user.uid).set({
+            'username': username,
+          }, SetOptions(merge: true)).timeout(const Duration(milliseconds: 600));
+        }
       } catch (_) {
         // Keep offline resilience
       }
@@ -553,6 +580,9 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
   }
 
   Future<void> _showEditProfileDialog() async {
+    final injectedDb = _resolveInjectedFirestore();
+    final currentUser = _authService.currentUser;
+    final previousUsername = _username;
     final result = await Navigator.push<Map<String, String>>(
       context,
       MaterialPageRoute(
@@ -561,20 +591,25 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
           initialUsername: _username,
           initialBio: _bio,
           initialLocation: _location,
+          currentUid: currentUser?.uid,
+          firestore: injectedDb,
           onSave: (newName, newUsername, newBio, newLocation) async {
-            setState(() {
-              _displayName = newUsername;
-              _username = newUsername;
-              _bio = newBio;
-              _location = newLocation;
-            });
-
             await _updateProfileInFirestore(
               name: newUsername,
               username: newUsername,
               bio: newBio,
               location: newLocation,
+              previousUsername: previousUsername,
             );
+
+            if (mounted) {
+              setState(() {
+                _displayName = newUsername;
+                _username = newUsername;
+                _bio = newBio;
+                _location = newLocation;
+              });
+            }
           },
         ),
       ),

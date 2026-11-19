@@ -16,6 +16,7 @@ import 'package:flash_ink/screens/artist_dashboard/artist_calendar_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_collections_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_earnings_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/booking_request_detail_screen.dart';
+import 'package:flash_ink/screens/artist_dashboard/pending_custom_requests_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_share_link_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
 
@@ -96,9 +97,9 @@ void main() {
       expect(find.byKey(const Key('metric_bookings_this_week')), findsOneWidget);
       expect(find.byKey(const Key('metric_new_requests')), findsOneWidget);
       expect(find.text('12'), findsWidgets); // Booking metric + badge
-      expect(find.text('2'), findsWidgets);
+      expect(find.text('4'), findsWidgets); // Synced with pendingRequests.length
       expect(find.text('BOOKINGS THIS WEEK'), findsOneWidget);
-      expect(find.text('NEW REQUESTS'), findsOneWidget);
+      expect(find.text('Pending custom requests'), findsOneWidget);
 
       // 4. Hero Next Appointment card
       expect(find.byKey(const Key('hero_next_appointment_card')), findsOneWidget);
@@ -389,6 +390,143 @@ void main() {
 
       // Reset mock data for test isolation
       ArtistDashboardRepository.resetMockData();
+    });
+
+    testWidgets('Tapping Pending custom requests card opens dedicated PendingCustomRequestsScreen', (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      // Metric card shows synced count (4) and exact label
+      final metricCard = find.byKey(const Key('metric_new_requests'));
+      expect(metricCard, findsOneWidget);
+      expect(
+        find.descendant(
+          of: metricCard,
+          matching: find.text('Pending custom requests'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: metricCard, matching: find.text('4')),
+        findsOneWidget,
+      );
+
+      // Tap metric card -> navigates to dedicated PendingCustomRequestsScreen
+      await tester.tap(metricCard);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PendingCustomRequestsScreen), findsOneWidget);
+      expect(find.text('Pending Custom Requests'), findsOneWidget);
+      expect(find.byKey(const Key('pending_custom_request_card_req_sarah_1')), findsOneWidget);
+      expect(find.text('Outer Thigh'), findsWidgets);
+      expect(find.text('Est. \$350'), findsOneWidget);
+
+      // Add a 24h custom hold and verify badge appears live
+      ArtistDashboardRepository.addCustomHold(
+        CustomHold(
+          id: 'hold_test_sarah',
+          requestId: 'req_sarah_1',
+          clientName: 'Sarah Jenkins',
+          date: DateTime(2026, 12, 10),
+          timeSlot: '3:00 PM',
+          estimatedPrice: 350,
+          deposit: 90,
+          createdAt: DateTime.now(),
+          expiresAt: DateTime.now().add(const Duration(hours: 24)),
+        ),
+      );
+      await tester.pump();
+      expect(find.byKey(const Key('pending_custom_request_hold_badge_req_sarah_1')), findsOneWidget);
+      expect(find.text('24h Hold • 3:00 PM'), findsOneWidget);
+
+      // Tap a custom request card -> opens BookingRequestDetailScreen
+      await tester.tap(find.byKey(const Key('open_custom_request_req_sarah_1')));
+      await tester.pumpAndSettle();
+      expect(find.byType(BookingRequestDetailScreen), findsOneWidget);
+
+      // Decline request and pop back -> dedicated list updates to 3
+      final declineBtn = find.byKey(const Key('decline_request_button'));
+      await tester.ensureVisible(declineBtn);
+      await tester.tap(declineBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PendingCustomRequestsScreen), findsOneWidget);
+      expect(find.byKey(const Key('pending_custom_request_card_req_sarah_1')), findsNothing);
+
+      // Pop back to dashboard -> metric card now shows 3
+      await tester.tap(find.byKey(const Key('pending_custom_requests_back_button')));
+      await tester.pumpAndSettle();
+      expect(find.byType(ArtistDashboardScreen), findsOneWidget);
+      expect(
+        find.descendant(of: metricCard, matching: find.text('3')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('VIEW ALL and Review Requests open PendingCustomRequestsScreen and empty state renders when cleared', (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      // 1. Tap Review Requests (4) on BooksStatusCard
+      await tester.tap(find.text('Review Requests (4)'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PendingCustomRequestsScreen), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('pending_custom_requests_back_button')));
+      await tester.pumpAndSettle();
+
+      // 2. Tap VIEW ALL on Pending Requests section
+      final viewAllBtn = find.byKey(const Key('pending_requests_view_all_button'));
+      await tester.ensureVisible(viewAllBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(viewAllBtn);
+      await tester.pumpAndSettle();
+      expect(find.byType(PendingCustomRequestsScreen), findsOneWidget);
+
+      // 3. Clear all requests -> empty state displays
+      for (final req in List.from(ArtistDashboardRepository.pendingRequests)) {
+        ArtistDashboardRepository.declineBookingRequest(req.id);
+      }
+      await tester.pump();
+      expect(find.byKey(const Key('pending_custom_requests_empty_state')), findsOneWidget);
+      expect(find.text('No pending custom requests'), findsOneWidget);
+
+      // Back on dashboard -> metric card shows 0
+      await tester.tap(find.byKey(const Key('pending_custom_requests_back_button')));
+      await tester.pumpAndSettle();
+      final metricCard = find.byKey(const Key('metric_new_requests'));
+      expect(
+        find.descendant(of: metricCard, matching: find.text('0')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Header date uses 20pt bold #EEC200 typography and abbreviated month format', (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      final dateFinder = find.byKey(const Key('dashboard_current_date'));
+      expect(dateFinder, findsOneWidget);
+
+      final dateText = tester.widget<Text>(dateFinder);
+      expect(
+        dateText.data,
+        matches(RegExp(r'^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d+(st|nd|rd|th)$')),
+      );
+      expect(dateText.style?.fontSize, 20);
+      expect(dateText.style?.fontWeight, FontWeight.w700);
+      expect(dateText.style?.color, const Color(0xFFEEC200));
+    });
+
+    testWidgets('Tapping BooksStatusCard navigates to the Books tab', (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('books_status_chevron')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ArtistBooksScreen), findsOneWidget);
+      expect(find.text('Books & Schedule'), findsOneWidget);
     });
   });
 }
