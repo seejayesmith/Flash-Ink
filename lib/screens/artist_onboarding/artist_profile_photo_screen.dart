@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../config/dev_config.dart';
 import '../../repositories/artist_repository.dart';
 import '../../services/auth_service.dart';
+import '../../services/auth/dev_mock_user.dart';
 import '../../widgets/fade_page_route.dart';
 import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/tattoo_background_wrapper.dart';

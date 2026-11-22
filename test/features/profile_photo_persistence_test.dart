@@ -12,6 +12,7 @@ import 'package:flash_ink/models/artist.dart';
 import 'package:flash_ink/providers/app_providers.dart';
 import 'package:flash_ink/repositories/artist_repository.dart';
 import 'package:flash_ink/services/auth_service.dart';
+import 'package:flash_ink/services/auth/dev_mock_user.dart';
 import 'package:flash_ink/features/artist/presentation/screens/artist_profile_screen.dart';
 import 'package:flash_ink/screens/client_account_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_account_screen.dart';

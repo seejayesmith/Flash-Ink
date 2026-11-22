@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flash_ink/screens/client_account_screen.dart';
 import 'package:flash_ink/screens/splash_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
+import 'package:flash_ink/services/auth/auth_exceptions.dart';
 import 'package:flash_ink/widgets/reauthentication_bottom_sheet.dart';
 
 class ReauthTestUser extends Fake implements User {

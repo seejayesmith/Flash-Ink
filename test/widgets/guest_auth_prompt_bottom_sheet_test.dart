@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flash_ink/services/auth_service.dart';
+import 'package:flash_ink/services/auth/dev_mock_user.dart';
 import 'package:flash_ink/widgets/guest_auth_prompt_bottom_sheet.dart';
 
 void main() {

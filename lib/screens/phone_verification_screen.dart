@@ -7,6 +7,7 @@ import '../features/auth/presentation/screens/auth_lockout_screen.dart';
 import '../features/auth/presentation/sheets/account_collision_sheet.dart';
 import '../features/auth/presentation/sheets/delivery_troubleshooting_sheet.dart';
 import '../services/auth_service.dart';
+import '../services/auth/dev_mock_user.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_radius.dart';
 import '../widgets/adaptive_glass_container.dart';

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../config/dev_config.dart';
 import '../services/auth_service.dart';
+import '../services/auth/dev_mock_user.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/adaptive_glass_container.dart';
 import '../widgets/flash_glass_app_bar.dart';

@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/dev_config.dart';
 import '../../providers/app_providers.dart';
 import '../../services/auth_service.dart';
+import '../../services/auth/dev_mock_user.dart';
 import '../../services/username_service.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/adaptive_glass_container.dart';

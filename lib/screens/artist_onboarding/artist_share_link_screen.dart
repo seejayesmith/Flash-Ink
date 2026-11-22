@@ -10,6 +10,7 @@ import '../../models/studio_information.dart';
 import '../../providers/app_providers.dart';
 import '../../repositories/artist_repository.dart';
 import '../../services/auth_service.dart';
+import '../../services/auth/dev_mock_user.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';
 import '../../widgets/adaptive_glass_container.dart';

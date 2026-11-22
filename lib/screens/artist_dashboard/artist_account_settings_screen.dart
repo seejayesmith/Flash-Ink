@@ -10,6 +10,7 @@ import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/inline_email_verification_tile.dart';
 import '../../widgets/reauthentication_bottom_sheet.dart';
 import '../../services/auth_service.dart';
+import '../../services/auth/auth_exceptions.dart';
 import '../../providers/app_providers.dart';
 import '../location_settings_screen.dart';
 import '../splash_screen.dart';

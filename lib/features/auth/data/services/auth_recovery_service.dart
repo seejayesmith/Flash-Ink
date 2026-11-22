@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../providers/app_providers.dart';
 import '../../../../services/auth_service.dart';
+import '../../../../services/auth/dev_mock_user.dart';
 
 /// Service responsible for login troubleshooting, server-verified recovery OTPs,
 /// phone number updates, credential collision resolution, and support escalation.

@@ -9,6 +9,8 @@ import '../features/appointments/domain/models/appointment_item.dart';
 import '../providers/app_providers.dart';
 import '../repositories/artist_repository.dart';
 import '../services/auth_service.dart';
+import '../services/auth/dev_mock_user.dart';
+import '../services/auth/auth_exceptions.dart';
 import '../services/notification_service.dart';
 import '../services/username_service.dart';
 import '../theme/app_theme.dart';

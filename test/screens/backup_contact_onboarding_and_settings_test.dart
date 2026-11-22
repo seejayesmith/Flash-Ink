@@ -17,6 +17,7 @@ import 'package:flash_ink/screens/client_account_screen.dart';
 import 'package:flash_ink/screens/client_backup_contact_screen.dart';
 import 'package:flash_ink/screens/profile_setup_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
+import 'package:flash_ink/services/auth/auth_exceptions.dart';
 import 'package:flash_ink/widgets/inline_email_verification_tile.dart';
 import 'package:flash_ink/widgets/reauthentication_bottom_sheet.dart';
 import 'package:flutter/material.dart';

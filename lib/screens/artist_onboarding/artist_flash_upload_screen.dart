@@ -8,6 +8,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import '../../models/artist.dart';
 import '../../models/studio_information.dart';
 import '../../services/auth_service.dart';
+import '../../services/auth/dev_mock_user.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';
 import '../../theme/app_spacing.dart';

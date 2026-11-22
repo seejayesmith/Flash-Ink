@@ -16,6 +16,7 @@ import 'package:flash_ink/models/artist.dart';
 import 'package:flash_ink/models/studio_information.dart';
 import 'package:flash_ink/providers/app_providers.dart';
 import 'package:flash_ink/services/auth_service.dart';
+import 'package:flash_ink/services/auth/dev_mock_user.dart';
 import 'package:flash_ink/services/google_places_service.dart';
 import 'package:flash_ink/services/studio_map_service.dart';
 

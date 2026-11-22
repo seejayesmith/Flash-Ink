@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flash_ink/features/appointments/domain/models/appointment_item.dart';
 import 'package:flash_ink/repositories/artist_dashboard_repository.dart';
 import 'package:flash_ink/services/auth_service.dart';
+import 'package:flash_ink/services/auth/dev_mock_user.dart';
 import 'package:flash_ink/services/booking_sync_service.dart';
 
 class _UnverifiedFakeUser extends Fake implements User {

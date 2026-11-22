@@ -12,6 +12,7 @@ import '../providers/app_providers.dart';
 import '../repositories/artist_repository.dart';
 import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
+import '../services/auth/dev_mock_user.dart';
 import '../services/username_service.dart';
 import '../theme/app_buttons.dart';
 import '../theme/app_radius.dart';

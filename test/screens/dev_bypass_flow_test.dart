@@ -13,6 +13,7 @@ import 'package:flash_ink/screens/main_feed_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_info_screen.dart';
 import 'package:flash_ink/widgets/skip_pill_button.dart';
 import 'package:flash_ink/services/auth_service.dart';
+import 'package:flash_ink/services/auth/dev_mock_user.dart';
 import 'package:flash_ink/services/stripe_service.dart';
 
 void main() {
