@@ -3,56 +3,17 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import '../core/mock/mock_data_config.dart';
 import '../features/appointments/domain/models/appointment_item.dart';
 import '../features/messages/domain/models/message_thread.dart';
 import '../models/artist_dashboard/artist_books_schedule.dart';
 import '../models/artist_dashboard/booking_request.dart';
 import '../models/artist_dashboard/dashboard_appointment.dart';
-import '../repositories/artist_dashboard_repository.dart';
+import '../models/booking_notification.dart';
 import '../models/waitlist_entry.dart';
 import 'auth_service.dart';
-
-/// Represents an in-app or push notification dispatched for booking lifecycle events.
-class BookingNotification {
-  final String id;
-  final String senderId;
-  final String recipientId;
-  final String recipientName;
-  final String title;
-  final String body;
-  final String category; // 'booking_confirmed', 'custom_request', 'rescheduled', 'cancelled', 'reminder'
-  final String? appointmentId;
-  final DateTime createdAt;
-
-  const BookingNotification({
-    required this.id,
-    required this.senderId,
-    required this.recipientId,
-    required this.recipientName,
-    required this.title,
-    required this.body,
-    required this.category,
-    this.appointmentId,
-    required this.createdAt,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'senderId': senderId,
-      'recipientId': recipientId,
-      'recipientName': recipientName,
-      'title': title,
-      'body': body,
-      'message': body,
-      'category': category,
-      'type': category,
-      'appointmentId': appointmentId,
-      'createdAt': createdAt.toIso8601String(),
-    };
-  }
-}
+import 'booking/booking_cloud_hydrator.dart';
+import 'booking/chat_cloud_sync.dart';
+import 'booking/schedule_cloud_sync.dart';
 
 /// Multi-device Cloud Firestore synchronization and notification service for bookings.
 ///
@@ -87,7 +48,9 @@ class BookingSyncService {
     try {
       candidate = FirebaseAuth.instance.currentUser?.photoURL;
     } catch (_) {}
-    if (candidate == null || candidate.trim().isEmpty || candidate.trim().startsWith('local://')) {
+    if (candidate == null ||
+        candidate.trim().isEmpty ||
+        candidate.trim().startsWith('local://')) {
       candidate = AuthService.devMockUser?.photoURL;
     }
     if (candidate == null) return '';
@@ -243,7 +206,9 @@ class BookingSyncService {
           .doc(bookingId)
           .set(payload, SetOptions(merge: true));
     } catch (e) {
-      debugPrint('[BookingSyncService] Offline/local fallback for booking $bookingId: $e');
+      debugPrint(
+        '[BookingSyncService] Offline/local fallback for booking $bookingId: $e',
+      );
     }
   }
 
@@ -257,12 +222,14 @@ class BookingSyncService {
   }) async {
     final effectiveClientId = (clientId != null && clientId.trim().isNotEmpty)
         ? clientId.trim()
-        : (appointment.clientId != null && appointment.clientId!.trim().isNotEmpty
+        : (appointment.clientId != null &&
+                appointment.clientId!.trim().isNotEmpty
             ? appointment.clientId!.trim()
             : resolveCurrentUid());
     final effectiveArtistId = (artistId != null && artistId.trim().isNotEmpty)
         ? artistId.trim()
-        : (appointment.artistId != null && appointment.artistId!.trim().isNotEmpty
+        : (appointment.artistId != null &&
+                appointment.artistId!.trim().isNotEmpty
             ? appointment.artistId!.trim()
             : resolveCurrentUid('artist_unknown'));
 
@@ -323,7 +290,9 @@ class BookingSyncService {
         } catch (_) {}
       }
     } catch (e) {
-      debugPrint('[BookingSyncService] Offline/local fallback for appointment ${appointment.id}: $e');
+      debugPrint(
+        '[BookingSyncService] Offline/local fallback for appointment ${appointment.id}: $e',
+      );
     }
   }
 
@@ -379,268 +348,72 @@ class BookingSyncService {
           .doc(request.id)
           .set(payload, SetOptions(merge: true));
     } catch (e) {
-      debugPrint('[BookingSyncService] Offline/local fallback for request ${request.id}: $e');
+      debugPrint(
+        '[BookingSyncService] Offline/local fallback for request ${request.id}: $e',
+      );
     }
   }
 
-  /// Persists the artist's [ArtistBooksSchedule] in Cloud Firestore (`artist_schedules`
-  /// and public `artists` collections).
   static Future<void> syncBooksScheduleToCloud(
     ArtistBooksSchedule schedule, {
     required String artistId,
     FirebaseFirestore? firestore,
-  }) async {
-    final cleanArtistId = artistId.trim();
-    if (cleanArtistId.isEmpty) return;
+  }) =>
+      ScheduleCloudSync.syncBooksScheduleToCloud(
+        schedule,
+        artistId: artistId,
+        syncedPayloads: syncedPayloads,
+        enableCloudWrites: enableCloudWrites,
+        firestore: firestore,
+      );
 
-    final scheduleMap = schedule.toMap();
-    final payload = {
-      ...scheduleMap,
-      'artistId': cleanArtistId,
-      'updatedAt': DateTime.now().toIso8601String(),
-    };
-
-    syncedPayloads.add({'collection': 'artist_schedules', 'data': payload});
-
-    if (!enableCloudWrites && firestore == null) return;
-    try {
-      final db = firestore ?? FirebaseFirestore.instance;
-      await db
-          .collection('artist_schedules')
-          .doc(cleanArtistId)
-          .set(payload, SetOptions(merge: true));
-      await db.collection('artists').doc(cleanArtistId).set({
-        'isBooksOpen': schedule.isBooksOpen,
-        'booksSchedule': scheduleMap,
-        'updatedAt': DateTime.now().toIso8601String(),
-      }, SetOptions(merge: true));
-    } catch (e) {
-      debugPrint('[BookingSyncService] Offline/local fallback for schedule $cleanArtistId: $e');
-    }
-  }
-
-  /// Syncs the artist's active 24h [heldSlots] onto `artist_schedules/{artistId}`
-  /// so public booking clients respect holds in real time.
   static Future<void> syncHeldSlotsToCloud(
     List<ScheduleSlotEntry> heldSlots, {
     required String artistId,
     FirebaseFirestore? firestore,
-  }) async {
-    final cleanArtistId = artistId.trim();
-    if (cleanArtistId.isEmpty) return;
+  }) =>
+      ScheduleCloudSync.syncHeldSlotsToCloud(
+        heldSlots,
+        artistId: artistId,
+        syncedPayloads: syncedPayloads,
+        enableCloudWrites: enableCloudWrites,
+        firestore: firestore,
+      );
 
-    final serialized = heldSlots.map((e) => e.toMap()).toList();
-    final nowIso = DateTime.now().toIso8601String();
-    final payload = {
-      'artistId': cleanArtistId,
-      'heldSlots': serialized,
-      'updatedAt': nowIso,
-    };
-
-    syncedPayloads.add({'collection': 'artist_schedules', 'data': payload});
-
-    if (!enableCloudWrites && firestore == null) return;
-    try {
-      final db = firestore ?? FirebaseFirestore.instance;
-      await db
-          .collection('artist_schedules')
-          .doc(cleanArtistId)
-          .set(payload, SetOptions(merge: true));
-      await db.collection('artists').doc(cleanArtistId).set({
-        'booksSchedule': {'heldSlots': serialized},
-        'updatedAt': nowIso,
-      }, SetOptions(merge: true));
-    } catch (e) {
-      debugPrint('[BookingSyncService] Offline/local fallback for heldSlots $cleanArtistId: $e');
-    }
-  }
-
-  /// Fetches an artist's public [ArtistBooksSchedule] from `artist_schedules/{artistId}`
-  /// (falling back to `artists/{artistId}.booksSchedule`).
   static Future<ArtistBooksSchedule?> fetchArtistScheduleFromCloud(
     String artistId, {
     FirebaseFirestore? firestore,
-  }) async {
-    final cleanArtistId = artistId.trim();
-    if (cleanArtistId.isEmpty) return null;
+  }) =>
+      ScheduleCloudSync.fetchArtistScheduleFromCloud(
+        artistId,
+        firestore: firestore,
+      );
 
-    FirebaseFirestore? db = firestore;
-    if (db == null) {
-      try {
-        db = FirebaseFirestore.instance;
-      } catch (_) {
-        return null;
-      }
-    }
-
-    try {
-      final schedDoc =
-          await db.collection('artist_schedules').doc(cleanArtistId).get();
-      if (schedDoc.exists && schedDoc.data() != null) {
-        return ArtistBooksSchedule.fromMap(schedDoc.data()!);
-      }
-      final artistDoc = await db.collection('artists').doc(cleanArtistId).get();
-      final artistData = artistDoc.data();
-      if (artistData != null && artistData['booksSchedule'] is Map) {
-        return ArtistBooksSchedule.fromMap(
-          Map<String, dynamic>.from(artistData['booksSchedule'] as Map),
-        );
-      }
-    } catch (e) {
-      debugPrint('[BookingSyncService] Failed to fetch artist schedule $cleanArtistId: $e');
-    }
-    return null;
-  }
-
-  /// Re-fetches the artist's cloud schedule and active bookings/appointments
-  /// immediately before deposit checkout to catch concurrent slot conflicts.
   static Future<({bool available, ArtistBooksSchedule? schedule})>
       verifySlotAvailableInCloud({
     required String artistId,
     required DateTime date,
     required String timeSlot,
     FirebaseFirestore? firestore,
-  }) async {
-    final cleanArtistId = artistId.trim();
-    if (cleanArtistId.isEmpty) {
-      return (available: true, schedule: null);
-    }
-
-    FirebaseFirestore? db = firestore;
-    if (db == null) {
-      try {
-        db = FirebaseFirestore.instance;
-      } catch (_) {
-        return (available: true, schedule: null);
-      }
-    }
-
-    final fetched = await fetchArtistScheduleFromCloud(
-      cleanArtistId,
-      firestore: db,
-    );
-
-    final extraBooked = <ScheduleSlotEntry>[];
-    const excludedStatuses = {
-      'cancelled',
-      'canceled',
-      'declined',
-      'passed',
-    };
-
-    void collectSlot(dynamic rawDate, dynamic rawTime, dynamic rawStatus) {
-      final status = (rawStatus ?? 'confirmed').toString().trim().toLowerCase();
-      if (excludedStatuses.contains(status)) return;
-      DateTime? parsedDate;
-      if (rawDate is Timestamp) {
-        parsedDate = rawDate.toDate();
-      } else if (rawDate is String) {
-        parsedDate = DateTime.tryParse(rawDate);
-      }
-      if (parsedDate == null) return;
-      final rawTimeStr = (rawTime ?? '').toString().split('(').first.trim();
-      if (rawTimeStr.isEmpty) return;
-      extraBooked.add(
-        ScheduleSlotEntry(
-          dateKey: ArtistBooksSchedule.dateKey(parsedDate),
-          timeSlot: rawTimeStr,
-        ),
+  }) =>
+      ScheduleCloudSync.verifySlotAvailableInCloud(
+        artistId: artistId,
+        date: date,
+        timeSlot: timeSlot,
+        firestore: firestore,
       );
-    }
 
-    try {
-      final aptSnap = await db
-          .collection('appointments')
-          .where('artistId', isEqualTo: cleanArtistId)
-          .get();
-      for (final doc in aptSnap.docs) {
-        final data = doc.data();
-        collectSlot(data['scheduledDate'], data['time'], data['status']);
-      }
-    } catch (_) {}
-
-    try {
-      final bookingSnap = await db
-          .collection('bookings')
-          .where('artistId', isEqualTo: cleanArtistId)
-          .get();
-      for (final doc in bookingSnap.docs) {
-        final data = doc.data();
-        collectSlot(
-          data['selectedDate'],
-          data['selectedTimeSlot'],
-          data['status'],
-        );
-      }
-    } catch (_) {}
-
-    ArtistBooksSchedule effectiveSchedule =
-        fetched ?? ArtistDashboardRepository.booksSchedule;
-    if (extraBooked.isNotEmpty) {
-      final merged = <String, ScheduleSlotEntry>{
-        for (final e in effectiveSchedule.bookedSlots)
-          '${e.dateKey}__${ArtistBooksSchedule.normalizeTimeLabel(e.timeSlot)}':
-              e,
-        for (final e in extraBooked)
-          '${e.dateKey}__${ArtistBooksSchedule.normalizeTimeLabel(e.timeSlot)}':
-              e,
-      };
-      effectiveSchedule = effectiveSchedule.copyWith(
-        bookedSlots: merged.values.toList(),
-      );
-    }
-
-    final isAvailable = ArtistDashboardRepository.isSlotBookable(
-      date: date,
-      timeSlot: timeSlot,
-      schedule: effectiveSchedule,
-      artistId: cleanArtistId,
-    );
-    return (
-      available: isAvailable,
-      schedule: fetched != null || extraBooked.isNotEmpty
-          ? effectiveSchedule
-          : null,
-    );
-  }
-
-  /// Persists the artist's VIP [WaitlistEntry] roster in Cloud Firestore (`artist_schedules`
-  /// and `artists` collections).
   static Future<void> syncWaitlistToCloud(
     List<WaitlistEntry> entries, {
     required String artistId,
-  }) async {
-    final cleanArtistId = artistId.trim();
-    if (cleanArtistId.isEmpty) return;
+  }) =>
+      ScheduleCloudSync.syncWaitlistToCloud(
+        entries,
+        artistId: artistId,
+        syncedPayloads: syncedPayloads,
+        enableCloudWrites: enableCloudWrites,
+      );
 
-    final serialized = entries.map((e) => e.toMap()).toList();
-    final payload = {
-      'artistId': cleanArtistId,
-      'waitlistEntries': serialized,
-      'updatedAt': DateTime.now().toIso8601String(),
-    };
-
-    syncedPayloads.add({'collection': 'artist_schedules', 'data': payload});
-
-    if (!enableCloudWrites) return;
-    try {
-      await FirebaseFirestore.instance
-          .collection('artist_schedules')
-          .doc(cleanArtistId)
-          .set(payload, SetOptions(merge: true));
-      await FirebaseFirestore.instance
-          .collection('artists')
-          .doc(cleanArtistId)
-          .set({
-        'waitlistEntries': serialized,
-        'updatedAt': DateTime.now().toIso8601String(),
-      }, SetOptions(merge: true));
-    } catch (e) {
-      debugPrint('[BookingSyncService] Offline/local fallback for waitlist $cleanArtistId: $e');
-    }
-  }
-
-  /// Persists or updates a [MessageThread] and its messages in Cloud Firestore (`chats/{threadId}`).
   static Future<void> syncChatThreadToCloud(
     MessageThread thread, {
     String? clientId,
@@ -648,452 +421,63 @@ class BookingSyncService {
     String? clientName,
     String? clientAvatar,
     String? artistAvatar,
-  }) async {
-    final effectiveArtistId = artistId.trim().isNotEmpty
-        ? artistId.trim()
-        : (thread.artistId.trim().isNotEmpty ? thread.artistId.trim() : resolveCurrentUid('artist_unknown'));
-    final effectiveClientId = (clientId != null && clientId.trim().isNotEmpty)
-        ? clientId.trim()
-        : (thread.clientId != null && thread.clientId!.trim().isNotEmpty
-            ? thread.clientId!.trim()
-            : resolveCurrentUid('client_unknown'));
-    final participants = <String>[effectiveClientId, effectiveArtistId];
+  }) =>
+      ChatCloudSync.syncChatThreadToCloud(
+        thread,
+        artistId: artistId,
+        resolveCurrentUid: resolveCurrentUid,
+        syncedPayloads: syncedPayloads,
+        enableCloudWrites: enableCloudWrites,
+        clientId: clientId,
+        clientName: clientName,
+        clientAvatar: clientAvatar,
+        artistAvatar: artistAvatar,
+      );
 
-    final resolvedClientAvatar = (clientAvatar != null &&
-            clientAvatar.trim().isNotEmpty &&
-            !clientAvatar.trim().startsWith('local://'))
-        ? clientAvatar.trim()
-        : (thread.clientAvatar.trim().isNotEmpty &&
-                !thread.clientAvatar.trim().startsWith('local://')
-            ? thread.clientAvatar.trim()
-            : '');
-    final resolvedArtistAvatar = (artistAvatar != null &&
-            artistAvatar.trim().isNotEmpty &&
-            !artistAvatar.trim().startsWith('local://'))
-        ? artistAvatar.trim()
-        : (thread.artistAvatar.trim().isNotEmpty &&
-                !thread.artistAvatar.trim().startsWith('local://')
-            ? thread.artistAvatar.trim()
-            : '');
-
-    final threadMap = thread.toMap();
-    if (resolvedClientAvatar.isEmpty) {
-      threadMap.remove('clientAvatar');
-    } else {
-      threadMap['clientAvatar'] = resolvedClientAvatar;
-    }
-    if (resolvedArtistAvatar.isEmpty) {
-      threadMap.remove('artistAvatar');
-    } else {
-      threadMap['artistAvatar'] = resolvedArtistAvatar;
-    }
-
-    final payload = {
-      ...threadMap,
-      'clientId': effectiveClientId,
-      'artistId': effectiveArtistId,
-      if (clientName != null && clientName.isNotEmpty) 'clientName': clientName,
-      'participants': participants,
-      'createdAt': thread.lastMessageTime.toIso8601String(),
-      'updatedAt': DateTime.now().toIso8601String(),
-    };
-
-    syncedPayloads.add({'collection': 'chats', 'data': payload});
-
-    if (!enableCloudWrites) return;
-    try {
-      final docRef = FirebaseFirestore.instance.collection('chats').doc(thread.id);
-      await docRef.set(payload, SetOptions(merge: true));
-      for (final msg in thread.messages) {
-        await docRef
-            .collection('messages')
-            .doc(msg.id)
-            .set(msg.toMap(), SetOptions(merge: true));
-      }
-    } catch (e) {
-      debugPrint('[BookingSyncService] Offline/local fallback for chat thread ${thread.id}: $e');
-    }
-  }
-
-  /// Appends a single [ChatMessage] to an active conversation in local memory and Cloud Firestore.
   static Future<void> appendAndSyncChatMessage({
     required String threadId,
     required ChatMessage message,
-  }) async {
-    final threads = MessageThread.activeThreads;
-    final idx = threads.indexWhere((t) => t.id == threadId);
-    if (idx != -1) {
-      final existing = threads[idx];
-      final updatedMessages = [...existing.messages, message];
-      final updatedThread = existing.copyWith(
-        lastMessage: message.previewText,
-        lastMessageTime: message.timestamp,
-        unreadCount: 0,
-        messages: updatedMessages,
+  }) =>
+      ChatCloudSync.appendAndSyncChatMessage(
+        threadId: threadId,
+        message: message,
+        syncedPayloads: syncedPayloads,
+        enableCloudWrites: enableCloudWrites,
       );
-      threads[idx] = updatedThread;
-      ArtistDashboardRepository.notifyPendingRequestsChanged();
-    }
 
-    syncedPayloads.add({'collection': 'messages', 'data': message.toMap()});
-
-    if (!enableCloudWrites) return;
-    try {
-      final docRef = FirebaseFirestore.instance.collection('chats').doc(threadId);
-      await docRef.set({
-        'lastMessage': message.previewText,
-        'lastMessageTime': message.timestamp.toIso8601String(),
-        'updatedAt': DateTime.now().toIso8601String(),
-        'messages': FieldValue.arrayUnion([message.toMap()]),
-      }, SetOptions(merge: true));
-      await docRef
-          .collection('messages')
-          .doc(message.id)
-          .set(message.toMap(), SetOptions(merge: true));
-    } catch (e) {
-      debugPrint('[BookingSyncService] Offline/local fallback for chat message ${message.id}: $e');
-    }
-  }
-
-  static List<BookingRequest> _parsePendingCustomRequests(
-    QuerySnapshot<Map<String, dynamic>> snap,
-  ) {
-    return snap.docs
-        .where((doc) {
-          final st = (doc.data()['status'] ?? 'pending').toString();
-          return st == 'pending' || st == 'pending_artist_approval';
-        })
-        .map((doc) => BookingRequest.fromMap(doc.data(), doc.id))
-        .toList();
-  }
-
-  /// Subscribes to real-time updates of pending custom piece requests for [artistId]
-  /// in Cloud Firestore (`custom_requests` collection) when running in live mode.
   static StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
       listenToArtistCustomRequests(
     String artistId, {
     FirebaseFirestore? firestore,
-  }) {
-    final cleanArtistId = artistId.trim();
-    if (cleanArtistId.isEmpty || MockDataConfig.isEnabled) return null;
-
-    FirebaseFirestore? db = firestore;
-    if (db == null) {
-      try {
-        db = FirebaseFirestore.instance;
-      } catch (_) {
-        return null;
-      }
-    }
-
-    try {
-      return db
-          .collection('custom_requests')
-          .where('artistId', isEqualTo: cleanArtistId)
-          .snapshots()
-          .listen(
-        (snap) {
-          ArtistDashboardRepository.pendingRequests =
-              _parsePendingCustomRequests(snap);
-        },
-        onError: (Object error) {
-          debugPrint(
-            '[BookingSyncService] Custom requests stream error for $cleanArtistId: $error',
-          );
-        },
+  }) =>
+      BookingCloudHydrator.listenToArtistCustomRequests(
+        artistId,
+        firestore: firestore,
       );
-    } catch (_) {
-      return null;
-    }
-  }
 
-  /// Hydrates live artist appointments, custom requests, book schedule, waitlist, and chat threads
-  /// from Cloud Firestore when running in live mode (`!MockDataConfig.isEnabled`).
   static Future<void> hydrateArtistDataFromCloud(
     String artistId, {
     FirebaseFirestore? firestore,
-  }) async {
-    final cleanArtistId = artistId.trim();
-    if (cleanArtistId.isEmpty || MockDataConfig.isEnabled) return;
+  }) =>
+      BookingCloudHydrator.hydrateArtistDataFromCloud(
+        artistId,
+        resolveCurrentUserPhotoUrlSync: resolveCurrentUserPhotoUrlSync,
+        extractPhotoUrl: extractPhotoUrl,
+        enableCloudWrites: enableCloudWrites,
+        firestore: firestore,
+      );
 
-    FirebaseFirestore? db = firestore;
-    if (db == null) {
-      try {
-        db = FirebaseFirestore.instance;
-      } catch (_) {
-        return;
-      }
-    }
-
-    bool changed = false;
-
-    // 1. Hydrate artist_schedules (BooksSchedule + Waitlist)
-    try {
-      final schedDoc = await db.collection('artist_schedules').doc(cleanArtistId).get();
-      if (schedDoc.exists && schedDoc.data() != null) {
-        final data = schedDoc.data()!;
-        ArtistDashboardRepository.booksSchedule = ArtistBooksSchedule.fromMap(data);
-        if (data['waitlistEntries'] is List) {
-          final parsedWaitlist = (data['waitlistEntries'] as List)
-              .whereType<Map>()
-              .map((m) => WaitlistEntry.fromMap(Map<String, dynamic>.from(m)))
-              .toList();
-          ArtistDashboardRepository.liveWaitlistEntries = parsedWaitlist;
-        }
-        changed = true;
-      } else {
-        final fallbackSchedule =
-            await fetchArtistScheduleFromCloud(cleanArtistId, firestore: db);
-        if (fallbackSchedule != null) {
-          ArtistDashboardRepository.booksSchedule = fallbackSchedule;
-          changed = true;
-        }
-      }
-    } catch (_) {}
-
-    // 2. Hydrate appointments for this artist
-    try {
-      final aptSnap = await db
-          .collection('appointments')
-          .where('artistId', isEqualTo: cleanArtistId)
-          .get();
-      final remoteApts = aptSnap.docs
-          .where((doc) => doc.data()['status'] != 'cancelled')
-          .map((doc) => DashboardAppointment.fromMap(doc.data(), doc.id))
-          .toList();
-      if (remoteApts.isNotEmpty) {
-        final merged = <String, DashboardAppointment>{
-          for (final a in ArtistDashboardRepository.liveCalendarAppointments) a.id: a,
-          for (final a in remoteApts) a.id: a,
-        };
-        ArtistDashboardRepository.liveCalendarAppointments = merged.values.toList();
-        changed = true;
-      }
-    } catch (_) {}
-
-    // 3. Hydrate pending custom_requests for this artist
-    try {
-      final reqSnap = await db
-          .collection('custom_requests')
-          .where('artistId', isEqualTo: cleanArtistId)
-          .get();
-      final remoteReqs = _parsePendingCustomRequests(reqSnap);
-      if (remoteReqs.isNotEmpty) {
-        final merged = <String, BookingRequest>{
-          for (final r in ArtistDashboardRepository.livePendingRequests) r.id: r,
-          for (final r in remoteReqs) r.id: r,
-        };
-        ArtistDashboardRepository.livePendingRequests = merged.values.toList();
-        changed = true;
-      }
-    } catch (_) {}
-
-    // 4. Hydrate chats where artist is a participant
-    try {
-      final clientAvatarsByClientId = <String, String>{};
-      for (final apt in ArtistDashboardRepository.liveCalendarAppointments) {
-        final cid = apt.clientId?.trim() ?? '';
-        final avatar = apt.clientAvatar?.trim() ?? '';
-        if (cid.isNotEmpty && avatar.isNotEmpty && !avatar.startsWith('local://')) {
-          clientAvatarsByClientId[cid] = avatar;
-        }
-      }
-      for (final req in ArtistDashboardRepository.livePendingRequests) {
-        final cid = req.clientId?.trim() ?? '';
-        final avatar = req.clientAvatar?.trim() ?? '';
-        if (cid.isNotEmpty && avatar.isNotEmpty && !avatar.startsWith('local://')) {
-          clientAvatarsByClientId.putIfAbsent(cid, () => avatar);
-        }
-      }
-
-      String selfArtistAvatar = resolveCurrentUserPhotoUrlSync();
-      if (selfArtistAvatar.isEmpty) {
-        try {
-          final selfArtistDoc = await db.collection('artists').doc(cleanArtistId).get();
-          selfArtistAvatar = extractPhotoUrl(selfArtistDoc.data());
-        } catch (_) {}
-      }
-
-      final chatSnap = await db
-          .collection('chats')
-          .where('participants', arrayContains: cleanArtistId)
-          .get();
-      if (chatSnap.docs.isNotEmpty) {
-        final merged = <String, MessageThread>{
-          for (final t in MessageThread.liveThreads) t.id: t,
-        };
-        for (final doc in chatSnap.docs) {
-          var thread = MessageThread.fromMap(doc.data(), doc.id);
-          try {
-            final msgSnap = await doc.reference.collection('messages').get();
-            if (msgSnap.docs.isNotEmpty) {
-              final byId = <String, ChatMessage>{
-                for (final m in thread.messages) m.id: m,
-                for (final mDoc in msgSnap.docs)
-                  mDoc.id: ChatMessage.fromMap(mDoc.data(), mDoc.id),
-              };
-              final mergedMsgs = byId.values.toList()
-                ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-              thread = thread.copyWith(messages: mergedMsgs);
-            }
-          } catch (_) {}
-
-          final updates = <String, dynamic>{};
-          final threadClientId = thread.clientId?.trim() ?? '';
-          if ((thread.clientAvatar.trim().isEmpty ||
-                  thread.clientAvatar.trim().startsWith('local://')) &&
-              threadClientId.isNotEmpty) {
-            var resolvedClientAvatar = clientAvatarsByClientId[threadClientId] ?? '';
-            if (resolvedClientAvatar.isEmpty) {
-              try {
-                // Public artist profile lookup works cleanly for dual-role collectors.
-                final clientArtistDoc =
-                    await db.collection('artists').doc(threadClientId).get();
-                resolvedClientAvatar = extractPhotoUrl(clientArtistDoc.data());
-              } catch (_) {}
-            }
-            if (resolvedClientAvatar.isEmpty && threadClientId == cleanArtistId) {
-              resolvedClientAvatar = selfArtistAvatar;
-            }
-            if (resolvedClientAvatar.isNotEmpty) {
-              thread = thread.copyWith(clientAvatar: resolvedClientAvatar);
-              updates['clientAvatar'] = resolvedClientAvatar;
-            }
-          }
-
-          if ((thread.artistAvatar.trim().isEmpty ||
-                  thread.artistAvatar.trim().startsWith('local://')) &&
-              thread.artistId == cleanArtistId &&
-              selfArtistAvatar.isNotEmpty) {
-            thread = thread.copyWith(artistAvatar: selfArtistAvatar);
-            updates['artistAvatar'] = selfArtistAvatar;
-          }
-
-          if (updates.isNotEmpty && enableCloudWrites) {
-            try {
-              await doc.reference.set(updates, SetOptions(merge: true));
-            } catch (_) {}
-          }
-
-          merged[thread.id] = thread;
-        }
-        MessageThread.liveThreads
-          ..clear()
-          ..addAll(merged.values);
-        changed = true;
-      }
-    } catch (_) {}
-
-    if (changed) {
-      ArtistDashboardRepository.notifyPendingRequestsChanged();
-      MessageThread.unreadUpdateNotifier.value++;
-    }
-  }
-
-  /// Hydrates live client chat threads from Cloud Firestore (`chats` collection)
-  /// and backfills missing `clientAvatar` / `artistAvatar` URLs.
   static Future<void> hydrateClientDataFromCloud(
     String clientId, {
     FirebaseFirestore? firestore,
-  }) async {
-    final cleanClientId = clientId.trim();
-    if (cleanClientId.isEmpty || MockDataConfig.isEnabled) return;
-
-    FirebaseFirestore? db = firestore;
-    if (db == null) {
-      try {
-        db = FirebaseFirestore.instance;
-      } catch (_) {
-        return;
-      }
-    }
-
-    bool changed = false;
-    final selfPhotoUrl = await resolveCurrentUserPhotoUrl(
-      uid: cleanClientId,
-      firestore: db,
-    );
-
-    try {
-      final chatSnap = await db
-          .collection('chats')
-          .where('participants', arrayContains: cleanClientId)
-          .get();
-      if (chatSnap.docs.isNotEmpty) {
-        final merged = <String, MessageThread>{
-          for (final t in MessageThread.liveThreads) t.id: t,
-        };
-        final artistAvatarCache = <String, String>{};
-
-        for (final doc in chatSnap.docs) {
-          var thread = MessageThread.fromMap(doc.data(), doc.id);
-          try {
-            final msgSnap = await doc.reference.collection('messages').get();
-            if (msgSnap.docs.isNotEmpty) {
-              final byId = <String, ChatMessage>{
-                for (final m in thread.messages) m.id: m,
-                for (final mDoc in msgSnap.docs)
-                  mDoc.id: ChatMessage.fromMap(mDoc.data(), mDoc.id),
-              };
-              final mergedMsgs = byId.values.toList()
-                ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-              thread = thread.copyWith(messages: mergedMsgs);
-            }
-          } catch (_) {}
-
-          final updates = <String, dynamic>{};
-          if (selfPhotoUrl.isNotEmpty &&
-              (thread.clientAvatar.trim().isEmpty ||
-                  thread.clientAvatar.trim().startsWith('local://') ||
-                  thread.clientAvatar.trim() != selfPhotoUrl) &&
-              (thread.clientId == null ||
-                  thread.clientId!.trim().isEmpty ||
-                  thread.clientId!.trim() == cleanClientId)) {
-            thread = thread.copyWith(clientAvatar: selfPhotoUrl);
-            updates['clientAvatar'] = selfPhotoUrl;
-          }
-
-          final targetArtistId = thread.artistId.trim();
-          if ((thread.artistAvatar.trim().isEmpty ||
-                  thread.artistAvatar.trim().startsWith('local://')) &&
-              targetArtistId.isNotEmpty) {
-            var resolvedArtistAvatar = artistAvatarCache[targetArtistId];
-            if (resolvedArtistAvatar == null) {
-              try {
-                final artistDoc =
-                    await db.collection('artists').doc(targetArtistId).get();
-                resolvedArtistAvatar = extractPhotoUrl(artistDoc.data());
-              } catch (_) {
-                resolvedArtistAvatar = '';
-              }
-              artistAvatarCache[targetArtistId] = resolvedArtistAvatar;
-            }
-            if (resolvedArtistAvatar.isNotEmpty) {
-              thread = thread.copyWith(artistAvatar: resolvedArtistAvatar);
-              updates['artistAvatar'] = resolvedArtistAvatar;
-            }
-          }
-
-          if (updates.isNotEmpty && enableCloudWrites) {
-            try {
-              await doc.reference.set(updates, SetOptions(merge: true));
-            } catch (_) {}
-          }
-
-          merged[thread.id] = thread;
-        }
-
-        MessageThread.liveThreads
-          ..clear()
-          ..addAll(merged.values);
-        changed = true;
-      }
-    } catch (_) {}
-
-    if (changed) {
-      MessageThread.unreadUpdateNotifier.value++;
-    }
-  }
+  }) =>
+      BookingCloudHydrator.hydrateClientDataFromCloud(
+        clientId,
+        resolveCurrentUserPhotoUrl: resolveCurrentUserPhotoUrl,
+        extractPhotoUrl: extractPhotoUrl,
+        enableCloudWrites: enableCloudWrites,
+        firestore: firestore,
+      );
 
   /// Dispatches a booking lifecycle or 24h reminder notification to a client or artist.
   static BookingNotification sendBookingNotification({
@@ -1108,9 +492,10 @@ class BookingSyncService {
     final effectiveSenderId = (senderId != null && senderId.trim().isNotEmpty)
         ? senderId.trim()
         : resolveCurrentUid();
-    final effectiveRecipientId = (recipientId != null && recipientId.trim().isNotEmpty)
-        ? recipientId.trim()
-        : resolveCurrentUid('recipient_unknown');
+    final effectiveRecipientId =
+        (recipientId != null && recipientId.trim().isNotEmpty)
+            ? recipientId.trim()
+            : resolveCurrentUid('recipient_unknown');
 
     final notification = BookingNotification(
       id: 'notif_${DateTime.now().microsecondsSinceEpoch}',
@@ -1125,7 +510,8 @@ class BookingSyncService {
     );
 
     sentNotifications.insert(0, notification);
-    syncedPayloads.add({'collection': 'notifications', 'data': notification.toMap()});
+    syncedPayloads
+        .add({'collection': 'notifications', 'data': notification.toMap()});
 
     if (enableCloudWrites) {
       try {
