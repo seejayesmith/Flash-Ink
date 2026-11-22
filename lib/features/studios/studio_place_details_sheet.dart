@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist.dart';
 import '../../services/google_places_service.dart';
+import '../../models/google_place_models.dart';
 import '../../services/studio_map_service.dart';
 import '../../theme/app_radius.dart';
 import '../../theme/app_spacing.dart';

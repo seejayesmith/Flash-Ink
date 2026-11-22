@@ -10,6 +10,7 @@ import '../../providers/app_providers.dart';
 import '../../screens/flash_details_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/google_places_service.dart';
+import '../../models/google_place_models.dart';
 import '../../services/studio_map_service.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';

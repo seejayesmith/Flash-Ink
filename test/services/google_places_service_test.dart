@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:flash_ink/services/google_places_service.dart';
+import 'package:flash_ink/models/google_place_models.dart';
 
 void main() {
   group('GooglePlacesService Tests', () {

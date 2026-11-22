@@ -6,6 +6,7 @@ import '../core/utils/distance_calculator.dart';
 import '../features/explore/domain/models/explore_studio.dart';
 import '../models/artist.dart';
 import 'google_places_service.dart';
+import '../models/google_place_models.dart';
 import 'location_service.dart';
 
 /// Unified map pin representation for both verified Flash.Ink studios (backed by

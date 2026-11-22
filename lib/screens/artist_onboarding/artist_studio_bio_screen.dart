@@ -7,6 +7,7 @@ import '../../models/studio_information.dart';
 import '../../repositories/artist_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/google_places_service.dart';
+import '../../models/google_place_models.dart';
 import '../../theme/app_radius.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/adaptive_glass_container.dart';

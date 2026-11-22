@@ -7,6 +7,7 @@ import '../../core/utils/distance_calculator.dart';
 import '../../models/artist.dart';
 import '../../providers/app_providers.dart';
 import '../../services/google_places_service.dart';
+import '../../models/google_place_models.dart';
 import '../../services/location_service.dart';
 import '../../services/studio_map_service.dart';
 import '../../theme/app_radius.dart';
