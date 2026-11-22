@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderOrFamily;
 import '../core/mock/mock_data_config.dart';
 import '../core/mock/mock_fixtures.dart';
 import '../core/utils/distance_calculator.dart';
@@ -366,30 +367,27 @@ final activeAppModeProvider =
   ActiveAppModeNotifier.new,
 );
 
+void _invalidateUserSession(void Function(ProviderOrFamily) invalidate) {
+  invalidate(sessionEpochProvider);
+  invalidate(authStateStreamProvider);
+  invalidate(activeUidProvider);
+  invalidate(currentUserProfileProvider);
+  invalidate(currentArtistProfileProvider);
+  invalidate(activeAppModeProvider);
+  invalidate(liveGpsCoordinatesProvider);
+  invalidate(effectiveClientCoordinatesProvider);
+}
+
 /// Explicitly invalidates all user-scoped Riverpod providers on sign-out.
 void invalidateUserSessionProviders(WidgetRef ref) {
-  ref.invalidate(sessionEpochProvider);
-  ref.invalidate(authStateStreamProvider);
-  ref.invalidate(activeUidProvider);
-  ref.invalidate(currentUserProfileProvider);
-  ref.invalidate(currentArtistProfileProvider);
-  ref.invalidate(activeAppModeProvider);
-  ref.invalidate(liveGpsCoordinatesProvider);
-  ref.invalidate(effectiveClientCoordinatesProvider);
+  _invalidateUserSession(ref.invalidate);
 }
 
 /// Invalidates all user-scoped Riverpod providers via [BuildContext] if inside a [ProviderScope].
 void invalidateUserSessionFromContext(BuildContext context) {
   try {
     final container = ProviderScope.containerOf(context, listen: false);
-    container.invalidate(sessionEpochProvider);
-    container.invalidate(authStateStreamProvider);
-    container.invalidate(activeUidProvider);
-    container.invalidate(currentUserProfileProvider);
-    container.invalidate(currentArtistProfileProvider);
-    container.invalidate(activeAppModeProvider);
-    container.invalidate(liveGpsCoordinatesProvider);
-    container.invalidate(effectiveClientCoordinatesProvider);
+    _invalidateUserSession(container.invalidate);
   } catch (_) {
     // Safe no-op in standalone widget tests rendered without a ProviderScope
   }

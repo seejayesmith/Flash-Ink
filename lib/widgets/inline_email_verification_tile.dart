@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/auth/auth_exceptions.dart';
 import '../theme/app_theme.dart';
 import 'flash_snack_bar.dart';
+import 'inline_verification_shared.dart';
 import 'reauthentication_bottom_sheet.dart';
 
 /// Expandable inline settings tile for viewing, adding, or updating an
@@ -54,14 +54,14 @@ class _InlineEmailVerificationTileState
     extends State<InlineEmailVerificationTile> {
   late final AuthService _authService = widget.authService ?? AuthService();
   final TextEditingController _emailController = TextEditingController();
+  final InlineResendCooldownController _cooldown =
+      InlineResendCooldownController();
 
   bool _isExpanded = false;
   bool _awaitingLinkConfirmation = false;
   bool _isLoading = false;
   String? _errorMessage;
   String? _localPendingEmail;
-  int _resendCooldown = 0;
-  Timer? _resendTimer;
 
   static final RegExp _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
@@ -94,26 +94,15 @@ class _InlineEmailVerificationTileState
 
   @override
   void dispose() {
-    _resendTimer?.cancel();
+    _cooldown.dispose();
     _emailController.dispose();
     super.dispose();
   }
 
   void _startResendCooldown() {
-    _resendTimer?.cancel();
     if (!mounted) return;
-    setState(() => _resendCooldown = 30);
-    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_resendCooldown <= 1) {
-        timer.cancel();
-        setState(() => _resendCooldown = 0);
-      } else {
-        setState(() => _resendCooldown -= 1);
-      }
+    _cooldown.start(() {
+      if (mounted) setState(() {});
     });
   }
 
@@ -243,7 +232,7 @@ class _InlineEmailVerificationTileState
       );
       if (!mounted) return;
       if (verified) {
-        _resendTimer?.cancel();
+        _cooldown.cancel();
         final resolvedEmail =
             _authService.currentUser?.email?.trim().isNotEmpty == true
                 ? _authService.currentUser!.email!.trim()
@@ -274,67 +263,6 @@ class _InlineEmailVerificationTileState
       });
       FlashSnackBar.showError(context, message);
     }
-  }
-
-  Widget _buildBadge({
-    required Key badgeKey,
-    required String label,
-    required Color backgroundColor,
-    required Color borderColor,
-    required Color textColor,
-  }) {
-    return Container(
-      key: badgeKey,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: borderColor),
-      ),
-      child: Text(
-        label,
-        style: GoogleFonts.plusJakartaSans(
-          color: textColor,
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActionPill({
-    required Key buttonKey,
-    required String label,
-    required VoidCallback onTap,
-    bool highlighted = false,
-  }) {
-    return GestureDetector(
-      key: buttonKey,
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: highlighted
-              ? AppTheme.gold.withAlpha(30)
-              : Colors.white.withAlpha(12),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: highlighted
-                ? AppTheme.gold.withAlpha(120)
-                : Colors.white.withAlpha(30),
-          ),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.plusJakartaSans(
-            color: highlighted ? AppTheme.gold : Colors.white70,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
   }
 
   @override
@@ -369,7 +297,7 @@ class _InlineEmailVerificationTileState
               ),
               if (hasPending) ...[
                 const SizedBox(width: 8),
-                _buildBadge(
+                InlineVerificationStatusBadge(
                   badgeKey: const Key('email_pending_badge'),
                   label: 'PENDING',
                   backgroundColor: AppTheme.gold.withAlpha(25),
@@ -378,7 +306,7 @@ class _InlineEmailVerificationTileState
                 ),
               ] else if (hasEmail && widget.emailVerified) ...[
                 const SizedBox(width: 8),
-                _buildBadge(
+                InlineVerificationStatusBadge(
                   badgeKey: const Key('email_verified_badge'),
                   label: 'VERIFIED',
                   backgroundColor: const Color(0xFF10B981).withAlpha(25),
@@ -394,12 +322,12 @@ class _InlineEmailVerificationTileState
             style: GoogleFonts.plusJakartaSans(
               color: hasPending
                   ? AppTheme.gold
-                  : (hasEmail ? const Color(0xFF919696) : const Color(0xFF6B7280)),
+                  : (hasEmail ? AppTheme.navInactive : const Color(0xFF6B7280)),
               fontSize: 13,
             ),
           ),
           trailing: hasPending
-              ? _buildActionPill(
+              ? InlineVerificationActionPill(
                   buttonKey: const Key('check_email_verified_button'),
                   label: _isExpanded ? 'Close' : 'Verify',
                   highlighted: true,
@@ -409,12 +337,12 @@ class _InlineEmailVerificationTileState
                   ),
                 )
               : (hasEmail
-                  ? _buildActionPill(
+                  ? InlineVerificationActionPill(
                       buttonKey: const Key('change_email_button'),
                       label: _isExpanded ? 'Close' : 'Change',
                       onTap: () => _toggleExpanded(),
                     )
-                  : _buildActionPill(
+                  : InlineVerificationActionPill(
                       buttonKey: const Key('add_email_button'),
                       label: _isExpanded ? 'Close' : 'Add',
                       highlighted: true,
@@ -450,7 +378,7 @@ class _InlineEmailVerificationTileState
         Text(
           'Enter an email address to receive a one-tap verification link.',
           style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFF919696),
+            color: AppTheme.navInactive,
             fontSize: 12,
             height: 1.4,
           ),
@@ -465,7 +393,7 @@ class _InlineEmailVerificationTileState
             color: Colors.white,
             fontSize: 14,
           ),
-          decoration: InputDecoration(
+          decoration: buildInlineVerificationInputDecoration(
             hintText: 'you@example.com',
             hintStyle: GoogleFonts.plusJakartaSans(
               color: const Color(0xFF6B7280),
@@ -476,16 +404,8 @@ class _InlineEmailVerificationTileState
               color: AppTheme.gold,
               size: 18,
             ),
-            filled: true,
-            fillColor: const Color(0xFF141616),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.white.withAlpha(25)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppTheme.gold, width: 1.5),
-            ),
+            borderRadius: 12,
+            borderColor: Colors.white.withAlpha(25),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 12,
@@ -500,45 +420,18 @@ class _InlineEmailVerificationTileState
         ),
         if (_errorMessage != null) ...[
           const SizedBox(height: 8),
-          Text(
-            _errorMessage!,
-            key: const Key('inline_email_error_text'),
-            style: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFFCF6679),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
+          InlineVerificationErrorText(
+            errorKey: const Key('inline_email_error_text'),
+            message: _errorMessage!,
+            color: const Color(0xFFCF6679),
           ),
         ],
         const SizedBox(height: 12),
-        ElevatedButton(
-          key: const Key('inline_email_send_link_button'),
-          onPressed: _isLoading ? null : () => _sendVerificationLink(),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.gold,
-            foregroundColor: const Color(0xFF121414),
-            disabledBackgroundColor: AppTheme.gold.withAlpha(110),
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          child: _isLoading
-              ? const SizedBox(
-                  height: 18,
-                  width: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Color(0xFF121414),
-                  ),
-                )
-              : Text(
-                  'Send Verification Link',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
-                ),
+        InlineVerificationSubmitButton(
+          buttonKey: const Key('inline_email_send_link_button'),
+          label: 'Send Verification Link',
+          isLoading: _isLoading,
+          onPressed: () => _sendVerificationLink(),
         ),
       ],
     );
@@ -559,92 +452,44 @@ class _InlineEmailVerificationTileState
         ),
         if (_errorMessage != null) ...[
           const SizedBox(height: 8),
-          Text(
-            _errorMessage!,
-            key: const Key('inline_email_error_text'),
-            style: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFFCF6679),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
+          InlineVerificationErrorText(
+            errorKey: const Key('inline_email_error_text'),
+            message: _errorMessage!,
+            color: const Color(0xFFCF6679),
           ),
         ],
         const SizedBox(height: 12),
-        ElevatedButton(
-          key: const Key('inline_email_check_verified_button'),
-          onPressed: _isLoading ? null : _checkEmailVerified,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.gold,
-            foregroundColor: const Color(0xFF121414),
-            disabledBackgroundColor: AppTheme.gold.withAlpha(110),
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          child: _isLoading
-              ? const SizedBox(
-                  height: 18,
-                  width: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Color(0xFF121414),
-                  ),
-                )
-              : Text(
-                  "I've Verified My Email",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
-                ),
+        InlineVerificationSubmitButton(
+          buttonKey: const Key('inline_email_check_verified_button'),
+          label: "I've Verified My Email",
+          isLoading: _isLoading,
+          onPressed: _checkEmailVerified,
         ),
         const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            TextButton(
-              key: const Key('inline_email_edit_button'),
-              onPressed: _isLoading
-                  ? null
-                  : () {
-                      setState(() {
-                        _awaitingLinkConfirmation = false;
-                        _errorMessage = null;
-                        _emailController.text = _effectivePendingEmail ?? '';
-                      });
-                    },
-              child: Text(
-                'Change Email',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFD8DDDD),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            TextButton(
-              key: const Key('inline_email_resend_button'),
-              onPressed: (_isLoading || _resendCooldown > 0)
-                  ? null
-                  : () => _sendVerificationLink(
-                        overrideEmail: _effectivePendingEmail,
-                        isResend: true,
-                      ),
-              child: Text(
-                _resendCooldown > 0
-                    ? 'Resend in ${_resendCooldown}s'
-                    : 'Resend Link',
-                style: GoogleFonts.plusJakartaSans(
-                  color: _resendCooldown > 0
-                      ? const Color(0xFF919696)
-                      : AppTheme.gold,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
+        InlineVerificationFooterActions(
+          editKey: const Key('inline_email_edit_button'),
+          editLabel: 'Change Email',
+          editColor: const Color(0xFFD8DDDD),
+          editFontWeight: FontWeight.w600,
+          onEdit: _isLoading
+              ? null
+              : () {
+                  setState(() {
+                    _awaitingLinkConfirmation = false;
+                    _errorMessage = null;
+                    _emailController.text = _effectivePendingEmail ?? '';
+                  });
+                },
+          resendKey: const Key('inline_email_resend_button'),
+          resendLabel: 'Resend Link',
+          cooldownSeconds: _cooldown.secondsRemaining,
+          disabledCooldownColor: AppTheme.navInactive,
+          onResend: (_isLoading || _cooldown.isActive)
+              ? null
+              : () => _sendVerificationLink(
+                    overrideEmail: _effectivePendingEmail,
+                    isResend: true,
+                  ),
         ),
       ],
     );

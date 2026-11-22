@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,6 +7,7 @@ import '../theme/app_buttons.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_theme.dart';
 import 'flash_snack_bar.dart';
+import 'inline_verification_shared.dart';
 import 'phone_number_input_formatter.dart';
 
 /// An inline expandable settings tile for adding, verifying, or changing
@@ -50,8 +50,8 @@ class _InlinePhoneVerificationTileState
   late final TextEditingController _phoneController;
   late final TextEditingController _otpController;
 
-  int _cooldownSeconds = 0;
-  Timer? _cooldownTimer;
+  final InlineResendCooldownController _cooldown =
+      InlineResendCooldownController();
 
   @override
   void initState() {
@@ -76,26 +76,15 @@ class _InlinePhoneVerificationTileState
 
   @override
   void dispose() {
-    _cooldownTimer?.cancel();
+    _cooldown.dispose();
     _phoneController.dispose();
     _otpController.dispose();
     super.dispose();
   }
 
   void _startCooldown() {
-    _cooldownTimer?.cancel();
-    setState(() => _cooldownSeconds = 30);
-    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_cooldownSeconds <= 1) {
-        timer.cancel();
-        setState(() => _cooldownSeconds = 0);
-      } else {
-        setState(() => _cooldownSeconds--);
-      }
+    _cooldown.start(() {
+      if (mounted) setState(() {});
     });
   }
 
@@ -113,19 +102,35 @@ class _InlinePhoneVerificationTileState
 
   void _cancelInlineFlow() {
     FocusManager.instance.primaryFocus?.unfocus();
-    _cooldownTimer?.cancel();
+    _cooldown.cancel(resetSeconds: true);
     setState(() {
       _isExpanding = false;
       _isCodeSent = false;
       _isSendingCode = false;
       _isVerifying = false;
       _errorMessage = null;
-      _cooldownSeconds = 0;
       _otpController.clear();
       _phoneController.text = widget.phoneVerified
           ? AuthService.formatDisplayPhoneNumber(widget.phoneNumber)
           : '';
     });
+  }
+
+  Future<void> _syncArtistPrivatePhoneSettings(
+    String uid,
+    String formattedE164,
+  ) async {
+    final db = widget.firestore ?? FirebaseFirestore.instance;
+    await db
+        .collection('artists')
+        .doc(uid)
+        .collection('private')
+        .doc('settings')
+        .set({
+      'phoneNumber': formattedE164,
+      'phoneVerified': true,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   Future<void> _sendCode() async {
@@ -138,7 +143,9 @@ class _InlinePhoneVerificationTileState
       return;
     }
     if (digits.length < 10) {
-      setState(() => _errorMessage = 'Please enter a valid 10-digit phone number.');
+      setState(
+        () => _errorMessage = 'Please enter a valid 10-digit phone number.',
+      );
       return;
     }
 
@@ -205,17 +212,7 @@ class _InlinePhoneVerificationTileState
         );
 
         if (widget.isArtist) {
-          final db = widget.firestore ?? FirebaseFirestore.instance;
-          await db
-              .collection('artists')
-              .doc(user.uid)
-              .collection('private')
-              .doc('settings')
-              .set({
-            'phoneNumber': formattedE164,
-            'phoneVerified': true,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+          await _syncArtistPrivatePhoneSettings(user.uid, formattedE164);
         }
       }
       if (!mounted) return;
@@ -236,13 +233,18 @@ class _InlinePhoneVerificationTileState
     final smsCode = _otpController.text.trim();
 
     if (smsCode.length < 6) {
-      setState(() => _errorMessage = 'Please enter the 6-digit verification code.');
+      setState(
+        () => _errorMessage = 'Please enter the 6-digit verification code.',
+      );
       return;
     }
 
     final effectiveVid = _verificationId ?? _authService.verificationId ?? '';
     if (effectiveVid.isEmpty) {
-      setState(() => _errorMessage = 'Verification session expired. Please request a new code.');
+      setState(
+        () => _errorMessage =
+            'Verification session expired. Please request a new code.',
+      );
       return;
     }
 
@@ -263,17 +265,7 @@ class _InlinePhoneVerificationTileState
       final user = _authService.currentUser;
       if (user != null && widget.isArtist) {
         try {
-          final db = widget.firestore ?? FirebaseFirestore.instance;
-          await db
-              .collection('artists')
-              .doc(user.uid)
-              .collection('private')
-              .doc('settings')
-              .set({
-            'phoneNumber': formattedE164,
-            'phoneVerified': true,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+          await _syncArtistPrivatePhoneSettings(user.uid, formattedE164);
         } catch (_) {}
       }
 
@@ -291,7 +283,7 @@ class _InlinePhoneVerificationTileState
   }
 
   void _finalizeSuccess(String formattedE164) {
-    _cooldownTimer?.cancel();
+    _cooldown.cancel();
     setState(() {
       _isExpanding = false;
       _isCodeSent = false;
@@ -346,7 +338,7 @@ class _InlinePhoneVerificationTileState
           key: const Key('account_phone_subtitle'),
           style: GoogleFonts.plusJakartaSans(
             color: hasVerifiedPhone
-                ? const Color(0xFF919696)
+                ? AppTheme.navInactive
                 : const Color(0xFF6B7280),
             fontSize: 12,
           ),
@@ -355,24 +347,17 @@ class _InlinePhoneVerificationTileState
             ? Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    key: const Key('phone_verified_badge'),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: const Color(0x2222C55E),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                          color: const Color(0xFF22C55E), width: 0.8),
-                    ),
-                    child: Text(
-                      'VERIFIED',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFF22C55E),
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                  const InlineVerificationStatusBadge(
+                    badgeKey: Key('phone_verified_badge'),
+                    label: 'VERIFIED',
+                    backgroundColor: Color(0x2222C55E),
+                    borderColor: Color(0xFF22C55E),
+                    textColor: Color(0xFF22C55E),
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    borderWidth: 0.8,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: null,
                   ),
                   const SizedBox(width: 8),
                   TextButton(
@@ -380,7 +365,9 @@ class _InlinePhoneVerificationTileState
                     onPressed: _startInlineFlow,
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -409,8 +396,10 @@ class _InlinePhoneVerificationTileState
                 ),
                 style: TextButton.styleFrom(
                   backgroundColor: const Color(0x1AEEC200),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                     side: const BorderSide(color: AppTheme.gold, width: 0.8),
@@ -431,7 +420,7 @@ class _InlinePhoneVerificationTileState
       decoration: BoxDecoration(
         color: const Color(0xFF1E2121),
         borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-        border: Border.all(color: const Color(0xFF2E3232)),
+        border: Border.all(color: AppTheme.darkBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -441,8 +430,11 @@ class _InlinePhoneVerificationTileState
             children: [
               Row(
                 children: [
-                  const Icon(Icons.phone_outlined,
-                      color: AppTheme.gold, size: 18),
+                  const Icon(
+                    Icons.phone_outlined,
+                    color: AppTheme.gold,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     _isCodeSent
@@ -460,7 +452,11 @@ class _InlinePhoneVerificationTileState
               ),
               IconButton(
                 key: const Key('inline_phone_cancel_button'),
-                icon: const Icon(Icons.close, color: Color(0xFF919696), size: 18),
+                icon: const Icon(
+                  Icons.close,
+                  color: AppTheme.navInactive,
+                  size: 18,
+                ),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
                 onPressed: _cancelInlineFlow,
@@ -472,7 +468,7 @@ class _InlinePhoneVerificationTileState
             Text(
               'A 6-digit SMS verification code will be sent to this number.',
               style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFF919696),
+                color: AppTheme.navInactive,
                 fontSize: 12,
               ),
             ),
@@ -487,41 +483,27 @@ class _InlinePhoneVerificationTileState
                 fontSize: 15,
               ),
               inputFormatters: const [PhoneNumberInputFormatter()],
-              decoration: InputDecoration(
+              decoration: buildInlineVerificationInputDecoration(
                 hintText: '(555) 000-0000',
                 hintStyle: GoogleFonts.plusJakartaSans(
                   color: const Color(0xFF6E7474),
                   fontSize: 15,
                 ),
-                filled: true,
-                fillColor: const Color(0xFF141616),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-                  borderSide: const BorderSide(color: Color(0xFF2E3232)),
+                borderRadius: AppRadius.radiusSm,
+                borderColor: AppTheme.darkBorder,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-                  borderSide: const BorderSide(color: Color(0xFF2E3232)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-                  borderSide:
-                      const BorderSide(color: AppTheme.gold, width: 1.5),
-                ),
+                includeBaseBorder: true,
               ),
             ),
             if (_errorMessage != null) ...[
               const SizedBox(height: 8),
-              Text(
-                _errorMessage!,
-                key: const Key('inline_phone_error_text'),
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFEF4444),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
+              InlineVerificationErrorText(
+                errorKey: const Key('inline_phone_error_text'),
+                message: _errorMessage!,
+                color: const Color(0xFFEF4444),
               ),
             ],
             const SizedBox(height: 14),
@@ -535,7 +517,7 @@ class _InlinePhoneVerificationTileState
             Text(
               'We sent a 6-digit code to ${_phoneController.text.trim()}',
               style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFF919696),
+                color: AppTheme.navInactive,
                 fontSize: 12,
               ),
             ),
@@ -552,43 +534,29 @@ class _InlinePhoneVerificationTileState
                 letterSpacing: 4,
                 fontWeight: FontWeight.w600,
               ),
-              decoration: InputDecoration(
+              decoration: buildInlineVerificationInputDecoration(
                 counterText: '',
                 hintText: '••••••',
                 hintStyle: GoogleFonts.plusJakartaSans(
                   color: const Color(0xFF6E7474),
                   letterSpacing: 4,
                 ),
-                filled: true,
-                fillColor: const Color(0xFF141616),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-                  borderSide: const BorderSide(color: Color(0xFF2E3232)),
+                borderRadius: AppRadius.radiusSm,
+                borderColor: AppTheme.darkBorder,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-                  borderSide: const BorderSide(color: Color(0xFF2E3232)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-                  borderSide:
-                      const BorderSide(color: AppTheme.gold, width: 1.5),
-                ),
+                includeBaseBorder: true,
               ),
               onSubmitted: (_) => _verifyOtp(),
             ),
             if (_errorMessage != null) ...[
               const SizedBox(height: 8),
-              Text(
-                _errorMessage!,
-                key: const Key('inline_phone_error_text'),
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFEF4444),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
+              InlineVerificationErrorText(
+                errorKey: const Key('inline_phone_error_text'),
+                message: _errorMessage!,
+                color: const Color(0xFFEF4444),
               ),
             ],
             const SizedBox(height: 14),
@@ -605,47 +573,26 @@ class _InlinePhoneVerificationTileState
               ],
             ),
             const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                TextButton(
-                  key: const Key('inline_phone_edit_number_link'),
-                  onPressed: _isVerifying
-                      ? null
-                      : () {
-                          setState(() {
-                            _isCodeSent = false;
-                            _errorMessage = null;
-                            _otpController.clear();
-                          });
-                        },
-                  child: Text(
-                    'Change Number',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFF919696),
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  key: const Key('inline_phone_resend_code_button'),
-                  onPressed: (_isSendingCode || _cooldownSeconds > 0)
-                      ? null
-                      : _sendCode,
-                  child: Text(
-                    _cooldownSeconds > 0
-                        ? 'Resend in ${_cooldownSeconds}s'
-                        : 'Resend Code',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: _cooldownSeconds > 0
-                          ? const Color(0xFF6E7474)
-                          : AppTheme.gold,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
+            InlineVerificationFooterActions(
+              editKey: const Key('inline_phone_edit_number_link'),
+              editLabel: 'Change Number',
+              editColor: AppTheme.navInactive,
+              onEdit: _isVerifying
+                  ? null
+                  : () {
+                      setState(() {
+                        _isCodeSent = false;
+                        _errorMessage = null;
+                        _otpController.clear();
+                      });
+                    },
+              resendKey: const Key('inline_phone_resend_code_button'),
+              resendLabel: 'Resend Code',
+              cooldownSeconds: _cooldown.secondsRemaining,
+              disabledCooldownColor: const Color(0xFF6E7474),
+              onResend: (_isSendingCode || _cooldown.isActive)
+                  ? null
+                  : _sendCode,
             ),
           ],
         ],
