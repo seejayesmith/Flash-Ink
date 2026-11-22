@@ -11,7 +11,6 @@ import 'package:flash_ink/widgets/keyboard_collapse_button.dart';
 import 'package:flash_ink/widgets/guest_auth_prompt_bottom_sheet.dart';
 import 'package:flash_ink/widgets/reauthentication_bottom_sheet.dart';
 import 'package:flash_ink/screens/artist_dashboard/add_waitlist_entry_sheet.dart';
-import 'package:flash_ink/screens/phone_entry_screen.dart';
 import 'package:flash_ink/screens/phone_verification_screen.dart';
 
 class _FakeUserInfo extends Fake implements UserInfo {
@@ -406,47 +405,6 @@ void main() {
   });
 
   group('Numeric Keyboard and Phone Verification Screen Collapse Tests', () {
-    testWidgets('PhoneEntryScreen removes in-card collapse buttons while retaining tap-out dismiss', (tester) async {
-      tester.view.physicalSize = const Size(800, 1400);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      final mockAuth = AuthService(mockUser: _ReauthTestUser());
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: PhoneEntryScreen(
-            role: 'client',
-            authService: mockAuth,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Verify card header collapse button is removed
-      expect(find.byKey(const Key('phone_card_collapse_button')), findsNothing);
-
-      // Verify TextFormField suffix collapse button is removed
-      expect(find.byKey(const Key('collapse_keyboard_button')), findsNothing);
-
-      // Find phone text field focus node
-      final focusNode = tester.widget<EditableText>(find.byType(EditableText)).focusNode;
-      expect(focusNode.hasFocus, isFalse);
-
-      // 1. Focus the phone field
-      focusNode.requestFocus();
-      await tester.pump();
-      expect(focusNode.hasFocus, isTrue);
-
-      // 2. Tap out on background text (e.g. 'Verify Phone Number' title)
-      await tester.tap(find.text('Verify Phone Number'));
-      await tester.pump();
-      expect(focusNode.hasFocus, isFalse);
-    });
-
     testWidgets('PhoneVerificationScreen removes in-card collapse button while retaining tap-out dismiss', (tester) async {
       tester.view.physicalSize = const Size(800, 1400);
       tester.view.devicePixelRatio = 1.0;

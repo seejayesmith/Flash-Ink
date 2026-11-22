@@ -6,7 +6,6 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:flash_ink/theme/app_spacing.dart';
 import 'package:flash_ink/widgets/adaptive_glass_container.dart';
-import 'package:flash_ink/screens/phone_entry_screen.dart';
 import 'package:flash_ink/screens/phone_verification_screen.dart';
 import 'package:flash_ink/screens/email_auth_screen.dart';
 import 'package:flash_ink/screens/email_verification_screen.dart';
@@ -46,52 +45,6 @@ void main() {
 
   group('Auth & Verification Screens Center-Top Layout Alignment', () {
     const testScreenSize = Size(400, 850);
-
-    testWidgets('PhoneEntryScreen: Container is positioned center-top with 24px headerTop spacing', (tester) async {
-      tester.view.physicalSize = testScreenSize;
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: MediaQuery(
-            data: const MediaQueryData(
-              padding: EdgeInsets.only(top: 44.0, bottom: 34.0),
-              size: testScreenSize,
-            ),
-            child: PhoneEntryScreen(
-              role: 'client',
-              authService: FakeAuthService(),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final cardFinder = find.byType(AdaptiveGlassContainer);
-      expect(cardFinder, findsOneWidget);
-
-      final cardTop = tester.getTopLeft(cardFinder).dy;
-      final cardRect = tester.getRect(cardFinder);
-
-      // topInset = topSafeArea (44) + kToolbarHeight (56) = 100.
-      // Top spacing = AppSpacing.headerTop = 24.
-      // Expected card top = 100 + 24 = 124.
-      expect(cardTop, equals(124.0));
-
-      // Horizontally centered within the 400px screen (margin of 20px on each side)
-      expect(cardRect.left, equals(AppSpacing.screenMargin));
-      expect(cardRect.right, equals(400.0 - AppSpacing.screenMargin));
-
-      // Verify CTA button is at the bottom
-      final ctaFinder = find.text('Send Verification Code');
-      expect(ctaFinder, findsOneWidget);
-      final ctaTop = tester.getTopLeft(ctaFinder).dy;
-
-      // Space below card to CTA must be much larger than the 24px top space (center-top layout)
-      final spaceBelowCard = ctaTop - cardRect.bottom;
-      expect(spaceBelowCard, greaterThan(100.0));
-    });
 
     testWidgets('PhoneVerificationScreen: Container is positioned center-top with 24px headerTop spacing', (tester) async {
       tester.view.physicalSize = testScreenSize;

@@ -7,7 +7,7 @@ import 'package:firebase_core_platform_interface/test.dart';
 
 import 'package:flash_ink/models/artist.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_account_screen.dart';
-import 'package:flash_ink/screens/artist_profile_screen.dart';
+import 'package:flash_ink/features/artist/presentation/screens/artist_profile_screen.dart';
 import 'package:flash_ink/screens/splash_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
 

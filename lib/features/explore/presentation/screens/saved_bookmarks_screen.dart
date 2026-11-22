@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/mock/mock_fixtures.dart';
 import '../../../../models/artist.dart';
 import '../../../../providers/app_providers.dart';
-import '../../../../screens/artist_profile_screen.dart';
+import '../../../artist/presentation/screens/artist_profile_screen.dart';
 import '../../../../screens/flash_details_screen.dart';
 import '../../../../services/auth_service.dart';
 import '../../../../theme/app_radius.dart';

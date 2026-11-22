@@ -6,8 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 // ignore: depend_on_referenced_packages
 import 'package:firebase_core_platform_interface/test.dart';
 import 'package:flash_ink/services/auth_service.dart';
+import 'package:flash_ink/screens/aesthetics_selection_screen.dart';
 import 'package:flash_ink/screens/main_feed_screen.dart';
-import 'package:flash_ink/features/onboarding/client/client_style_discovery_screen.dart';
 import 'package:flash_ink/features/onboarding/client/client_notifications_screen.dart';
 
 class MockClientUser extends Fake implements User {
@@ -48,30 +48,25 @@ void main() {
   });
 
   group('Client Onboarding Flow & Layout Contract Test Suite', () {
-    testWidgets('Sequential navigation through Style Discovery and Notifications to MainFeedScreen (Home Base removed)', (tester) async {
+    testWidgets('Sequential navigation from AestheticsSelectionScreen through ClientNotificationsScreen to MainFeedScreen', (tester) async {
       final fakeAuth = FakeClientFlowAuthService();
 
       await tester.pumpWidget(
         MaterialApp(
-          home: ClientStyleDiscoveryScreen(authService: fakeAuth),
+          home: AestheticsSelectionScreen(
+            authService: fakeAuth,
+            navigateToOnboarding: true,
+          ),
         ),
       );
       await tester.pumpAndSettle();
 
-      // Style Discovery
-      expect(find.text('Discover your style'), findsOneWidget);
-      expect(find.text('Pick the styles you love. We\'ll tailor your feed and artist recommendations.'), findsOneWidget);
-
       // Select Traditional style
-      final traditionalChip = find.byKey(const Key('style_tag_traditional'));
-      expect(traditionalChip, findsOneWidget);
-      await tester.tap(traditionalChip);
+      await tester.tap(find.text('TRADITIONAL'));
       await tester.pumpAndSettle();
 
-      // Tap CONTINUE -> advances directly to Notification Permissions (Home Base removed)
-      final step1Continue = find.byKey(const Key('client_styles_continue_button'));
-      expect(step1Continue, findsOneWidget);
-      await tester.tap(step1Continue);
+      // Tap Continue -> advances to Notification Permissions
+      await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
 
       // Notification Permissions
@@ -92,56 +87,19 @@ void main() {
       expect(find.text('Browse Artists'), findsOneWidget);
     });
 
-    testWidgets('Header typography and content baseline remain invariant across Client Onboarding steps', (tester) async {
-      final fakeAuth = FakeClientFlowAuthService();
-
-      // Style Discovery Positions
-      await tester.pumpWidget(
-        MaterialApp(home: ClientStyleDiscoveryScreen(authService: fakeAuth)),
-      );
-      await tester.pumpAndSettle();
-
-      final titleTopStep1 = tester.getTopLeft(find.byKey(const Key('onboarding_title'))).dy;
-      final subtitleTopStep1 = tester.getTopLeft(find.byKey(const Key('onboarding_subtitle'))).dy;
-      final ctaTopStep1 = tester.getTopLeft(find.byType(ElevatedButton)).dy;
-
-      // Notifications Positions
-      await tester.pumpWidget(
-        MaterialApp(home: ClientNotificationsScreen(authService: fakeAuth)),
-      );
-      await tester.pumpAndSettle();
-
-      final titleTopStep2 = tester.getTopLeft(find.byKey(const Key('onboarding_title'))).dy;
-      final subtitleTopStep2 = tester.getTopLeft(find.byKey(const Key('onboarding_subtitle'))).dy;
-      final ctaTopStep2 = tester.getTopLeft(find.byType(ElevatedButton)).dy;
-
-      // Assert identical coordinates across steps (zero visual jitter)
-      expect(titleTopStep2, equals(titleTopStep1), reason: 'Title offset invariant across client onboarding steps');
-      expect(subtitleTopStep2, equals(subtitleTopStep1), reason: 'Subtitle offset invariant across client onboarding steps');
-      expect(ctaTopStep2, equals(ctaTopStep1), reason: 'CTA offset invariant across client onboarding steps');
-    });
-
-    testWidgets('Tapping Skip on Client Onboarding steps advances forward seamlessly', (tester) async {
+    testWidgets('Tapping Skip on ClientNotificationsScreen completes to MainFeedScreen', (tester) async {
       final fakeAuth = FakeClientFlowAuthService();
 
       await tester.pumpWidget(
         MaterialApp(
-          home: ClientStyleDiscoveryScreen(authService: fakeAuth),
+          home: ClientNotificationsScreen(authService: fakeAuth),
         ),
       );
       await tester.pumpAndSettle();
 
-      // Skip on Style Discovery -> advances directly to Notifications
-      final skipButton1 = find.byKey(const Key('onboarding_skip_button'));
-      expect(skipButton1, findsOneWidget);
-      await tester.tap(skipButton1);
-      await tester.pumpAndSettle();
-
-      expect(find.byType(ClientNotificationsScreen), findsOneWidget);
-
-      // Skip on Notifications -> completes to MainFeedScreen
-      final skipButton2 = find.byKey(const Key('onboarding_skip_button'));
-      await tester.tap(skipButton2);
+      final skipButton = find.byKey(const Key('onboarding_skip_button'));
+      expect(skipButton, findsOneWidget);
+      await tester.tap(skipButton);
       await tester.pumpAndSettle();
 
       expect(find.byType(MainFeedScreen), findsOneWidget);

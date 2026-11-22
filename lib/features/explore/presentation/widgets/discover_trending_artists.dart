@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../models/artist.dart';
-import '../../../../screens/artist_profile_screen.dart';
+import '../../../artist/presentation/screens/artist_profile_screen.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';

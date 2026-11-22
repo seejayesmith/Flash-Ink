@@ -26,7 +26,7 @@ import '../location_settings_screen.dart';
 import '../app_info_screen.dart';
 import '../main_feed_screen.dart';
 import '../splash_screen.dart';
-import '../artist_profile_screen.dart';
+import '../../features/artist/presentation/screens/artist_profile_screen.dart';
 
 /// Artist Account Screen
 ///

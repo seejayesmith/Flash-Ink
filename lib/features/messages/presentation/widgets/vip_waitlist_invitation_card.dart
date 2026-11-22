@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../models/artist.dart';
 import '../../../../models/artist_dashboard_data.dart';
 import '../../../../models/waitlist_entry.dart';
-import '../../../../screens/artist_profile_screen.dart';
+import '../../../artist/presentation/screens/artist_profile_screen.dart';
 import '../../../../screens/custom_request_screen.dart';
 import '../../../../theme/app_buttons.dart';
 import '../../../../theme/app_radius.dart';

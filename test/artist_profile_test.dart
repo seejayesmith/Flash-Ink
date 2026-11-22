@@ -4,7 +4,7 @@ import 'package:flash_ink/core/mock/mock_data_config.dart';
 import 'package:flash_ink/features/artist/presentation/widgets/artist_stats_row.dart';
 import 'package:flash_ink/features/artist/presentation/widgets/custom_request_banner.dart';
 import 'package:flash_ink/models/artist.dart';
-import 'package:flash_ink/screens/artist_profile_screen.dart';
+import 'package:flash_ink/features/artist/presentation/screens/artist_profile_screen.dart';
 import 'package:flash_ink/screens/custom_request_screen.dart';
 import 'package:flash_ink/screens/flash_details_screen.dart';
 import 'package:flash_ink/features/artist/presentation/widgets/flash_piece_card.dart';

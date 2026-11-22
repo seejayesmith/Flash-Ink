@@ -6,7 +6,6 @@ import 'package:firebase_core/firebase_core.dart';
 // ignore: depend_on_referenced_packages
 import 'package:firebase_core_platform_interface/test.dart';
 
-import 'package:flash_ink/widgets/artist_stepper_header.dart';
 import 'package:flash_ink/features/onboarding/shared/onboarding_step_scaffold.dart';
 import 'package:flash_ink/widgets/tattoo_background_wrapper.dart';
 import 'package:flash_ink/widgets/adaptive_glass_container.dart';
@@ -137,103 +136,6 @@ void main() {
     binding.platformDispatcher.views.first.resetDevicePixelRatio();
   });
 
-  group('ArtistStepperHeader Tests', () {
-    testWidgets('Renders all three steps with correct labels', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: ArtistStepperHeader(currentStep: 1),
-          ),
-        ),
-      );
-
-      expect(find.text('Account'), findsOneWidget);
-      expect(find.text('Profile'), findsOneWidget);
-      expect(find.text('Share'), findsOneWidget);
-    });
-
-    testWidgets('Current step 1 shows step 1 active and steps 2 & 3 inactive', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: ArtistStepperHeader(currentStep: 1),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final size1 = tester.getSize(find.byKey(const Key('artist_step_indicator_1')));
-      final size2 = tester.getSize(find.byKey(const Key('artist_step_indicator_2')));
-      final size3 = tester.getSize(find.byKey(const Key('artist_step_indicator_3')));
-
-      expect(size1.width, 24.0);
-      expect(size2.width, 12.0);
-      expect(size3.width, 12.0);
-
-      final c1 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_1')));
-      final c2 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_2')));
-      final c3 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_3')));
-
-      expect((c1.decoration as BoxDecoration).color, const Color(0xFFEEC200));
-      expect((c2.decoration as BoxDecoration).color, const Color(0xFF333737));
-      expect((c3.decoration as BoxDecoration).color, const Color(0xFF333737));
-    });
-
-    testWidgets('Current step 2 shows step 1 completed and step 2 active', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: ArtistStepperHeader(currentStep: 2),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final size1 = tester.getSize(find.byKey(const Key('artist_step_indicator_1')));
-      final size2 = tester.getSize(find.byKey(const Key('artist_step_indicator_2')));
-      final size3 = tester.getSize(find.byKey(const Key('artist_step_indicator_3')));
-
-      expect(size1.width, 12.0);
-      expect(size2.width, 24.0);
-      expect(size3.width, 12.0);
-
-      final c1 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_1')));
-      final c2 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_2')));
-      final c3 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_3')));
-
-      expect((c1.decoration as BoxDecoration).color, const Color(0xFFEEC200));
-      expect((c2.decoration as BoxDecoration).color, const Color(0xFFEEC200));
-      expect((c3.decoration as BoxDecoration).color, const Color(0xFF333737));
-    });
-
-    testWidgets('Current step 3 shows steps 1 and 2 completed and step 3 active', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: ArtistStepperHeader(currentStep: 3),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final size1 = tester.getSize(find.byKey(const Key('artist_step_indicator_1')));
-      final size2 = tester.getSize(find.byKey(const Key('artist_step_indicator_2')));
-      final size3 = tester.getSize(find.byKey(const Key('artist_step_indicator_3')));
-
-      expect(size1.width, 12.0);
-      expect(size2.width, 12.0);
-      expect(size3.width, 24.0);
-
-      final c1 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_1')));
-      final c2 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_2')));
-      final c3 = tester.widget<AnimatedContainer>(find.byKey(const Key('artist_step_indicator_3')));
-
-      expect((c1.decoration as BoxDecoration).color, const Color(0xFFEEC200));
-      expect((c2.decoration as BoxDecoration).color, const Color(0xFFEEC200));
-      expect((c3.decoration as BoxDecoration).color, const Color(0xFFEEC200));
-    });
-  });
-
   group('Artist Auth & Information Screen Tests', () {
     testWidgets('AccountCreationScreen for artist mirrors client UI and hides guest option', (tester) async {
       await tester.pumpWidget(
@@ -268,7 +170,6 @@ void main() {
       );
 
       expect(find.byType(SegmentedProgressPills), findsOneWidget);
-      expect(find.byType(ArtistStepperHeader), findsNothing);
       expect(find.text('Artist Profile'), findsOneWidget);
       expect(find.text('Enter your artist name and an optional phone number to get set up.'), findsOneWidget);
       expect(find.text('Name or Artist Handle'), findsOneWidget);
@@ -820,14 +721,13 @@ void main() {
   });
 
   group('Artist Onboarding Progress Bar Matching Client Side Suite', () {
-    testWidgets('All artist onboarding screens render top SegmentedProgressPills and no ArtistStepperHeader', (tester) async {
+    testWidgets('All artist onboarding screens render top SegmentedProgressPills', (tester) async {
       final fakeAuth = FakeArtistAuthService();
 
       // Step 1: Info Screen
       await tester.pumpWidget(MaterialApp(home: ArtistInfoScreen(authService: fakeAuth)));
       await tester.pumpAndSettle();
       expect(find.byType(SegmentedProgressPills), findsOneWidget);
-      expect(find.byType(ArtistStepperHeader), findsNothing);
       var pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
       expect(pills.currentStep, equals(1));
       expect(pills.totalSteps, equals(9));
@@ -844,7 +744,6 @@ void main() {
       ));
       await tester.pumpAndSettle();
       expect(find.byType(SegmentedProgressPills), findsOneWidget);
-      expect(find.byType(ArtistStepperHeader), findsNothing);
       pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
       expect(pills.currentStep, equals(1));
       expect(pills.totalSteps, equals(9));
@@ -858,7 +757,6 @@ void main() {
       ));
       await tester.pumpAndSettle();
       expect(find.byType(SegmentedProgressPills), findsOneWidget);
-      expect(find.byType(ArtistStepperHeader), findsNothing);
       pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
       expect(pills.currentStep, equals(2));
       expect(pills.totalSteps, equals(9));
@@ -872,7 +770,6 @@ void main() {
       ));
       await tester.pumpAndSettle();
       expect(find.byType(SegmentedProgressPills), findsOneWidget);
-      expect(find.byType(ArtistStepperHeader), findsNothing);
       pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
       expect(pills.currentStep, equals(3));
       expect(pills.totalSteps, equals(9));
@@ -886,7 +783,6 @@ void main() {
       ));
       await tester.pumpAndSettle();
       expect(find.byType(SegmentedProgressPills), findsOneWidget);
-      expect(find.byType(ArtistStepperHeader), findsNothing);
       pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
       expect(pills.currentStep, equals(4));
       expect(pills.totalSteps, equals(9));
@@ -900,7 +796,6 @@ void main() {
       ));
       await tester.pumpAndSettle();
       expect(find.byType(SegmentedProgressPills), findsOneWidget);
-      expect(find.byType(ArtistStepperHeader), findsNothing);
       pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
       expect(pills.currentStep, equals(5));
       expect(pills.totalSteps, equals(9));
@@ -916,7 +811,6 @@ void main() {
       ));
       await tester.pumpAndSettle();
       expect(find.byType(SegmentedProgressPills), findsOneWidget);
-      expect(find.byType(ArtistStepperHeader), findsNothing);
       pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
       expect(pills.currentStep, equals(6));
       expect(pills.totalSteps, equals(9));
@@ -932,7 +826,6 @@ void main() {
       ));
       await tester.pumpAndSettle();
       expect(find.byType(SegmentedProgressPills), findsOneWidget);
-      expect(find.byType(ArtistStepperHeader), findsNothing);
       pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
       expect(pills.currentStep, equals(7));
       expect(pills.totalSteps, equals(9));
@@ -948,7 +841,6 @@ void main() {
       ));
       await tester.pumpAndSettle();
       expect(find.byType(SegmentedProgressPills), findsOneWidget);
-      expect(find.byType(ArtistStepperHeader), findsNothing);
       pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
       expect(pills.currentStep, equals(8));
       expect(pills.totalSteps, equals(9));
@@ -962,7 +854,6 @@ void main() {
       ));
       await tester.pumpAndSettle();
       expect(find.byType(SegmentedProgressPills), findsOneWidget);
-      expect(find.byType(ArtistStepperHeader), findsNothing);
       pills = tester.widget<SegmentedProgressPills>(find.byType(SegmentedProgressPills));
       expect(pills.currentStep, equals(9));
       expect(pills.totalSteps, equals(9));

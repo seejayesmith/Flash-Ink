@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flash_ink/services/auth_service.dart';
-import 'package:flash_ink/screens/phone_entry_screen.dart';
 import 'package:flash_ink/screens/phone_verification_screen.dart';
 import 'package:flash_ink/screens/email_auth_screen.dart';
 import 'package:flash_ink/screens/email_verification_screen.dart';
@@ -46,27 +45,6 @@ void main() {
   });
 
   group('Pinned Bottom CTA Verification Across All Target Screens', () {
-    testWidgets('PhoneEntryScreen: CTA is pinned outside SingleChildScrollView', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: PhoneEntryScreen(
-            role: 'client',
-            authService: FakeAuthService(),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final scrollFinder = find.byType(SingleChildScrollView);
-      expect(scrollFinder, findsOneWidget);
-
-      final ctaFinder = find.widgetWithText(ElevatedButton, 'Send Verification Code');
-      expect(ctaFinder, findsOneWidget);
-
-      // Verify CTA is NOT inside SingleChildScrollView
-      expect(find.descendant(of: scrollFinder, matching: ctaFinder), findsNothing);
-    });
-
     testWidgets('PhoneVerificationScreen: CTA and Resend are pinned outside SingleChildScrollView', (tester) async {
       await tester.pumpWidget(
         MaterialApp(

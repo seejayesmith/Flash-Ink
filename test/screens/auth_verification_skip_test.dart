@@ -8,7 +8,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flash_ink/screens/email_auth_screen.dart';
 import 'package:flash_ink/screens/email_verification_screen.dart';
 import 'package:flash_ink/screens/phone_verification_screen.dart';
-import 'package:flash_ink/screens/phone_entry_screen.dart';
 import 'package:flash_ink/screens/role_selection_screen.dart';
 import 'package:flash_ink/screens/account_creation_screen.dart';
 import 'package:flash_ink/screens/artist_onboarding/artist_phone_verification_screen.dart';
@@ -208,27 +207,6 @@ void main() {
 
       expect(find.byType(ArtistPhoneVerificationScreen), findsNothing);
       expect(find.byType(ArtistProfilePhotoScreen), findsOneWidget);
-    });
-
-    testWidgets('PhoneEntryScreen: Has SkipPillButton for client and artist', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: PhoneEntryScreen(
-            role: 'client',
-            authService: TestMockAuthService(),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.byType(SkipPillButton), findsOneWidget);
-      expect(find.text('Skip'), findsOneWidget);
-
-      await tester.tap(find.byType(SkipPillButton));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(PhoneEntryScreen), findsNothing);
-      expect(find.byType(ProfileSetupScreen), findsOneWidget);
     });
 
     testWidgets('RoleSelectionScreen: Does not have SkipPillButton and requires role selection', (tester) async {

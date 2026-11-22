@@ -21,7 +21,7 @@ import '../widgets/flash_snack_bar.dart';
 import '../widgets/flash_switch.dart';
 import '../widgets/flash_tab_header.dart';
 import '../widgets/user_avatar.dart';
-import 'artist_profile_screen.dart';
+import '../features/artist/presentation/screens/artist_profile_screen.dart';
 import 'client_account_screen.dart';
 import '../widgets/guest_auth_prompt_bottom_sheet.dart';
 

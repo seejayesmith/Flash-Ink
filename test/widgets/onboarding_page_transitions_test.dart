@@ -5,7 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 // ignore: depend_on_referenced_packages
 import 'package:firebase_core_platform_interface/test.dart';
 import 'package:flash_ink/widgets/fade_page_route.dart';
-import 'package:flash_ink/widgets/artist_stepper_header.dart';
 import 'package:flash_ink/screens/profile_setup_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
 
@@ -90,64 +89,6 @@ void main() {
 
       await tester.pumpAndSettle();
       expect(find.text('Fade Page 2'), findsOneWidget);
-    });
-  });
-
-  group('ArtistStepperHeader Stationary Hero Tests', () {
-    testWidgets('Hero flight maintains stationary header and animates step pills across routes', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            appBar: AppBar(
-              title: const ArtistStepperHeader(currentStep: 1),
-            ),
-            body: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    FadePageRoute(
-                      builder: (_) => Scaffold(
-                        appBar: AppBar(
-                          title: const ArtistStepperHeader(currentStep: 2),
-                        ),
-                        body: const Text('Step 2 Content'),
-                      ),
-                    ),
-                  );
-                },
-                child: const Text('Next Step'),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Step 1 active: width 24; Step 2: width 12
-      final size1Before = tester.getSize(find.byKey(const Key('artist_step_indicator_1')));
-      final size2Before = tester.getSize(find.byKey(const Key('artist_step_indicator_2')));
-      expect(size1Before.width, 24.0);
-      expect(size2Before.width, 12.0);
-
-      // Trigger navigation
-      await tester.tap(find.text('Next Step'));
-      await tester.pump();
-      // Pump halfway through 250ms transition
-      await tester.pump(const Duration(milliseconds: 125));
-
-      // Stepper header is rendered during Hero flight shuttle
-      expect(find.byKey(const Key('artist_step_indicator_1')), findsWidgets);
-      expect(find.byKey(const Key('artist_step_indicator_2')), findsWidgets);
-
-      // Complete navigation
-      await tester.pumpAndSettle();
-
-      // Step 2 active: width 24; Step 1 completed: width 12
-      final size1After = tester.getSize(find.byKey(const Key('artist_step_indicator_1')));
-      final size2After = tester.getSize(find.byKey(const Key('artist_step_indicator_2')));
-      expect(size1After.width, 12.0);
-      expect(size2After.width, 24.0);
     });
   });
 

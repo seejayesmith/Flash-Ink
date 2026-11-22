@@ -19,7 +19,6 @@ import 'package:flash_ink/screens/app_info_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_account_settings_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_edit_profile_screen.dart';
 import 'package:flash_ink/screens/profile_setup_screen.dart';
-import 'package:flash_ink/screens/phone_entry_screen.dart';
 import 'package:flash_ink/widgets/flash_glass_app_bar.dart';
 import 'package:flash_ink/services/auth_service.dart';
 
@@ -257,30 +256,6 @@ void main() {
 
       expect(find.byType(FlashGlassAppBar), findsOneWidget);
       expect(tester.widget<AppBar>(find.byType(AppBar)).backgroundColor, equals(Colors.transparent));
-    });
-
-    testWidgets('PhoneEntryScreen has extendBodyBehindAppBar true, transparent AppBar, and edge-to-edge background', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: PhoneEntryScreen(
-            role: 'client',
-            authService: FakeAuthService(),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-      expect(scaffold.extendBodyBehindAppBar, isTrue);
-      expect(scaffold.resizeToAvoidBottomInset, isFalse);
-
-      expect(find.byType(FlashGlassAppBar), findsOneWidget);
-      final appBar = tester.widget<AppBar>(find.byType(AppBar));
-      expect(appBar.backgroundColor, equals(Colors.transparent));
-
-      // Verify the background texture image is loaded edge-to-edge
-      expect(find.byType(Image), findsOneWidget);
-      expect(find.byType(TextFormField), findsOneWidget);
     });
   });
 }
