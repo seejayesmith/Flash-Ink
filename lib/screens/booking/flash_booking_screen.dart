@@ -1,29 +1,32 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/mock/mock_data_config.dart';
 import '../../core/utils/calendar_event_launcher.dart';
-import '../client_account_screen.dart';
+import '../../features/appointments/domain/models/appointment_item.dart';
 import '../../features/messages/domain/models/message_thread.dart';
 import '../../models/artist.dart';
 import '../../models/artist_dashboard/artist_books_schedule.dart';
 import '../../models/artist_dashboard/dashboard_appointment.dart';
-import '../../repositories/artist_dashboard_repository.dart';
 import '../../models/booking.dart';
-import '../../features/appointments/domain/models/appointment_item.dart';
-import '../../theme/app_theme.dart';
+import '../../repositories/artist_dashboard_repository.dart';
+import '../../services/booking_sync_service.dart';
+import '../../services/stripe_service.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';
 import '../../theme/app_spacing.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/adaptive_glass_container.dart';
-import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
-import '../../widgets/flash_switch.dart';
-import '../../services/booking_sync_service.dart';
-import '../../services/stripe_service.dart';
-
+import '../client_account_screen.dart';
+import 'widgets/booking_progress_stepper.dart';
+import 'widgets/booking_step_confirmation.dart';
+import 'widgets/booking_step_details.dart';
+import 'widgets/booking_step_payment.dart';
+import 'widgets/booking_step_schedule.dart';
+import 'widgets/placement_selection_bottom_sheet.dart';
 
 /// Full-flow booking screen for claiming a flash artwork piece.
 ///
@@ -95,13 +98,6 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     'Other',
   ];
 
-  static const List<String> _monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-
-  static const List<String> _weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-
   bool _isUserPhoneVerified = false;
   String _clientAvatarUrl = '';
 
@@ -110,7 +106,8 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     super.initState();
     String defaultName = MockDataConfig.isEnabled ? 'Alex Rivers' : '';
     String defaultPhone = MockDataConfig.isEnabled ? '(555) 234-5678' : '';
-    String defaultEmail = MockDataConfig.isEnabled ? 'alex.rivers@example.com' : '';
+    String defaultEmail =
+        MockDataConfig.isEnabled ? 'alex.rivers@example.com' : '';
     bool userPhoneVerified = MockDataConfig.isEnabled;
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -140,7 +137,6 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     _emailController = TextEditingController(text: defaultEmail);
     _checkPhoneVerificationStatus();
 
-    // Default to next valid upcoming working date in current/next month
     final now = DateTime.now();
     _currentMonth = DateTime(now.year, now.month, 1);
     _selectedDate = now.add(const Duration(days: 2));
@@ -151,7 +147,8 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       _selectedPlacement = _placementOptions.first;
     }
 
-    final codeNum = (10000 + (_selectedDate.millisecondsSinceEpoch % 89999)).toString();
+    final codeNum =
+        (10000 + (_selectedDate.millisecondsSinceEpoch % 89999)).toString();
     _confirmationCode = 'INK-$codeNum';
 
     _loadRemoteArtistSchedule();
@@ -262,7 +259,10 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
             _phoneController.text = uPhone!.trim();
           });
         }
-        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
         if (doc.exists && doc.data() != null && mounted) {
           final data = doc.data()!;
           final docPhoto = BookingSyncService.extractPhotoUrl(data);
@@ -325,7 +325,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
                 'To protect artists and receive SMS appointment reminders, Flash.Ink requires a verified phone number on your account.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF919696),
+                  color: AppTheme.navInactive,
                   fontSize: 13,
                   height: 1.4,
                 ),
@@ -353,7 +353,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
                 child: Text(
                   'Cancel',
                   style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFF919696),
+                    color: AppTheme.navInactive,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -369,8 +369,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
   String get _artistName =>
       widget.artist?.name ?? widget.flash.artistName ?? 'Featured Artist';
 
-  String get _artistLocation =>
-      widget.artist?.location ?? widget.flash.location;
+  String get _artistLocation => widget.artist?.location ?? widget.flash.location;
 
   String _formatDate(DateTime date) {
     const months = [
@@ -395,6 +394,81 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     if (prev.isBefore(firstOfCurrent)) return;
     setState(() {
       _currentMonth = prev;
+    });
+  }
+
+  void _handleDateSelected(DateTime cellDate) {
+    final artistId = _effectiveArtistId.isNotEmpty ? _effectiveArtistId : null;
+    setState(() {
+      _selectedDate = cellDate;
+      final slots = _effectiveSchedule.generateTimeSlots();
+      if (slots.isNotEmpty &&
+          !ArtistDashboardRepository.isSlotBookable(
+            date: cellDate,
+            timeSlot: _selectedTimeSlot,
+            schedule: _effectiveSchedule,
+            artistId: artistId,
+          )) {
+        final firstOpen = slots.firstWhere(
+          (s) => ArtistDashboardRepository.isSlotBookable(
+            date: cellDate,
+            timeSlot: s.time,
+            schedule: _effectiveSchedule,
+            artistId: artistId,
+          ),
+          orElse: () => slots.first,
+        );
+        _selectedTimeSlot = firstOpen.time;
+      }
+    });
+  }
+
+  void _showPlacementBottomSheet() {
+    HapticFeedback.lightImpact();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return PlacementSelectionBottomSheet(
+          initialPlacement: _selectedPlacement,
+          options: _placementOptions,
+          onSelected: (newPlacement) {
+            setState(() {
+              _selectedPlacement = newPlacement;
+            });
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _handleAddToCalendar() async {
+    if (_isAddingToCalendar) return;
+    setState(() => _isAddingToCalendar = true);
+
+    final event = CalendarEventLauncher.buildTattooAppointmentEvent(
+      date: _selectedDate,
+      timeSlot: _selectedTimeSlot,
+      durationLabel: widget.flash.estimatedTime,
+      flashTitle: widget.flash.title,
+      artistName: _artistName,
+      studioName: widget.artist?.studioType,
+      studioAddress: _artistLocation,
+      placement: _selectedPlacement,
+      depositAmount: widget.flash.deposit,
+      totalPrice: widget.flash.price,
+      notes: _notesController.text.trim(),
+    );
+
+    final added =
+        await CalendarEventLauncher.addEventToCalendar(context, event);
+    if (!mounted) return;
+    setState(() {
+      _isAddingToCalendar = false;
+      if (added) {
+        _addedToCalendar = true;
+      }
     });
   }
 
@@ -467,7 +541,6 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           : await BookingSyncService.resolveCurrentUserPhotoUrl(uid: clientId);
       if (!mounted) return;
 
-      // 1. Instantiate domain FlashBooking record and persist to /bookings/{bookingId}
       final booking = FlashBooking(
         id: _confirmationCode,
         clientId: clientId,
@@ -480,7 +553,9 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         clientPhone: _phoneController.text.trim(),
         clientEmail: _emailController.text.trim(),
         placement: _selectedPlacement,
-        clientNotes: _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
+        clientNotes: _notesController.text.trim().isNotEmpty
+            ? _notesController.text.trim()
+            : null,
         isSilentAppointment: _isSilentSession,
         depositAmount: widget.flash.deposit,
         totalAmount: widget.flash.price,
@@ -510,7 +585,6 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         firestore: widget.firestore,
       );
 
-      // 2. Synchronize to Artist Calendar schedule
       final calendarApt = DashboardAppointment(
         id: 'cal_${booking.id}',
         clientId: clientId,
@@ -523,7 +597,10 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         scheduledDate: booking.selectedDate,
         date: _formatDate(booking.selectedDate),
         placement: booking.placement,
-        notes: booking.clientNotes ?? (booking.isSilentAppointment ? 'Silent appointment requested.' : ''),
+        notes: booking.clientNotes ??
+            (booking.isSilentAppointment
+                ? 'Silent appointment requested.'
+                : ''),
         depositPaid: booking.depositAmount,
         fullPrice: booking.totalAmount,
         artworkImageUrl: widget.flash.imageUrl,
@@ -550,7 +627,6 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         );
       }
 
-      // 3. Synchronize to Client Upcoming Appointments list
       final clientApt = ClientAppointment(
         id: booking.id,
         artistName: _artistName,
@@ -574,7 +650,6 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       );
       ClientAppointment.addUpcomingAppointment(clientApt);
 
-      // 4. Synchronize confirmed flash booking receipt thread to Messages inbox
       final receiptText =
           'Flash piece "${widget.flash.title}" claimed for ${_formatDate(booking.selectedDate)} at ${booking.selectedTimeSlot}. Deposit of \$${booking.depositAmount} received.';
       final appointmentStartDateTime =
@@ -643,7 +718,6 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -665,10 +739,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           bottom: false,
           child: Column(
             children: [
-              // Top Progress Indicator
-              _buildProgressStepper(),
-
-              // Step Content + Inline CTA
+              BookingProgressStepper(currentStep: _currentStep),
               Expanded(
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
@@ -704,7 +775,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       leading: IconButton(
         icon: Icon(
           _currentStep == 3 ? Icons.close : Icons.arrow_back,
-          color: const Color(0xFFF9FAFA),
+          color: AppTheme.textPrimary,
         ),
         onPressed: () {
           if (_currentStep == 3) {
@@ -721,7 +792,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       title: Text(
         _currentStep == 3 ? 'Booking Confirmed' : 'Claim & Book Flash',
         style: GoogleFonts.plusJakartaSans(
-          color: const Color(0xFFF9FAFA),
+          color: AppTheme.textPrimary,
           fontSize: 18,
           fontWeight: FontWeight.bold,
         ),
@@ -729,1317 +800,70 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     );
   }
 
-  Widget _buildProgressStepper() {
-    final steps = ['Date & Time', 'Details', 'Payment', 'Confirmed'];
-
-    return Container(
-      key: const Key('booking_progress_stepper'),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter, vertical: 12),
-      decoration: const BoxDecoration(
-        color: AppTheme.onyxBackground,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFF262929), width: 1),
-        ),
-      ),
-      child: Row(
-        children: List.generate(steps.length, (index) {
-          final isPast = index < _currentStep;
-          final isCurrent = index == _currentStep;
-          final isLast = index == steps.length - 1;
-
-          return Expanded(
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    children: [
-                      Container(
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: isPast || isCurrent
-                              ? const Color(0xFFEEC200)
-                              : const Color(0xFF2E3333),
-                          borderRadius: BorderRadius.circular(AppRadius.dragHandle),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        steps[index],
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.plusJakartaSans(
-                          color: isCurrent
-                              ? const Color(0xFFEEC200)
-                              : (isPast ? const Color(0xFFF9FAFA) : const Color(0xFF6B7272)),
-                          fontSize: 10,
-                          fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (!isLast) const SizedBox(width: 8),
-              ],
-            ),
-          );
-        }),
-      ),
-    );
-  }
-
   Widget _buildCurrentStepContent() {
+    final artistId = _effectiveArtistId.isNotEmpty ? _effectiveArtistId : null;
     switch (_currentStep) {
       case 0:
-        return _buildStepSchedule();
+        return BookingStepSchedule(
+          flash: widget.flash,
+          artistName: _artistName,
+          artistId: artistId,
+          schedule: _effectiveSchedule,
+          currentMonth: _currentMonth,
+          selectedDate: _selectedDate,
+          selectedTimeSlot: _selectedTimeSlot,
+          selectedPlacement: _selectedPlacement,
+          isSilentSession: _isSilentSession,
+          onPrevMonth: _prevMonth,
+          onNextMonth: _nextMonth,
+          onDateSelected: _handleDateSelected,
+          onTimeSlotSelected: (time) =>
+              setState(() => _selectedTimeSlot = time),
+          onPlacementTap: _showPlacementBottomSheet,
+          onSilentChanged: (val) => setState(() => _isSilentSession = val),
+        );
       case 1:
-        return _buildStepDetails();
+        return BookingStepDetails(
+          nameController: _nameController,
+          phoneController: _phoneController,
+          emailController: _emailController,
+          notesController: _notesController,
+          isUserPhoneVerified: _isUserPhoneVerified,
+          agreedToPolicies: _agreedToPolicies,
+          onFieldChanged: () => setState(() {}),
+          onVerifyPhoneTap: _showVerifiedPhoneRequiredSheet,
+          onAgreedChanged: (val) => setState(() => _agreedToPolicies = val),
+        );
       case 2:
-        return _buildStepPayment();
+        return BookingStepPayment(
+          flash: widget.flash,
+          artistName: _artistName,
+          artistLocation: _artistLocation,
+          formattedDate: _formatDate(_selectedDate),
+          selectedTimeSlot: _selectedTimeSlot,
+          selectedPlacement: _selectedPlacement,
+          isSilentSession: _isSilentSession,
+        );
       case 3:
-        return _buildStepConfirmation();
+        return BookingStepConfirmation(
+          flash: widget.flash,
+          artistName: _artistName,
+          artistLocation: _artistLocation,
+          confirmationCode: _confirmationCode,
+          formattedDate: _formatDate(_selectedDate),
+          selectedTimeSlot: _selectedTimeSlot,
+          selectedPlacement: _selectedPlacement,
+          selectedPaymentMethod: _selectedPaymentMethod,
+          addedToCalendar: _addedToCalendar,
+          isAddingToCalendar: _isAddingToCalendar,
+          onAddToCalendar: _handleAddToCalendar,
+          onDone: () => Navigator.of(context).pop(true),
+        );
       default:
         return const SizedBox.shrink();
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // STEP 1: SCHEDULE (Date, Time, Placement, Silent Toggle)
-  // ---------------------------------------------------------------------------
-  Widget _buildStepSchedule() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Artwork Recap Header
-        _buildArtworkSummaryBanner(),
-        const SizedBox(height: 20),
-
-        // Section Title: Select Date
-        Text(
-          'SELECT DATE',
-          style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFF919696),
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.8,
-          ),
-        ),
-        const SizedBox(height: 10),
-
-        // Calendar Card
-        _buildCalendarCard(),
-        const SizedBox(height: 24),
-
-        // Section Title: Select Time Slot
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'SELECT TIME SLOT',
-              style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFF919696),
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8,
-              ),
-            ),
-            Text(
-              'Session Est. ${widget.flash.estimatedTime}',
-              style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFFEEC200),
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // Time Slot Chips
-        _buildTimeSlotsGrid(),
-        const SizedBox(height: 24),
-
-        // Placement Selection
-        Text(
-          'BODY PLACEMENT',
-          style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFF919696),
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.8,
-          ),
-        ),
-        const SizedBox(height: 8),
-        _buildPlacementSelector(),
-        const SizedBox(height: 20),
-
-        // Silent Session Preference Switch
-        _buildSilentSessionTile(),
-      ],
-    );
-  }
-
-  Widget _buildArtworkSummaryBanner() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF171A1A),
-        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-        border: Border.all(color: const Color(0xFF262929)),
-      ),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-            child: SizedBox(
-              width: 58,
-              height: 58,
-              child: FlashImage(
-                urlOrPath: widget.flash.imageUrl,
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.flash.title,
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFFF9FAFA),
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'by $_artistName',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFFEEC200),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Deposit: \$${widget.flash.deposit} • Full: \$${widget.flash.price}',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFF919696),
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCalendarCard() {
-    final daysInMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 0).day;
-    final firstWeekday = DateTime(_currentMonth.year, _currentMonth.month, 1).weekday % 7;
-    final totalCells = firstWeekday + daysInMonth;
-    final rowCount = (totalCells / 7).ceil();
-
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF171A1A),
-        borderRadius: BorderRadius.circular(AppRadius.radiusLg),
-        border: Border.all(color: const Color(0xFF38352A), width: 1.2),
-      ),
-      child: Column(
-        children: [
-          // Month Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left, color: Color(0xFFF9FAFA)),
-                onPressed: _prevMonth,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-              Text(
-                '${_monthNames[_currentMonth.month - 1]} ${_currentMonth.year}',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFF9FAFA),
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.chevron_right, color: Color(0xFFF9FAFA)),
-                onPressed: _nextMonth,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Day of week headers
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: _weekdays.map((day) {
-              return SizedBox(
-                width: 32,
-                child: Center(
-                  child: Text(
-                    day,
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFF6B7272),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 10),
-
-          // Calendar Grid
-          Column(
-            children: List.generate(rowCount, (rowIndex) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: List.generate(7, (colIndex) {
-                    final cellIndex = rowIndex * 7 + colIndex;
-                    final dayNum = cellIndex - firstWeekday + 1;
-
-                    if (dayNum < 1 || dayNum > daysInMonth) {
-                      return const SizedBox(width: 34, height: 34);
-                    }
-
-                    final cellDate = DateTime(_currentMonth.year, _currentMonth.month, dayNum);
-                    final artistId =
-                        _effectiveArtistId.isNotEmpty ? _effectiveArtistId : null;
-                    final isPast = cellDate.isBefore(today);
-                    final isBookableDate = !isPast &&
-                        ArtistDashboardRepository.isDateBookable(
-                          date: cellDate,
-                          schedule: _effectiveSchedule,
-                          artistId: artistId,
-                        );
-                    final isDisabled = !isBookableDate;
-                    final isSelected = cellDate.year == _selectedDate.year &&
-                        cellDate.month == _selectedDate.month &&
-                        cellDate.day == _selectedDate.day;
-
-                    return GestureDetector(
-                      key: Key('flash_booking_day_$dayNum'),
-                      onTap: isDisabled
-                          ? null
-                          : () {
-                              setState(() {
-                                _selectedDate = cellDate;
-                                final slots = _effectiveSchedule.generateTimeSlots();
-                                if (slots.isNotEmpty &&
-                                    !ArtistDashboardRepository.isSlotBookable(
-                                      date: cellDate,
-                                      timeSlot: _selectedTimeSlot,
-                                      schedule: _effectiveSchedule,
-                                      artistId: artistId,
-                                    )) {
-                                  final firstOpen = slots.firstWhere(
-                                    (s) => ArtistDashboardRepository.isSlotBookable(
-                                      date: cellDate,
-                                      timeSlot: s.time,
-                                      schedule: _effectiveSchedule,
-                                      artistId: artistId,
-                                    ),
-                                    orElse: () => slots.first,
-                                  );
-                                  _selectedTimeSlot = firstOpen.time;
-                                }
-                              });
-                            },
-                      child: Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isSelected
-                              ? const Color(0xFFEEC200)
-                              : Colors.transparent,
-                          border: isSelected
-                              ? Border.all(color: const Color(0xFFEEC200), width: 1.5)
-                              : (cellDate.day == today.day && cellDate.month == today.month
-                                  ? Border.all(color: const Color(0xFF4D5252), width: 1)
-                                  : null),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '$dayNum',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: isSelected
-                                  ? const Color(0xFF121414)
-                                  : (isDisabled
-                                      ? const Color(0xFF424747)
-                                      : const Color(0xFFF9FAFA)),
-                              fontSize: 13,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-              );
-            }),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimeSlotsGrid() {
-    final schedule = _effectiveSchedule;
-    final slots = schedule.generateTimeSlots();
-    if (slots.isEmpty) {
-      return Text(
-        'No available time slots configured.',
-        style: GoogleFonts.plusJakartaSans(
-          color: const Color(0xFF8C9191),
-          fontSize: 13,
-        ),
-      );
-    }
-
-    final now = DateTime.now();
-    final artistId = _effectiveArtistId.isNotEmpty ? _effectiveArtistId : null;
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: slots.map((slot) {
-        final isBooked = ArtistDashboardRepository.isTimeSlotBooked(
-          date: _selectedDate,
-          timeSlot: slot.time,
-          schedule: schedule,
-          artistId: artistId,
-        );
-        final isHeld = !isBooked &&
-            ArtistDashboardRepository.hasActiveHoldForSlot(
-              date: _selectedDate,
-              timeSlot: slot.time,
-              schedule: schedule,
-              now: now,
-            );
-        final isAvailable = ArtistDashboardRepository.isSlotBookable(
-          date: _selectedDate,
-          timeSlot: slot.time,
-          schedule: schedule,
-          artistId: artistId,
-          now: now,
-        );
-        final isDisabled = isBooked || isHeld || !isAvailable;
-        final isSelected = !isDisabled && _selectedTimeSlot == slot.time;
-
-        final chipLabel = isBooked
-            ? '${slot.time} (Booked)'
-            : (isHeld ? '${slot.time} (Held)' : slot.time);
-
-        return ChoiceChip(
-          label: Text(chipLabel),
-          selected: isSelected,
-          showCheckmark: false,
-          onSelected: isDisabled
-              ? null
-              : (selected) {
-                  if (selected) {
-                    setState(() {
-                      _selectedTimeSlot = slot.time;
-                    });
-                  }
-                },
-          selectedColor: const Color(0xFFEEC200),
-          backgroundColor: isDisabled ? const Color(0xFF141616) : const Color(0xFF1E2020),
-          disabledColor: const Color(0xFF141616),
-          labelStyle: GoogleFonts.plusJakartaSans(
-            color: isDisabled
-                ? const Color(0xFF555A5A)
-                : (isSelected ? const Color(0xFF121414) : const Color(0xFFF9FAFA)),
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-            decoration: isDisabled ? TextDecoration.lineThrough : null,
-          ),
-          side: BorderSide(
-            color: isSelected
-                ? const Color(0xFFEEC200)
-                : (isDisabled ? const Color(0xFF222525) : const Color(0xFF333737)),
-            width: 1,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.radiusFull),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildPlacementSelector() {
-    return AdaptiveGlassContainer(
-      key: const Key('placement_selector_trigger'),
-      borderRadius: 14.0,
-      onTap: _showPlacementBottomSheet,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      useGradient: true,
-      child: Row(
-        children: [
-          const Icon(
-            Icons.accessibility_new_rounded,
-            color: Color(0xFFEEC200),
-            size: 22,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              _selectedPlacement,
-              key: const Key('placement_selector_text'),
-              style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFFF9FAFA),
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: Color(0xFFEEC200),
-            size: 22,
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showPlacementBottomSheet() {
-    HapticFeedback.lightImpact();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (bottomSheetContext) {
-        return _PlacementSelectionBottomSheet(
-          initialPlacement: _selectedPlacement,
-          options: _placementOptions,
-          onSelected: (newPlacement) {
-            setState(() {
-              _selectedPlacement = newPlacement;
-            });
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildSilentSessionTile() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF171A1A),
-        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-        border: Border.all(color: const Color(0xFF262929)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.volume_off_outlined, color: Color(0xFFEEC200), size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Silent Appointment',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFFF9FAFA),
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Minimal chatter during session. Perfect for resting or reading.',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: const Color(0xFF919696),
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          FlashSwitch(
-            value: _isSilentSession,
-            onChanged: (val) {
-              setState(() {
-                _isSilentSession = val;
-              });
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // STEP 2: DETAILS & STUDIO POLICIES
-  // ---------------------------------------------------------------------------
-  Widget _buildStepDetails() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'CLIENT INFORMATION',
-          style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFF919696),
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.8,
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        _buildInputField(
-          controller: _nameController,
-          label: 'Full Legal Name',
-          icon: Icons.person_outline,
-        ),
-        const SizedBox(height: 12),
-
-        _buildInputField(
-          controller: _phoneController,
-          label: 'Phone Number (for SMS reminders)',
-          icon: Icons.phone_outlined,
-          keyboardType: TextInputType.phone,
-        ),
-        if (!_isUserPhoneVerified) ...[
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              const Icon(Icons.info_outline, size: 14, color: AppTheme.gold),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'A verified phone number is required to book.',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: AppTheme.gold,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              TextButton(
-                key: const Key('booking_verify_phone_link'),
-                onPressed: _showVerifiedPhoneRequiredSheet,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text(
-                  '+ Verify',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: AppTheme.gold,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-        const SizedBox(height: 12),
-
-        _buildInputField(
-          controller: _emailController,
-          label: 'Email Address (for receipt & prep guide)',
-          icon: Icons.email_outlined,
-          keyboardType: TextInputType.emailAddress,
-        ),
-        const SizedBox(height: 12),
-
-        _buildInputField(
-          controller: _notesController,
-          label: 'Special Notes or Allergies (optional)',
-          icon: Icons.note_outlined,
-          maxLines: 2,
-        ),
-        const SizedBox(height: 24),
-
-        Text(
-          'STUDIO POLICIES & TERMS',
-          style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFF919696),
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.8,
-          ),
-        ),
-        const SizedBox(height: 10),
-
-        _buildPoliciesCard(),
-        const SizedBox(height: 16),
-
-        // Policy Agreement Checkbox
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              _agreedToPolicies = !_agreedToPolicies;
-            });
-          },
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Checkbox(
-                value: _agreedToPolicies,
-                onChanged: (val) {
-                  setState(() {
-                    _agreedToPolicies = val ?? false;
-                  });
-                },
-                activeColor: const Color(0xFFEEC200),
-                checkColor: const Color(0xFF121414),
-                side: const BorderSide(color: Color(0xFF4D5252), width: 1.5),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: Text(
-                    'I confirm I am 18+ years old and agree to the studio deposit and cancellation policies.',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFF9FAFA),
-                      fontSize: 12,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInputField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
-    int maxLines = 1,
-  }) {
-    return TextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      maxLines: maxLines,
-      onChanged: (_) => setState(() {}),
-      style: GoogleFonts.plusJakartaSans(
-        color: const Color(0xFFF9FAFA),
-        fontSize: 14,
-      ),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: GoogleFonts.plusJakartaSans(
-          color: const Color(0xFF919696),
-          fontSize: 13,
-        ),
-        prefixIcon: Icon(icon, color: const Color(0xFFEEC200), size: 20),
-        filled: true,
-        fillColor: const Color(0xFF171A1A),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-          borderSide: const BorderSide(color: Color(0xFF262929)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-          borderSide: const BorderSide(color: Color(0xFFEEC200), width: 1.5),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      ),
-    );
-  }
-
-  Widget _buildPoliciesCard() {
-    final policies = [
-      'Deposits are non-refundable and credited toward your session balance.',
-      '48-hour advance notice is required to reschedule your appointment.',
-      'A valid government-issued photo ID (18+) is required at the studio.',
-      'Please arrive well-rested, hydrated, and within 10 minutes of start time.',
-    ];
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF171A1A),
-        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-        border: Border.all(color: const Color(0xFF2B2F2F)),
-      ),
-      child: Column(
-        children: policies.map((policy) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.check_circle_outline, color: Color(0xFF4ADE80), size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    policy,
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFC0C5C5),
-                      fontSize: 12,
-                      height: 1.35,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // STEP 3: REVIEW & PAYMENT
-  // ---------------------------------------------------------------------------
-  Widget _buildStepPayment() {
-    final deposit = widget.flash.deposit;
-    final total = widget.flash.price;
-    final balance = total - deposit;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Appointment Summary Card
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF171A1A),
-            borderRadius: BorderRadius.circular(AppRadius.radiusLg),
-            border: Border.all(color: const Color(0xFF38352A), width: 1.2),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-                    child: SizedBox(
-                      width: 50,
-                      height: 50,
-                      child: FlashImage(
-                        urlOrPath: widget.flash.imageUrl,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.flash.title,
-                          style: GoogleFonts.plusJakartaSans(
-                            color: const Color(0xFFF9FAFA),
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          'by $_artistName',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: const Color(0xFFEEC200),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const Divider(color: Color(0xFF262929), height: 24),
-
-              _buildSummaryRow('Date', _formatDate(_selectedDate)),
-              const SizedBox(height: 6),
-              _buildSummaryRow('Time', '$_selectedTimeSlot (${widget.flash.estimatedTime})'),
-              const SizedBox(height: 6),
-              _buildSummaryRow('Placement', _selectedPlacement),
-              if (_isSilentSession) ...[
-                const SizedBox(height: 6),
-                _buildSummaryRow('Atmosphere', 'Silent Appointment requested'),
-              ],
-              const SizedBox(height: 6),
-              _buildSummaryRow('Studio', _artistLocation),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-
-        // Cost Breakdown Card
-        Text(
-          'PAYMENT BREAKDOWN',
-          style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFF919696),
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.8,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E2020),
-            borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-            border: Border.all(color: const Color(0xFF2B2F2F)),
-          ),
-          child: Column(
-            children: [
-              _buildPriceLine('Total Flash Price', '\$$total', isBold: false),
-              const SizedBox(height: 8),
-              _buildPriceLine(
-                'Deposit Due Today',
-                '\$$deposit',
-                isBold: true,
-                color: const Color(0xFFEEC200),
-              ),
-              const Divider(color: Color(0xFF333737), height: 20),
-              _buildPriceLine('Balance Due at Studio', '\$$balance', isBold: false),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-
-        // Secure Checkout Information Card
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF171A1A),
-            borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-            border: Border.all(color: const Color(0xFF38352A), width: 1.2),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEEC200).withAlpha(30),
-                      borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-                    ),
-                    child: const Icon(Icons.shield_outlined, color: Color(0xFFEEC200), size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'SECURE CHECKOUT VIA STRIPE',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: const Color(0xFFF9FAFA),
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Supports Apple Pay, Cards & Link',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: const Color(0xFF919696),
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.lock_outline, color: Color(0xFF22C55E), size: 18),
-                ],
-              ),
-              const Divider(color: Color(0xFF262929), height: 24),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.check_circle_outline, color: Color(0xFFEEC200), size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Your \$$deposit deposit locks this appointment exclusively for you. 100% applies directly to your tattoo total.',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFFC0C5C5),
-                        fontSize: 12,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.info_outline, color: Color(0xFF919696), size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Remaining balance of \$$balance will be paid directly to $_artistName on your appointment date.',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFF919696),
-                        fontSize: 12,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSummaryRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFF919696),
-            fontSize: 12,
-          ),
-        ),
-        Text(
-          value,
-          style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFFF9FAFA),
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPriceLine(String label, String value, {bool isBold = false, Color? color}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.plusJakartaSans(
-            color: color ?? const Color(0xFFC0C5C5),
-            fontSize: 13,
-            fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
-          ),
-        ),
-        Text(
-          value,
-          style: GoogleFonts.plusJakartaSans(
-            color: color ?? const Color(0xFFF9FAFA),
-            fontSize: isBold ? 16 : 14,
-            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _handleAddToCalendar() async {
-    if (_isAddingToCalendar) return;
-    setState(() => _isAddingToCalendar = true);
-
-    final event = CalendarEventLauncher.buildTattooAppointmentEvent(
-      date: _selectedDate,
-      timeSlot: _selectedTimeSlot,
-      durationLabel: widget.flash.estimatedTime,
-      flashTitle: widget.flash.title,
-      artistName: _artistName,
-      studioName: widget.artist?.studioType,
-      studioAddress: _artistLocation,
-      placement: _selectedPlacement,
-      depositAmount: widget.flash.deposit,
-      totalPrice: widget.flash.price,
-      notes: _notesController.text.trim(),
-    );
-
-    final added = await CalendarEventLauncher.addEventToCalendar(context, event);
-    if (!mounted) return;
-    setState(() {
-      _isAddingToCalendar = false;
-      if (added) {
-        _addedToCalendar = true;
-      }
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // STEP 4: CONFIRMATION & PREP GUIDE
-  // ---------------------------------------------------------------------------
-  Widget _buildStepConfirmation() {
-    return Column(
-      children: [
-        const SizedBox(height: 10),
-        // Golden Badge
-        Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(0xFF38351F),
-            border: Border.all(color: const Color(0xFFEEC200), width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFEEC200).withAlpha(40),
-                blurRadius: 20,
-                spreadRadius: 4,
-              ),
-            ],
-          ),
-          child: const Center(
-            child: Icon(Icons.check, color: Color(0xFFEEC200), size: 44),
-          ),
-        ),
-        const SizedBox(height: 18),
-
-        Text(
-          'Flash Claimed & Booked!',
-          style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFFF9FAFA),
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Ref: $_confirmationCode',
-          style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFFEEC200),
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.1,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'A confirmation email and SMS receipt have been sent.',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFF919696),
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(height: 24),
-
-        // Appointment Recap Card
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF171A1A),
-            borderRadius: BorderRadius.circular(AppRadius.radiusLg),
-            border: Border.all(color: const Color(0xFF262929)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-                    child: SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: FlashImage(
-                        urlOrPath: widget.flash.imageUrl,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.flash.title,
-                          style: GoogleFonts.plusJakartaSans(
-                            color: const Color(0xFFF9FAFA),
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          'Artist: $_artistName',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: const Color(0xFFEEC200),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const Divider(color: Color(0xFF262929), height: 20),
-              _buildSummaryRow('Date', _formatDate(_selectedDate)),
-              const SizedBox(height: 6),
-              _buildSummaryRow('Time Slot', _selectedTimeSlot),
-              const SizedBox(height: 6),
-              _buildSummaryRow('Placement', _selectedPlacement),
-              const SizedBox(height: 6),
-              _buildSummaryRow('Studio Location', _artistLocation),
-              const SizedBox(height: 6),
-              _buildSummaryRow('Deposit Paid', '\$${widget.flash.deposit} ($_selectedPaymentMethod)'),
-              const SizedBox(height: 6),
-              _buildSummaryRow(
-                'Balance at Appointment',
-                '\$${widget.flash.price - widget.flash.deposit}',
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-
-        // Add to calendar action button
-        OutlinedButton.icon(
-          key: const Key('confirmation_add_to_calendar_button'),
-          onPressed: _isAddingToCalendar ? null : _handleAddToCalendar,
-          icon: _isAddingToCalendar
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Color(0xFFEEC200),
-                  ),
-                )
-              : Icon(
-                  _addedToCalendar
-                      ? Icons.check_circle_rounded
-                      : Icons.calendar_month,
-                  color: _addedToCalendar
-                      ? const Color(0xFF4ADE80)
-                      : const Color(0xFFEEC200),
-                  size: 18,
-                ),
-          label: Text(
-            _addedToCalendar ? 'Added to Calendar' : 'Add to Calendar',
-            style: GoogleFonts.plusJakartaSans(
-              color: _addedToCalendar
-                  ? const Color(0xFF4ADE80)
-                  : const Color(0xFFEEC200),
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.8,
-            ),
-          ),
-          style: OutlinedButton.styleFrom(
-            backgroundColor: _addedToCalendar
-                ? const Color(0x1F4ADE80)
-                : Colors.transparent,
-            side: BorderSide(
-              color: _addedToCalendar
-                  ? const Color(0xFF4ADE80)
-                  : const Color(0xFFEEC200),
-            ),
-            minimumSize: const Size.fromHeight(44),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-            ),
-          ),
-        ),
-        const SizedBox(height: 20),
-
-        // Session Preparation Guidelines
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1D1D),
-            borderRadius: BorderRadius.circular(AppRadius.radiusMd),
-            border: Border.all(color: const Color(0xFF2A2E2E)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'SESSION PREPARATION TIPS',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFEEC200),
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.8,
-                ),
-              ),
-              const SizedBox(height: 8),
-              _buildPrepItem('Hydrate thoroughly & eat a solid meal 1-2 hours before.'),
-              _buildPrepItem('Bring valid 18+ government photo ID to the studio.'),
-              _buildPrepItem('Avoid alcohol or blood thinners for 24 hours prior.'),
-              _buildPrepItem('Wear loose, comfortable clothes for easy placement access.'),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-
-        // Done button
-        AppButtons.primaryCTA(
-          onPressed: () {
-            Navigator.of(context).pop(true);
-          },
-          text: 'Done',
-          backgroundColor: const Color(0xFFEEC200),
-          foregroundColor: const Color(0xFF121414),
-        ),
-        const SizedBox(height: 20),
-      ],
-    );
-  }
-
-  Widget _buildPrepItem(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.arrow_right, color: Color(0xFFEEC200), size: 18),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              text,
-              style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFFC0C5C5),
-                fontSize: 12,
-                height: 1.35,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // BOTTOM ACTION BAR
-  // ---------------------------------------------------------------------------
   Widget _buildBottomActionBar() {
     String buttonText;
     VoidCallback? onPressed;
@@ -2071,289 +895,15 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           : null;
     } else {
       buttonText = 'Pay \$${widget.flash.deposit} Deposit & Confirm';
-      onPressed = _isProcessingPayment
-          ? null
-          : _processPaymentAndConfirm;
+      onPressed = _isProcessingPayment ? null : _processPaymentAndConfirm;
     }
 
     return AppButtons.primaryCTA(
       onPressed: onPressed,
       text: buttonText,
       isLoading: _isProcessingPayment,
-      backgroundColor: const Color(0xFFEEC200),
-      foregroundColor: const Color(0xFF121414),
+      backgroundColor: AppTheme.gold,
+      foregroundColor: AppTheme.onyxBackground,
     );
   }
 }
-
-class _PlacementSelectionBottomSheet extends StatefulWidget {
-  final String initialPlacement;
-  final List<String> options;
-  final ValueChanged<String> onSelected;
-
-  const _PlacementSelectionBottomSheet({
-    required this.initialPlacement,
-    required this.options,
-    required this.onSelected,
-  });
-
-  @override
-  State<_PlacementSelectionBottomSheet> createState() =>
-      _PlacementSelectionBottomSheetState();
-}
-
-class _PlacementSelectionBottomSheetState
-    extends State<_PlacementSelectionBottomSheet> {
-  late String _currentSelection;
-  late final TextEditingController _customController;
-  bool _isCustomActive = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentSelection = widget.initialPlacement;
-    final isPreset = widget.options
-        .where((opt) => opt != 'Other')
-        .contains(widget.initialPlacement);
-
-    if (!isPreset && widget.initialPlacement.isNotEmpty) {
-      _isCustomActive = true;
-      _customController = TextEditingController(
-        text: widget.initialPlacement == 'Other' ? '' : widget.initialPlacement,
-      );
-    } else {
-      _customController = TextEditingController();
-    }
-  }
-
-  @override
-  void dispose() {
-    _customController.dispose();
-    super.dispose();
-  }
-
-  void _selectPreset(String option) {
-    HapticFeedback.selectionClick();
-    setState(() {
-      _currentSelection = option;
-      _isCustomActive = false;
-    });
-    widget.onSelected(option);
-    Navigator.of(context).pop();
-  }
-
-  void _activateCustom() {
-    HapticFeedback.selectionClick();
-    setState(() {
-      _currentSelection = 'Other';
-      _isCustomActive = true;
-    });
-  }
-
-  void _submitCustom() {
-    final text = _customController.text.trim();
-    final chosen = text.isNotEmpty ? text : 'Other';
-    HapticFeedback.selectionClick();
-    widget.onSelected(chosen);
-    Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AdaptiveGlassContainer.bottomSheet(
-      glassEnabled: true,
-      androidSurfaceColor: const Color(0xFF171A1A),
-      topRadius: AppRadius.radiusSheet,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-      child: SingleChildScrollView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Grab Handle
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF4D5252),
-                    borderRadius: BorderRadius.circular(AppRadius.dragHandle),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Title Header & Close Icon
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Select Body Placement',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFF9FAFA),
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  IconButton(
-                    key: const Key('close_placement_sheet'),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      color: Color(0xFF919696),
-                      size: 22,
-                    ),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Choose where you want this flash piece tattooed',
-                style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF919696),
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Divider(color: Color(0xFF262929), height: 1),
-
-              // Minimalist list rows
-              ...widget.options.map((option) {
-                final isOther = option == 'Other';
-                final isSelected = isOther
-                    ? (_isCustomActive ||
-                        !widget.options
-                            .where((o) => o != 'Other')
-                            .contains(_currentSelection))
-                    : (_currentSelection == option && !_isCustomActive);
-
-                return Column(
-                  children: [
-                    InkWell(
-                      key: Key('placement_option_$option'),
-                      onTap: () {
-                        if (isOther) {
-                          _activateCustom();
-                        } else {
-                          _selectPreset(option);
-                        }
-                      },
-                      splashColor: const Color(0xFFEEC200).withAlpha(20),
-                      highlightColor: Colors.transparent,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 14, horizontal: 4),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                option,
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: isSelected
-                                      ? const Color(0xFFEEC200)
-                                      : const Color(0xFFF9FAFA),
-                                  fontSize: 15,
-                                  fontWeight: isSelected
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
-                                ),
-                              ),
-                            ),
-                            if (isSelected)
-                              const Icon(
-                                Icons.check_rounded,
-                                color: Color(0xFFEEC200),
-                                size: 20,
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    // If Other is active and this is the Other row, show inline input
-                    if (isOther && _isCustomActive) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6, bottom: 12),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                key: const Key('custom_placement_field'),
-                                controller: _customController,
-                                autofocus: true,
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: const Color(0xFFF9FAFA),
-                                  fontSize: 14,
-                                ),
-                                textInputAction: TextInputAction.done,
-                                onSubmitted: (_) => _submitCustom(),
-                                decoration: InputDecoration(
-                                  hintText: 'e.g. Behind ear, Ankle, Ribs',
-                                  hintStyle: GoogleFonts.plusJakartaSans(
-                                    color: const Color(0xFF6B7280),
-                                    fontSize: 13,
-                                  ),
-                                  filled: true,
-                                  fillColor: const Color(0xFF121414),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 12,
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-                                    borderSide: const BorderSide(
-                                      color: Color(0xFF262929),
-                                    ),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-                                    borderSide: const BorderSide(
-                                      color: Color(0xFFEEC200),
-                                      width: 1.5,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            SizedBox(
-                              height: 44,
-                              child: ElevatedButton(
-                                key: const Key('confirm_custom_placement_btn'),
-                                onPressed: _submitCustom,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFEEC200),
-                                  foregroundColor: const Color(0xFF121414),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                  ),
-                                ),
-                                child: Text(
-                                  'Set',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    const Divider(color: Color(0xFF262929), height: 1),
-                  ],
-                );
-              }),
-            ],
-          ),
-        ),
-      );
-  }
-}
-
