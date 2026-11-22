@@ -7,7 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../config/dev_config.dart';
-import '../models/artist_dashboard_data.dart';
+import '../repositories/artist_dashboard_repository.dart';
 import '../models/user.dart';
 import 'booking_sync_service.dart';
 import 'notification_service.dart';

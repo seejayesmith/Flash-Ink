@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/utils/calendar_event_launcher.dart';
-import '../../../../models/artist_dashboard_data.dart';
+import '../../../../models/artist_dashboard/artist_books_schedule.dart';
 import '../../../../theme/app_buttons.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_theme.dart';

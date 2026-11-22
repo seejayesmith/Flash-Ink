@@ -1,7 +1,7 @@
 import 'package:flash_ink/core/mock/mock_data_config.dart';
 import 'package:flash_ink/features/messages/domain/models/message_thread.dart';
 import 'package:flash_ink/features/messages/presentation/screens/chat_conversation_screen.dart';
-import 'package:flash_ink/models/artist_dashboard_data.dart';
+import 'package:flash_ink/models/artist_dashboard/booking_request.dart';
 import 'package:flash_ink/services/booking_sync_service.dart';
 import 'package:flash_ink/services/chat_service.dart';
 import 'package:flutter/material.dart';

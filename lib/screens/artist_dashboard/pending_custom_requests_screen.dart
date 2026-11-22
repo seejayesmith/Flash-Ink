@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../models/artist_dashboard_data.dart';
+import '../../models/artist_dashboard/book_drop.dart';
+import '../../models/artist_dashboard/booking_request.dart';
+import '../../repositories/artist_dashboard_repository.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/flash_image.dart';

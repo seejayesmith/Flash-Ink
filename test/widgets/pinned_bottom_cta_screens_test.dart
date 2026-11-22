@@ -11,7 +11,8 @@ import 'package:flash_ink/screens/client_aesthetics_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_edit_profile_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/booking_request_detail_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/appointment_detail_screen.dart';
-import 'package:flash_ink/models/artist_dashboard_data.dart';
+import 'package:flash_ink/models/artist_dashboard/booking_request.dart';
+import 'package:flash_ink/models/artist_dashboard/dashboard_appointment.dart';
 
 class MockUser extends Fake implements User {
   @override

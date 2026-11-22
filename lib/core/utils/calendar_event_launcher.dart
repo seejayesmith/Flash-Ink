@@ -2,7 +2,8 @@ import 'package:add_2_calendar/add_2_calendar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../models/artist_dashboard_data.dart';
+import '../../models/artist_dashboard/artist_books_schedule.dart';
+import '../../repositories/artist_dashboard_repository.dart';
 import '../../widgets/flash_snack_bar.dart';
 
 /// Builds real tattoo session calendar [Event]s and launches the platform

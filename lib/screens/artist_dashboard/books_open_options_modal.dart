@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../models/artist_dashboard_data.dart';
+import '../../repositories/artist_dashboard_repository.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';
 import '../../widgets/adaptive_glass_container.dart';

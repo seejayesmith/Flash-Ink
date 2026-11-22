@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../models/artist_dashboard_data.dart';
+import '../../models/artist_dashboard/dashboard_appointment.dart';
+import '../../repositories/artist_dashboard_repository.dart';
 import '../../models/booking.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';

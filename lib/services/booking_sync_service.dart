@@ -6,7 +6,10 @@ import 'package:flutter/foundation.dart';
 import '../core/mock/mock_data_config.dart';
 import '../features/appointments/domain/models/appointment_item.dart';
 import '../features/messages/domain/models/message_thread.dart';
-import '../models/artist_dashboard_data.dart';
+import '../models/artist_dashboard/artist_books_schedule.dart';
+import '../models/artist_dashboard/booking_request.dart';
+import '../models/artist_dashboard/dashboard_appointment.dart';
+import '../repositories/artist_dashboard_repository.dart';
 import '../models/waitlist_entry.dart';
 import 'auth_service.dart';
 

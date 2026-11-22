@@ -4,7 +4,8 @@ import 'package:firebase_core/firebase_core.dart';
 // ignore: depend_on_referenced_packages
 import 'package:firebase_core_platform_interface/test.dart';
 import 'package:flash_ink/core/mock/mock_data_config.dart';
-import 'package:flash_ink/models/artist_dashboard_data.dart';
+import 'package:flash_ink/models/artist_dashboard/book_drop.dart';
+import 'package:flash_ink/repositories/artist_dashboard_repository.dart';
 import 'package:flash_ink/screens/artist_dashboard/create_book_drop_screen.dart';
 
 void main() {

@@ -11,7 +11,10 @@ import '../../features/messages/presentation/screens/chat_conversation_screen.da
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../models/artist.dart';
-import '../../models/artist_dashboard_data.dart';
+import '../../models/artist_dashboard/artist_dashboard_stats.dart';
+import '../../models/artist_dashboard/booking_request.dart';
+import '../../models/artist_dashboard/dashboard_appointment.dart';
+import '../../repositories/artist_dashboard_repository.dart';
 import '../../repositories/artist_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/booking_sync_service.dart';

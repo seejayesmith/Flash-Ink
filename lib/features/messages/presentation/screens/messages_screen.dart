@@ -3,7 +3,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/mock/mock_data_config.dart';
-import '../../../../models/artist_dashboard_data.dart';
+import '../../../../repositories/artist_dashboard_repository.dart';
 import '../../../../models/waitlist_entry.dart';
 import '../../../../services/booking_sync_service.dart';
 import '../../../../theme/app_radius.dart';

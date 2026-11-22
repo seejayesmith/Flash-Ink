@@ -7,7 +7,9 @@ import 'package:flash_ink/features/appointments/domain/models/appointment_item.d
 import 'package:flash_ink/features/messages/domain/models/message_thread.dart';
 import 'package:flash_ink/features/messages/presentation/widgets/booking_receipt_message_tile.dart';
 import 'package:flash_ink/models/artist.dart';
-import 'package:flash_ink/models/artist_dashboard_data.dart';
+import 'package:flash_ink/models/artist_dashboard/booking_request.dart';
+import 'package:flash_ink/models/artist_dashboard/dashboard_appointment.dart';
+import 'package:flash_ink/repositories/artist_dashboard_repository.dart';
 import 'package:flash_ink/screens/artist_dashboard/appointment_detail_screen.dart';
 import 'package:flash_ink/screens/artist_dashboard/booking_request_detail_screen.dart';
 import 'package:flash_ink/screens/booking/flash_booking_screen.dart';

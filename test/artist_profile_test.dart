@@ -8,7 +8,7 @@ import 'package:flash_ink/features/artist/presentation/screens/artist_profile_sc
 import 'package:flash_ink/screens/custom_request_screen.dart';
 import 'package:flash_ink/screens/flash_details_screen.dart';
 import 'package:flash_ink/features/artist/presentation/widgets/flash_piece_card.dart';
-import 'package:flash_ink/models/artist_dashboard_data.dart';
+import 'package:flash_ink/repositories/artist_dashboard_repository.dart';
 import 'package:flash_ink/screens/booking/flash_booking_screen.dart';
 import 'package:flash_ink/services/booking_sync_service.dart';
 import 'package:flash_ink/theme/app_theme.dart';

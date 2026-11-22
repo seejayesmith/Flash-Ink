@@ -6,7 +6,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_core_platform_interface/test.dart';
 import 'package:flash_ink/core/mock/mock_data_config.dart';
 import 'package:flash_ink/models/artist.dart';
-import 'package:flash_ink/models/artist_dashboard_data.dart';
+import 'package:flash_ink/models/artist_dashboard/artist_books_schedule.dart';
+import 'package:flash_ink/repositories/artist_dashboard_repository.dart';
 import 'package:flash_ink/screens/artist_dashboard/artist_books_screen.dart';
 import 'package:flash_ink/services/auth_service.dart';
 

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flash_ink/core/mock/mock_data_config.dart';
-import 'package:flash_ink/models/artist_dashboard_data.dart';
+import 'package:flash_ink/models/artist_dashboard/book_drop.dart';
+import 'package:flash_ink/repositories/artist_dashboard_repository.dart';
 import 'package:flash_ink/screens/artist_dashboard/books_status_card.dart';
 
 void main() {

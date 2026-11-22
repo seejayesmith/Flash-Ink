@@ -6,7 +6,9 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:http/http.dart' as http;
 import '../features/appointments/domain/models/appointment_item.dart';
-import '../models/artist_dashboard_data.dart';
+import '../models/artist_dashboard/artist_dashboard_stats.dart';
+import '../models/artist_dashboard/dashboard_appointment.dart';
+import '../repositories/artist_dashboard_repository.dart';
 
 /// Status of a Stripe payment attempt.
 enum StripePaymentStatus {

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../models/artist.dart';
-import '../../../../models/artist_dashboard_data.dart';
+import '../../../../repositories/artist_dashboard_repository.dart';
 import '../../../../models/waitlist_entry.dart';
 import '../../../artist/presentation/screens/artist_profile_screen.dart';
 import '../../../../screens/custom_request_screen.dart';
