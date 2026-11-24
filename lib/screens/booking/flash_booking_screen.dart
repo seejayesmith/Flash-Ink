@@ -39,12 +39,14 @@ class FlashBookingScreen extends StatefulWidget {
   final FlashArtwork flash;
   final Artist? artist;
   final FirebaseFirestore? firestore;
+  final StripeService? stripeService;
 
   const FlashBookingScreen({
     super.key,
     required this.flash,
     this.artist,
     this.firestore,
+    this.stripeService,
   });
 
   @override
@@ -503,18 +505,23 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       }
     }
 
-    final stripeService = StripeService();
+    final stripeService = widget.stripeService ?? StripeService();
     final paymentResult = await stripeService.presentDepositPaymentSheet(
       amountInDollars: widget.flash.deposit.toDouble(),
       flashTitle: widget.flash.title,
+      flashId: widget.flash.id,
       customerEmail: _emailController.text.trim(),
       customerName: _nameController.text.trim(),
-      artistStripeAccountId:
-          _effectiveArtistId.isNotEmpty ? _effectiveArtistId : null,
+      customerPhone: _phoneController.text.trim(),
+      artistId: _effectiveArtistId.isNotEmpty ? _effectiveArtistId : null,
       bookingId: _confirmationCode,
       selectedDate: _selectedDate.toIso8601String(),
       selectedTimeSlot: _selectedTimeSlot,
       placement: _selectedPlacement,
+      clientNotes: _notesController.text.trim().isNotEmpty
+          ? _notesController.text.trim()
+          : null,
+      isSilentAppointment: _isSilentSession,
     );
 
     if (!mounted) return;
@@ -563,27 +570,32 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         createdAt: DateTime.now(),
       );
 
-      BookingSyncService.syncBookingToCloud(
-        bookingId: booking.id,
-        flashId: widget.flash.id,
-        artistId: artistId,
-        clientId: clientId,
-        depositAmount: booking.depositAmount,
-        totalAmount: booking.totalAmount,
-        flashTitle: widget.flash.title,
-        flashImageUrl: widget.flash.imageUrl,
-        selectedDate: booking.selectedDate.toIso8601String(),
-        selectedTimeSlot: booking.selectedTimeSlot,
-        placement: booking.placement,
-        clientName: booking.clientName,
-        clientAvatar: clientAvatar,
-        clientEmail: booking.clientEmail,
-        clientPhone: booking.clientPhone,
-        clientNotes: booking.clientNotes,
-        isSilentAppointment: booking.isSilentAppointment,
-        status: 'pending',
-        firestore: widget.firestore,
-      );
+      // In live mode, `createPaymentIntent` + `stripeConnectWebhook` write
+      // authoritative booking/appointment/chat documents on the server so
+      // clients never overwrite server-verified payment status.
+      if (paymentResult.isSimulated || widget.firestore != null) {
+        BookingSyncService.syncBookingToCloud(
+          bookingId: booking.id,
+          flashId: widget.flash.id,
+          artistId: artistId,
+          clientId: clientId,
+          depositAmount: booking.depositAmount,
+          totalAmount: booking.totalAmount,
+          flashTitle: widget.flash.title,
+          flashImageUrl: widget.flash.imageUrl,
+          selectedDate: booking.selectedDate.toIso8601String(),
+          selectedTimeSlot: booking.selectedTimeSlot,
+          placement: booking.placement,
+          clientName: booking.clientName,
+          clientAvatar: clientAvatar,
+          clientEmail: booking.clientEmail,
+          clientPhone: booking.clientPhone,
+          clientNotes: booking.clientNotes,
+          isSilentAppointment: booking.isSilentAppointment,
+          status: 'pending',
+          firestore: widget.firestore,
+        );
+      }
 
       final calendarApt = DashboardAppointment(
         id: 'cal_${booking.id}',
@@ -697,20 +709,28 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         ],
       );
       MessageThread.addThread(receiptThread);
-      BookingSyncService.syncChatThreadToCloud(
-        receiptThread,
-        clientId: clientId,
-        artistId: artistId,
-        clientName: booking.clientName,
-        clientAvatar: clientAvatar,
-        artistAvatar: widget.artist?.avatarUrl,
-      );
+      if (paymentResult.isSimulated || widget.firestore != null) {
+        BookingSyncService.syncChatThreadToCloud(
+          receiptThread,
+          clientId: clientId,
+          artistId: artistId,
+          clientName: booking.clientName,
+          clientAvatar: clientAvatar,
+          artistAvatar: widget.artist?.avatarUrl,
+        );
+      }
       ArtistDashboardRepository.notifyPendingRequestsChanged();
 
       setState(() {
         _currentStep = 3;
       });
     } else if (!paymentResult.isCanceled) {
+      if (paymentResult.isSlotConflict) {
+        setState(() {
+          _currentStep = 0;
+        });
+        _loadRemoteArtistSchedule();
+      }
       FlashSnackBar.showError(
         context,
         paymentResult.errorMessage ?? 'Payment failed. Please try again.',

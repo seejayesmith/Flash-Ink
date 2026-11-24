@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../core/mock/artist_dashboard_fixtures.dart';
 import '../core/mock/mock_data_config.dart';
@@ -1002,6 +1003,350 @@ class ArtistDashboardRepository {
     );
 
     return calendarApt;
+  }
+
+  /// Sends up to 3 proposed date/time options and a quote to the client's chat
+  /// thread without locking all options off the artist's public calendar.
+  ///
+  /// Availability is re-verified live when the client selects one of the options
+  /// via [confirmProposedTimeSlot].
+  static MessageThread sendCustomTimeProposal(
+    BookingRequest request, {
+    required List<ProposedTimeOption> proposedSlots,
+    int? durationMinutes,
+    int? estimatedPrice,
+    int? deposit,
+  }) {
+    final cappedSlots = proposedSlots.take(3).toList();
+    final effectivePrice = estimatedPrice ?? request.estimatedPrice;
+    final effectiveDeposit = deposit ?? request.deposit;
+    final effectiveDuration =
+        durationMinutes ?? booksSchedule.slotDurationMinutes;
+    final resolvedArtistId =
+        request.artistId ?? BookingSyncService.resolveCurrentUid('artist_1');
+    final resolvedClientId = request.clientId ?? 'client_unknown';
+    final profile =
+        _resolveArtistMessagingProfile(fallbackArtistName: request.artistName);
+    final now = DateTime.now();
+
+    final summaryText = cappedSlots.length == 1
+        ? '${request.artistName} proposed a session time for your ${request.category} request.'
+        : '${request.artistName} proposed ${cappedSlots.length} session times for your ${request.category} request. Select one to confirm.';
+
+    final proposalMessage = ChatMessage(
+      id: 'proposal_${request.id}_${now.millisecondsSinceEpoch}',
+      senderId: resolvedArtistId,
+      senderName: request.artistName,
+      text: summaryText,
+      timestamp: now,
+      isFromArtist: true,
+      type: ChatMessageType.proposal,
+      receiptAmount: effectiveDeposit.toDouble(),
+      estimatedTotalPrice: effectivePrice,
+      appointmentDurationMinutes: effectiveDuration,
+      artistName: request.artistName,
+      studioLocation: booksSchedule.locationNote.isNotEmpty
+          ? booksSchedule.locationNote
+          : profile.studioName,
+      flashTitle: 'Custom: ${request.category}',
+      placement: request.placement,
+      flashImageUrl: request.sketchImageUrl.isNotEmpty
+          ? request.sketchImageUrl
+          : 'assets/images/flash_traditional_panther.jpg',
+      requestId: request.id,
+      proposedSlots: cappedSlots,
+    );
+
+    final threadId = 'thread_custom_${request.id}';
+    final existingIdx =
+        MessageThread.activeThreads.indexWhere((t) => t.id == threadId);
+    final MessageThread thread;
+    if (existingIdx != -1) {
+      final existing = MessageThread.activeThreads[existingIdx];
+      thread = existing.copyWith(
+        lastMessage: summaryText,
+        lastMessageTime: now,
+        unreadCount: existing.unreadCount + 1,
+        messages: [...existing.messages, proposalMessage],
+      );
+      MessageThread.activeThreads[existingIdx] = thread;
+      MessageThread.unreadUpdateNotifier.value++;
+    } else {
+      thread = MessageThread(
+        id: threadId,
+        artistId: resolvedArtistId,
+        clientId: resolvedClientId,
+        clientName: request.clientName,
+        clientAvatar: request.clientAvatar ?? '',
+        artistName: request.artistName,
+        artistAvatar: profile.artistAvatar,
+        studioName: profile.studioName,
+        lastMessage: summaryText,
+        lastMessageTime: now,
+        unreadCount: 1,
+        isOnline: true,
+        flashTitleContext: 'Custom: ${request.category}',
+        messages: [proposalMessage],
+      );
+      MessageThread.addThread(thread);
+    }
+
+    BookingSyncService.syncChatThreadToCloud(
+      thread,
+      clientId: resolvedClientId,
+      artistId: resolvedArtistId,
+      clientName: request.clientName,
+      clientAvatar: request.clientAvatar,
+      artistAvatar: profile.artistAvatar,
+    );
+    BookingSyncService.syncCustomRequestToCloud(
+      request,
+      clientId: resolvedClientId,
+      artistId: resolvedArtistId,
+      status: 'proposal_sent',
+    );
+    BookingSyncService.sendBookingNotification(
+      senderId: resolvedArtistId,
+      recipientId: resolvedClientId,
+      recipientName: request.clientName,
+      title: 'Session Times Proposed',
+      body: summaryText,
+      category: 'custom_request',
+      appointmentId: request.id,
+    );
+
+    return thread;
+  }
+
+  /// Live-checks the artist's latest schedule when a client selects one of the
+  /// artist's proposed times. Blocks double-booking if the slot was taken in the
+  /// meantime; otherwise confirms the booking, updates the calendar, and posts
+  /// a confirmation receipt message.
+  static Future<
+      ({
+        bool confirmed,
+        String? errorMessage,
+        ArtistBooksSchedule? schedule,
+        ChatMessage? updatedProposal,
+        ChatMessage? receiptMessage,
+      })> confirmProposedTimeSlot({
+    required ChatMessage proposalMessage,
+    required int optionIndex,
+    MessageThread? thread,
+    String? artistId,
+    FirebaseFirestore? firestore,
+  }) async {
+    if (optionIndex < 0 || optionIndex >= proposalMessage.proposedSlots.length) {
+      return (
+        confirmed: false,
+        errorMessage: 'Please select a valid proposed time.',
+        schedule: null,
+        updatedProposal: null,
+        receiptMessage: null,
+      );
+    }
+
+    final option = proposalMessage.proposedSlots[optionIndex];
+    final effectiveArtistId = (artistId != null && artistId.trim().isNotEmpty)
+        ? artistId.trim()
+        : (thread != null && thread.artistId.trim().isNotEmpty
+            ? thread.artistId.trim()
+            : proposalMessage.senderId.trim());
+
+    ArtistBooksSchedule? resolvedSchedule;
+    if (firestore != null || !MockDataConfig.isEnabled) {
+      final check = await BookingSyncService.verifySlotAvailableInCloud(
+        artistId: effectiveArtistId,
+        date: option.date,
+        timeSlot: option.timeSlot,
+        firestore: firestore,
+      );
+      resolvedSchedule = check.schedule;
+      if (!check.available) {
+        return (
+          confirmed: false,
+          errorMessage:
+              'That time slot is no longer available — another client booked it. Please choose another proposed time or message the artist for new options.',
+          schedule: resolvedSchedule,
+          updatedProposal: null,
+          receiptMessage: null,
+        );
+      }
+    } else {
+      final isOpen = isSlotBookable(
+        date: option.date,
+        timeSlot: option.timeSlot,
+        artistId: effectiveArtistId.isNotEmpty ? effectiveArtistId : null,
+      );
+      if (!isOpen) {
+        return (
+          confirmed: false,
+          errorMessage:
+              'That time slot is no longer available — another client booked it. Please choose another proposed time or message the artist for new options.',
+          schedule: booksSchedule,
+          updatedProposal: null,
+          receiptMessage: null,
+        );
+      }
+    }
+
+    final normalizedDate =
+        DateTime(option.date.year, option.date.month, option.date.day);
+    final formattedDate = _formatDisplayDate(normalizedDate);
+    final durationMins = proposalMessage.appointmentDurationMinutes ??
+        booksSchedule.slotDurationMinutes;
+    final durationHrs = durationMins / 60.0;
+    final durationLabel = durationHrs == durationHrs.roundToDouble()
+        ? '${durationHrs.toInt()} hrs'
+        : '${durationHrs.toStringAsFixed(1)} hrs';
+    final effectiveDeposit = (proposalMessage.receiptAmount ?? 80).round();
+    final effectivePrice =
+        proposalMessage.estimatedTotalPrice ?? (effectiveDeposit * 3);
+    final effectiveArtistName =
+        proposalMessage.artistName ?? thread?.artistName ?? 'Artist';
+    final effectiveClientName = thread?.clientName ?? 'Client';
+    final effectiveClientId =
+        thread?.clientId ?? BookingSyncService.resolveCurrentUid();
+    final effectiveStudio = proposalMessage.studioLocation?.isNotEmpty == true
+        ? proposalMessage.studioLocation!
+        : (thread?.studioName.isNotEmpty == true
+            ? thread!.studioName
+            : 'Studio');
+    final serviceTitle = proposalMessage.flashTitle ??
+        thread?.flashTitleContext ??
+        'Custom Tattoo';
+    final placement = proposalMessage.placement ?? 'Custom Placement';
+    final now = DateTime.now();
+
+    final aptId =
+        'cal_proposal_${proposalMessage.requestId ?? proposalMessage.id}';
+    final calendarApt = DashboardAppointment(
+      id: aptId,
+      clientId: effectiveClientId,
+      artistId: effectiveArtistId.isNotEmpty ? effectiveArtistId : 'artist_1',
+      clientName: effectiveClientName,
+      clientAvatar: thread?.clientAvatar,
+      serviceType: serviceTitle,
+      duration: durationLabel,
+      time: option.timeSlot,
+      scheduledDate: normalizedDate,
+      date: formattedDate,
+      placement: placement,
+      notes: 'Confirmed from artist proposed times.',
+      depositPaid: effectiveDeposit,
+      fullPrice: effectivePrice,
+      artworkImageUrl: proposalMessage.flashImageUrl ?? '',
+      visitType: 'Custom Tattoo',
+      dotColor: const Color(0xFF22C55E),
+    );
+    addCalendarAppointment(calendarApt);
+    if (firestore != null) {
+      await BookingSyncService.syncAppointmentToCloud(
+        calendarApt,
+        clientId: effectiveClientId,
+        artistId: effectiveArtistId,
+        status: 'confirmed',
+        firestore: firestore,
+      );
+    }
+
+    if (proposalMessage.requestId != null &&
+        proposalMessage.requestId!.isNotEmpty) {
+      pendingRequests = pendingRequests
+          .where((r) => r.id != proposalMessage.requestId)
+          .toList();
+    }
+
+    final clientApt = ClientAppointment(
+      id: 'PROP-${aptId.hashCode.abs() % 90000 + 10000}',
+      artistName: effectiveArtistName,
+      artistAvatar: thread?.artistAvatar ?? '',
+      studioName: thread?.studioName.isNotEmpty == true
+          ? thread!.studioName
+          : effectiveStudio,
+      studioAddress: effectiveStudio,
+      flashTitle: serviceTitle,
+      flashImageUrl: proposalMessage.flashImageUrl ??
+          'assets/images/flash_traditional_panther.jpg',
+      dateTime: normalizedDate,
+      timeSlot: '${option.timeSlot} ($durationLabel)',
+      placement: placement,
+      depositAmount: effectiveDeposit,
+      totalPrice: effectivePrice,
+      status: AppointmentStatus.confirmed,
+    );
+    ClientAppointment.addUpcomingAppointment(clientApt);
+
+    final updatedProposal = proposalMessage.copyWith(
+      selectedProposalIndex: optionIndex,
+    );
+    final receiptStart =
+        ArtistBooksSchedule.parseSlotDateTime(normalizedDate, option.timeSlot) ??
+            normalizedDate;
+    final receiptMessage = ChatMessage(
+      id: 'receipt_${proposalMessage.id}',
+      senderId: effectiveClientId,
+      senderName: effectiveClientName,
+      text:
+          'Session confirmed for $formattedDate at ${option.timeSlot}. Deposit: \$$effectiveDeposit.',
+      timestamp: now,
+      isFromArtist: false,
+      type: ChatMessageType.receipt,
+      receiptAmount: effectiveDeposit.toDouble(),
+      appointmentDate: receiptStart,
+      appointmentTimeSlot: option.timeSlot,
+      appointmentDurationMinutes: durationMins,
+      artistName: effectiveArtistName,
+      studioLocation: effectiveStudio,
+      flashTitle: serviceTitle,
+      placement: placement,
+      flashImageUrl: proposalMessage.flashImageUrl,
+    );
+
+    if (thread != null) {
+      final idx =
+          MessageThread.activeThreads.indexWhere((t) => t.id == thread.id);
+      if (idx != -1) {
+        final existing = MessageThread.activeThreads[idx];
+        final updatedMessages = existing.messages
+            .map((m) => m.id == proposalMessage.id ? updatedProposal : m)
+            .toList()
+          ..add(receiptMessage);
+        final updatedThread = existing.copyWith(
+          lastMessage: receiptMessage.text,
+          lastMessageTime: now,
+          messages: updatedMessages,
+        );
+        MessageThread.activeThreads[idx] = updatedThread;
+        MessageThread.unreadUpdateNotifier.value++;
+        BookingSyncService.syncChatThreadToCloud(
+          updatedThread,
+          clientId: updatedThread.clientId,
+          artistId: updatedThread.artistId,
+          clientName: updatedThread.clientName,
+          clientAvatar: updatedThread.clientAvatar,
+          artistAvatar: updatedThread.artistAvatar,
+        );
+      }
+    }
+
+    final updatedSchedule = resolvedSchedule?.copyWith(
+      bookedSlots: [
+        ...resolvedSchedule.bookedSlots,
+        ScheduleSlotEntry(
+          dateKey: ArtistBooksSchedule.dateKey(normalizedDate),
+          timeSlot: option.timeSlot,
+        ),
+      ],
+    );
+
+    return (
+      confirmed: true,
+      errorMessage: null,
+      schedule: updatedSchedule,
+      updatedProposal: updatedProposal,
+      receiptMessage: receiptMessage,
+    );
   }
 
   /// Declines a pending booking request and removes it from the active queue.

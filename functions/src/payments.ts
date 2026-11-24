@@ -2,100 +2,664 @@ import { defineSecret } from 'firebase-functions/params';
 import { onCall, HttpsError, onRequest } from 'firebase-functions/v2/https';
 import Stripe from 'stripe';
 import { admin, db } from './firebase';
-import { assertSlotIsAvailable } from './schedule';
+import {
+  assertSlotIsAvailable,
+  buildFlashLockId,
+  buildSlotLockId,
+  CHECKOUT_LOCK_TTL_MS,
+  CHECKOUT_LOCKS_COLLECTION,
+  extractDateKey,
+  normalizeSlotLabel,
+} from './schedule';
 
 const stripeSecretKey = defineSecret('STRIPE_SECRET_KEY');
+const stripeWebhookSecret = defineSecret('STRIPE_WEBHOOK_SECRET');
 
-const getStripeClient = (): Stripe => {
+const DEFAULT_FREE_BOOKINGS_ALLOWANCE = 2;
+
+export const getStripeClient = (): Stripe => {
   const secretKey = stripeSecretKey.value() || process.env.STRIPE_SECRET_KEY || '';
+  if (!secretKey) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Stripe payment processing is not configured on the server.'
+    );
+  }
   return new Stripe(secretKey, {
     apiVersion: '2025-02-24.acacia',
   });
 };
 
+interface PaymentConfig {
+  platformFeePercent: number;
+  platformFeeFlatCents: number;
+  requireArtistStripeConnect: boolean;
+  defaultFreeBookingsAllowance: number;
+}
+
+async function loadPaymentConfig(): Promise<PaymentConfig> {
+  const configSnap = await db.collection('core_config').doc('payments').get();
+  const data = (configSnap.exists ? configSnap.data() : {}) as Record<string, unknown>;
+
+  const feePercent =
+    typeof data.platformFeePercent === 'number' && data.platformFeePercent >= 0
+      ? data.platformFeePercent
+      : 0; // Phase A launch default: 0% platform fee; adjust in core_config/payments for Phase B.
+  const feeFlatCents =
+    typeof data.platformFeeFlatCents === 'number' && data.platformFeeFlatCents >= 0
+      ? Math.round(data.platformFeeFlatCents)
+      : 0;
+  const requireArtistStripeConnect = data.requireArtistStripeConnect !== false;
+  const defaultFreeBookingsAllowance =
+    typeof data.defaultFreeBookingsAllowance === 'number' &&
+    data.defaultFreeBookingsAllowance >= 0
+      ? Math.floor(data.defaultFreeBookingsAllowance)
+      : DEFAULT_FREE_BOOKINGS_ALLOWANCE;
+
+  return {
+    platformFeePercent: feePercent,
+    platformFeeFlatCents: feeFlatCents,
+    requireArtistStripeConnect,
+    defaultFreeBookingsAllowance,
+  };
+}
+
+function readTimestampMillis(raw: unknown): number {
+  if (raw instanceof admin.firestore.Timestamp) {
+    return raw.toMillis();
+  }
+  if (typeof raw === 'string') {
+    const parsed = Date.parse(raw);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
+function sanitizeBookingId(raw: unknown): string {
+  const cleaned = typeof raw === 'string' ? raw.trim() : '';
+  if (/^[A-Za-z0-9_-]{4,64}$/.test(cleaned)) {
+    return cleaned;
+  }
+  return `INK-${Date.now()}`;
+}
+
+function isFlashExclusive(flashRecord: Record<string, unknown>): boolean {
+  if (flashRecord.isExclusive === false) return false;
+  const status = String(flashRecord.status || 'available').trim().toLowerCase();
+  return status !== 'repeatable';
+}
+
+function isFlashClaimed(flashRecord: Record<string, unknown>): boolean {
+  if (flashRecord.isClaimed === true) return true;
+  const status = String(flashRecord.status || 'available').trim().toLowerCase();
+  return status === 'claimed';
+}
+
+async function cleanupCheckoutLocks(params: {
+  slotLockId?: string;
+  flashLockId?: string;
+  bookingId?: string;
+  markStatus?: 'payment_failed' | 'canceled';
+}): Promise<void> {
+  const { slotLockId, flashLockId, bookingId, markStatus } = params;
+  const batch = db.batch();
+  if (slotLockId) {
+    batch.delete(db.collection(CHECKOUT_LOCKS_COLLECTION).doc(slotLockId));
+  }
+  if (flashLockId) {
+    batch.delete(db.collection(CHECKOUT_LOCKS_COLLECTION).doc(flashLockId));
+  }
+  if (bookingId && markStatus) {
+    batch.set(
+      db.collection('bookings').doc(bookingId),
+      {
+        status: markStatus,
+        escrowStatus: 'canceled',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+  await batch.commit();
+}
+
 /**
  * Callable Cloud Function: Create Stripe PaymentIntent for Flash Deposit
  *
- * Unlocks `STRIPE_SECRET_KEY` from Firebase Secret Manager, creates a PaymentIntent
- * in Stripe, and returns the one-time `clientSecret` to the Flutter app so it can
- * present the native Stripe PaymentSheet.
+ * Enforces server-authoritative pricing, artist Stripe Connect readiness,
+ * first-2-bookings 0% platform fee allowance (`free_bookings_remaining`),
+ * an atomic 10-minute checkout lock in Firestore, and Separate Charges & Transfers
+ * escrow holding (`transfer_group`) until mutual in-person check-in.
  */
 export const createPaymentIntent = onCall(
   { secrets: [stripeSecretKey] },
   async (request) => {
+    if (!request.auth || !request.auth.uid) {
+      throw new HttpsError(
+        'unauthenticated',
+        'Please sign in to pay a deposit and confirm your booking.'
+      );
+    }
+
+    const signInProvider = request.auth.token?.firebase?.sign_in_provider;
+    if (signInProvider === 'anonymous') {
+      throw new HttpsError(
+        'unauthenticated',
+        'Please create or sign in to an account before booking.'
+      );
+    }
+
+    const clientUid = request.auth.uid;
     const data = (request.data || {}) as {
-      amount?: number;
       currency?: string;
+      flashId?: string;
       flashTitle?: string;
+      customRequestId?: string;
       customerEmail?: string;
       customerName?: string;
-      accountId?: string;
+      customerPhone?: string;
       artistId?: string;
       bookingId?: string;
       selectedDate?: string;
       selectedTimeSlot?: string;
       placement?: string;
+      clientNotes?: string;
+      isSilentAppointment?: boolean;
     };
 
-    const rawAmount = typeof data.amount === 'number' ? Math.round(data.amount) : 5000;
-    if (rawAmount < 50 || rawAmount > 1000000) {
+    const targetArtistId = typeof data.artistId === 'string' ? data.artistId.trim() : '';
+    if (!targetArtistId) {
       throw new HttpsError(
         'invalid-argument',
-        'Deposit amount must be between $0.50 and $10,000.00.'
+        'A valid artistId is required to create a booking deposit.'
+      );
+    }
+    if (targetArtistId === clientUid) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Artists cannot book their own flash designs.'
+      );
+    }
+
+    const dateKey = extractDateKey(data.selectedDate);
+    const normalizedSlot = normalizeSlotLabel(data.selectedTimeSlot);
+    if (!dateKey || !normalizedSlot) {
+      throw new HttpsError(
+        'invalid-argument',
+        'A valid appointment date and time slot are required.'
+      );
+    }
+
+    const bookingId = sanitizeBookingId(data.bookingId);
+    const flashId = typeof data.flashId === 'string' ? data.flashId.trim() : '';
+    const customRequestId =
+      typeof data.customRequestId === 'string' ? data.customRequestId.trim() : '';
+
+    if (!flashId && !customRequestId) {
+      throw new HttpsError(
+        'invalid-argument',
+        'A flashId or customRequestId is required so pricing can be verified on the server.'
       );
     }
 
     const currency = (data.currency || 'usd').toLowerCase();
-    const clientUid = request.auth?.uid || 'guest_client';
-    const targetArtistId = (
-      data.artistId ||
-      (data.accountId && !data.accountId.startsWith('acct_') ? data.accountId : '') ||
-      ''
-    ).trim();
+    if (currency !== 'usd') {
+      throw new HttpsError('invalid-argument', 'Only USD deposits are supported.');
+    }
 
+    // 1. Load payment config, artist profile, private artist Stripe account, and client profile.
+    const [config, artistSnap, financialsSnap, userSnap] = await Promise.all([
+      loadPaymentConfig(),
+      db.collection('artists').doc(targetArtistId).get(),
+      db
+        .collection('artists')
+        .doc(targetArtistId)
+        .collection('private')
+        .doc('financials')
+        .get(),
+      db.collection('users').doc(clientUid).get(),
+    ]);
+
+    if (!artistSnap.exists) {
+      throw new HttpsError('not-found', 'Artist profile could not be found.');
+    }
+    const artistData = (artistSnap.data() || {}) as Record<string, unknown>;
+    const financialsData = (financialsSnap.exists ? financialsSnap.data() : {}) as Record<
+      string,
+      unknown
+    >;
+
+    const artistStripeAccountId =
+      typeof financialsData.stripeAccountId === 'string'
+        ? financialsData.stripeAccountId.trim()
+        : '';
+    const artistPayoutsEnabled =
+      financialsData.payoutsEnabled === true &&
+      financialsData.chargesEnabled === true;
+
+    if (
+      config.requireArtistStripeConnect &&
+      (!artistStripeAccountId.startsWith('acct_') || !artistPayoutsEnabled)
+    ) {
+      throw new HttpsError(
+        'failed-precondition',
+        'This artist has not completed Stripe payout setup yet and cannot accept deposits right now.'
+      );
+    }
+
+    // 2. Authoritative server-side price & availability resolution.
+    let depositCents = 0;
+    let totalPriceCents = 0;
+    let resolvedTitle =
+      typeof data.flashTitle === 'string' && data.flashTitle.trim().length > 0
+        ? data.flashTitle.trim()
+        : 'Tattoo Deposit';
+    let resolvedImageUrl = '';
+    let resolvedDuration = '2.5 hrs';
+    let exclusiveFlash = false;
+
+    if (flashId) {
+      const flashList = Array.isArray(artistData.flashArtworks)
+        ? artistData.flashArtworks
+        : [];
+      const matched = flashList.find(
+        (item) =>
+          item &&
+          typeof item === 'object' &&
+          String((item as Record<string, unknown>).id || '').trim() === flashId
+      ) as Record<string, unknown> | undefined;
+
+      if (!matched) {
+        throw new HttpsError(
+          'not-found',
+          'This flash artwork is no longer listed on the artist profile.'
+        );
+      }
+
+      exclusiveFlash = isFlashExclusive(matched);
+      if (exclusiveFlash && isFlashClaimed(matched)) {
+        throw new HttpsError(
+          'already-exists',
+          'This one-off flash piece has already been claimed.'
+        );
+      }
+
+      const depositDollars =
+        typeof matched.deposit === 'number' && matched.deposit > 0
+          ? matched.deposit
+          : typeof artistData.minDeposit === 'number' && artistData.minDeposit > 0
+            ? artistData.minDeposit
+            : 50;
+      const fullDollars =
+        typeof matched.price === 'number' && matched.price > 0
+          ? matched.price
+          : typeof matched.fullPrice === 'number' && matched.fullPrice > 0
+            ? matched.fullPrice
+            : depositDollars * 3;
+
+      depositCents = Math.round(depositDollars * 100);
+      totalPriceCents = Math.round(fullDollars * 100);
+      resolvedTitle =
+        typeof matched.title === 'string' && matched.title.trim().length > 0
+          ? matched.title.trim()
+          : resolvedTitle;
+      resolvedImageUrl =
+        typeof matched.imageUrl === 'string' ? matched.imageUrl.trim() : '';
+      resolvedDuration =
+        typeof matched.estimatedTime === 'string' && matched.estimatedTime.trim().length > 0
+          ? matched.estimatedTime.trim()
+          : resolvedDuration;
+    } else if (customRequestId) {
+      const reqSnap = await db.collection('custom_requests').doc(customRequestId).get();
+      if (!reqSnap.exists) {
+        throw new HttpsError('not-found', 'Custom tattoo request could not be found.');
+      }
+      const reqData = (reqSnap.data() || {}) as Record<string, unknown>;
+      if (
+        String(reqData.clientId || '').trim() !== clientUid ||
+        String(reqData.artistId || '').trim() !== targetArtistId
+      ) {
+        throw new HttpsError(
+          'permission-denied',
+          'You are not authorized to pay for this custom request.'
+        );
+      }
+      const depositDollars =
+        typeof reqData.deposit === 'number' && reqData.deposit > 0
+          ? reqData.deposit
+          : typeof artistData.minDeposit === 'number' && artistData.minDeposit > 0
+            ? artistData.minDeposit
+            : 50;
+      const fullDollars =
+        typeof reqData.estimatedPrice === 'number' && reqData.estimatedPrice > 0
+          ? reqData.estimatedPrice
+          : depositDollars * 3;
+      depositCents = Math.round(depositDollars * 100);
+      totalPriceCents = Math.round(fullDollars * 100);
+      resolvedTitle =
+        typeof reqData.category === 'string' && reqData.category.trim().length > 0
+          ? `Custom: ${reqData.category.trim()}`
+          : 'Custom Tattoo Deposit';
+      resolvedImageUrl =
+        typeof reqData.sketchImageUrl === 'string' ? reqData.sketchImageUrl.trim() : '';
+    }
+
+    if (depositCents < 50 || depositCents > 1000000) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Deposit amount must be between $0.50 and $10,000.00.'
+      );
+    }
+
+    // 3. Server-side `free_bookings_remaining` promotional allowance & platform fee calculation.
+    const userData = (userSnap.exists ? userSnap.data() : {}) as Record<string, unknown>;
+    const hasExistingAllowance = typeof userData.free_bookings_remaining === 'number';
+    const freeBookingsRemaining = hasExistingAllowance
+      ? Math.max(0, Math.floor(userData.free_bookings_remaining as number))
+      : config.defaultFreeBookingsAllowance;
+
+    const basePlatformFeeCents =
+      Math.round(depositCents * (config.platformFeePercent / 100)) +
+      config.platformFeeFlatCents;
+    const promoFeeWaived = freeBookingsRemaining > 0;
+    const platformFeeCents = promoFeeWaived ? 0 : basePlatformFeeCents;
+    const totalChargeCents = depositCents + platformFeeCents;
+
+    // 4. Pre-check appointments/bookings collections for slot conflicts.
     await assertSlotIsAvailable(
       targetArtistId,
-      data.selectedDate,
-      data.selectedTimeSlot,
-      data.bookingId
+      dateKey,
+      normalizedSlot,
+      bookingId,
+      clientUid
     );
 
+    // 5. Atomically acquire 10-minute checkout locks (time slot + one-off flash piece)
+    // and persist server-authoritative pending_payment booking document.
+    const slotLockId = buildSlotLockId(targetArtistId, dateKey, normalizedSlot);
+    const flashLockId =
+      flashId && exclusiveFlash ? buildFlashLockId(targetArtistId, flashId) : '';
+    const slotLockRef = db.collection(CHECKOUT_LOCKS_COLLECTION).doc(slotLockId);
+    const flashLockRef = flashLockId
+      ? db.collection(CHECKOUT_LOCKS_COLLECTION).doc(flashLockId)
+      : null;
+    const scheduleRef = db.collection('artist_schedules').doc(targetArtistId);
+    const artistRef = db.collection('artists').doc(targetArtistId);
+    const bookingRef = db.collection('bookings').doc(bookingId);
+    const userRef = db.collection('users').doc(clientUid);
+
+    const nowMs = Date.now();
+    const lockExpiresAtMs = nowMs + CHECKOUT_LOCK_TTL_MS;
+    const nowTimestamp = admin.firestore.Timestamp.fromMillis(nowMs);
+    const expiresAtTimestamp = admin.firestore.Timestamp.fromMillis(lockExpiresAtMs);
+    const transferGroup = `booking_${bookingId}`;
+
+    await db.runTransaction(async (tx) => {
+      const [schedTxSnap, slotLockSnap, flashLockSnap, artistTxSnap] =
+        await Promise.all([
+          tx.get(scheduleRef),
+          tx.get(slotLockRef),
+          flashLockRef ? tx.get(flashLockRef) : Promise.resolve(null),
+          flashId && exclusiveFlash ? tx.get(artistRef) : Promise.resolve(null),
+        ]);
+
+      // Re-verify schedule inside transaction to eliminate race windows.
+      if (schedTxSnap.exists) {
+        const sched = (schedTxSnap.data() || {}) as Record<string, unknown>;
+        if (sched.isBooksOpen === false) {
+          throw new HttpsError(
+            'failed-precondition',
+            "This artist's books are currently closed."
+          );
+        }
+        const blocked = Array.isArray(sched.blockedDates)
+          ? sched.blockedDates.map((d) => String(d).trim())
+          : [];
+        if (blocked.includes(dateKey)) {
+          throw new HttpsError('failed-precondition', 'The selected date is unavailable.');
+        }
+        const booked = Array.isArray(sched.bookedSlots) ? sched.bookedSlots : [];
+        for (const entry of booked) {
+          if (entry && typeof entry === 'object') {
+            const rec = entry as Record<string, unknown>;
+            if (
+              extractDateKey(rec.date) === dateKey &&
+              normalizeSlotLabel(rec.time) === normalizedSlot
+            ) {
+              throw new HttpsError(
+                'already-exists',
+                'This time slot has already been booked. Please select another time slot.'
+              );
+            }
+          }
+        }
+        const held = Array.isArray(sched.heldSlots) ? sched.heldSlots : [];
+        for (const entry of held) {
+          if (entry && typeof entry === 'object') {
+            const rec = entry as Record<string, unknown>;
+            const heldExp = rec.expiresAt
+              ? Date.parse(String(rec.expiresAt))
+              : Number.POSITIVE_INFINITY;
+            if (
+              extractDateKey(rec.date) === dateKey &&
+              normalizeSlotLabel(rec.time) === normalizedSlot &&
+              (Number.isNaN(heldExp) || heldExp > nowMs)
+            ) {
+              throw new HttpsError(
+                'already-exists',
+                'This time slot is currently on a 24-hour hold. Please select another time slot.'
+              );
+            }
+          }
+        }
+      }
+
+      // Re-verify slot checkout lock.
+      if (slotLockSnap.exists) {
+        const lockData = (slotLockSnap.data() || {}) as Record<string, unknown>;
+        const lockExp = readTimestampMillis(lockData.expiresAt);
+        const holder = String(lockData.holderClientId || '').trim();
+        if (lockExp > nowMs && holder && holder !== clientUid) {
+          throw new HttpsError(
+            'already-exists',
+            'Another collector is currently checking out this time slot. Please try again shortly or pick another time.'
+          );
+        }
+      }
+
+      // Re-verify exclusive flash artwork & flash lock.
+      if (flashLockSnap && flashLockSnap.exists) {
+        const lockData = (flashLockSnap.data() || {}) as Record<string, unknown>;
+        const lockExp = readTimestampMillis(lockData.expiresAt);
+        const holder = String(lockData.holderClientId || '').trim();
+        if (lockExp > nowMs && holder && holder !== clientUid) {
+          throw new HttpsError(
+            'already-exists',
+            'Another collector currently has this one-off flash piece reserved in checkout. Please try again in a few minutes.'
+          );
+        }
+      }
+      if (artistTxSnap && artistTxSnap.exists) {
+        const freshArtist = (artistTxSnap.data() || {}) as Record<string, unknown>;
+        const freshList = Array.isArray(freshArtist.flashArtworks)
+          ? freshArtist.flashArtworks
+          : [];
+        const freshFlash = freshList.find(
+          (item) =>
+            item &&
+            typeof item === 'object' &&
+            String((item as Record<string, unknown>).id || '').trim() === flashId
+        ) as Record<string, unknown> | undefined;
+        if (freshFlash && isFlashExclusive(freshFlash) && isFlashClaimed(freshFlash)) {
+          throw new HttpsError(
+            'already-exists',
+            'This one-off flash piece was just claimed by another collector.'
+          );
+        }
+      }
+
+      // Acquire locks atomically.
+      tx.set(slotLockRef, {
+        lockType: 'slot',
+        artistId: targetArtistId,
+        dateKey,
+        timeSlot: normalizedSlot,
+        bookingId,
+        holderClientId: clientUid,
+        createdAt: nowTimestamp,
+        expiresAt: expiresAtTimestamp,
+      });
+
+      if (flashLockRef) {
+        tx.set(flashLockRef, {
+          lockType: 'flash',
+          artistId: targetArtistId,
+          flashId,
+          bookingId,
+          holderClientId: clientUid,
+          createdAt: nowTimestamp,
+          expiresAt: expiresAtTimestamp,
+        });
+      }
+
+      if (!hasExistingAllowance) {
+        tx.set(
+          userRef,
+          {
+            uid: clientUid,
+            free_bookings_remaining: config.defaultFreeBookingsAllowance,
+            updatedAt: nowTimestamp,
+          },
+          { merge: true }
+        );
+      }
+
+      tx.set(
+        bookingRef,
+        {
+          id: bookingId,
+          bookingId,
+          clientId: clientUid,
+          artistId: targetArtistId,
+          artistName: String(artistData.name || artistData.displayName || 'Artist'),
+          artistAvatar: String(artistData.avatarUrl || artistData.photoUrl || ''),
+          studioName: String(artistData.studioName || artistData.studioType || 'Studio'),
+          studioLocation: String(artistData.location || ''),
+          ...(flashId ? { flashId, flashIsExclusive: exclusiveFlash } : {}),
+          ...(customRequestId ? { customRequestId } : {}),
+          flashTitle: resolvedTitle,
+          flashImageUrl: resolvedImageUrl,
+          artworkImageUrl: resolvedImageUrl,
+          estimatedTime: resolvedDuration,
+          selectedDate: data.selectedDate || dateKey,
+          selectedDateKey: dateKey,
+          selectedTimeSlot: String(data.selectedTimeSlot || normalizedSlot).trim(),
+          placement: String(data.placement || 'Forearm').trim(),
+          clientName: String(
+            data.customerName || userData.displayName || userData.username || 'Client'
+          ).trim(),
+          clientEmail: String(data.customerEmail || request.auth?.token.email || '').trim(),
+          clientPhone: String(
+            data.customerPhone || request.auth?.token.phone_number || ''
+          ).trim(),
+          ...(data.clientNotes ? { clientNotes: String(data.clientNotes).trim() } : {}),
+          isSilentAppointment: data.isSilentAppointment === true,
+          depositAmount: Math.round(depositCents / 100),
+          totalAmount: Math.round(totalPriceCents / 100),
+          depositAmountCents: depositCents,
+          totalPriceCents,
+          platformFeeCents,
+          totalChargeCents,
+          artistPayoutCents: depositCents,
+          promoFeeWaived,
+          transferGroup,
+          slotLockId,
+          ...(flashLockId ? { flashLockId } : {}),
+          lockExpiresAt: expiresAtTimestamp,
+          status: 'pending_payment',
+          escrowStatus: 'pending',
+          createdAt: nowTimestamp,
+          updatedAt: nowTimestamp,
+        },
+        { merge: true }
+      );
+    });
+
+    // 6. Create Stripe PaymentIntent held on platform account (Separate Charges & Transfers).
     try {
       const stripe = getStripeClient();
+      const customerEmail =
+        typeof data.customerEmail === 'string' && data.customerEmail.trim().length > 0
+          ? data.customerEmail.trim()
+          : request.auth.token.email || undefined;
 
       const params: Stripe.PaymentIntentCreateParams = {
-        amount: rawAmount,
+        amount: totalChargeCents,
         currency,
         automatic_payment_methods: { enabled: true },
-        description: data.flashTitle
-          ? `Flash.Ink Deposit: ${data.flashTitle}`
-          : 'Flash.Ink Tattoo Deposit',
-        ...(data.customerEmail ? { receipt_email: data.customerEmail } : {}),
+        transfer_group: transferGroup,
+        payment_method_options: {
+          card: {
+            request_three_d_secure: 'automatic',
+          },
+        },
+        description: `Flash.Ink Deposit: ${resolvedTitle}`,
+        ...(customerEmail ? { receipt_email: customerEmail } : {}),
         metadata: {
-          booking_id: data.bookingId || '',
+          booking_id: bookingId,
           client_id: clientUid,
-          artist_id: data.artistId || data.accountId || '',
-          flash_title: data.flashTitle || '',
-          customer_name: data.customerName || '',
-          selected_date: data.selectedDate || '',
-          selected_time_slot: data.selectedTimeSlot || '',
-          placement: data.placement || '',
+          artist_id: targetArtistId,
+          artist_stripe_account_id: artistStripeAccountId,
+          flash_id: flashId,
+          flash_is_exclusive: exclusiveFlash ? 'true' : 'false',
+          flash_title: resolvedTitle,
+          custom_request_id: customRequestId,
+          customer_name: String(data.customerName || '').trim(),
+          selected_date: dateKey,
+          selected_time_slot: String(data.selectedTimeSlot || normalizedSlot).trim(),
+          placement: String(data.placement || '').trim(),
+          deposit_cents: String(depositCents),
+          platform_fee_cents: String(platformFeeCents),
+          total_price_cents: String(totalPriceCents),
+          promo_fee_waived: promoFeeWaived ? 'true' : 'false',
+          slot_lock_id: slotLockId,
+          flash_lock_id: flashLockId,
         },
       };
 
-      if (data.accountId && data.accountId.startsWith('acct_')) {
-        params.transfer_data = {
-          destination: data.accountId,
-        };
-      }
-
       const paymentIntent = await stripe.paymentIntents.create(params);
+
+      await bookingRef.set(
+        {
+          stripePaymentIntentId: paymentIntent.id,
+          paymentIntentId: paymentIntent.id,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
 
       return {
         clientSecret: paymentIntent.client_secret,
         id: paymentIntent.id,
+        bookingId,
+        lockExpiresAt: new Date(lockExpiresAtMs).toISOString(),
+        depositCents,
+        platformFeeCents,
+        totalChargeCents,
+        promoFeeWaived,
+        freeBookingsRemaining,
       };
     } catch (err: unknown) {
+      await cleanupCheckoutLocks({
+        slotLockId,
+        flashLockId: flashLockId || undefined,
+        bookingId,
+        markStatus: 'payment_failed',
+      }).catch(() => undefined);
+
+      if (err instanceof HttpsError) {
+        throw err;
+      }
       const message =
         err instanceof Error ? err.message : 'Unable to create Stripe PaymentIntent.';
       throw new HttpsError('internal', message);
@@ -104,19 +668,78 @@ export const createPaymentIntent = onCall(
 );
 
 /**
- * Stripe Connect Webhook: Verify Artist Payout Account & Lock Deposit Escrow
+ * Callable Cloud Function: Release an active 10-minute checkout lock
+ * when a collector cancels or backs out of Stripe PaymentSheet.
+ */
+export const releaseCheckoutLock = onCall(async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'Sign in is required to release a checkout lock.');
+  }
+
+  const clientUid = request.auth.uid;
+  const data = (request.data || {}) as {
+    bookingId?: string;
+    artistId?: string;
+    flashId?: string;
+    selectedDate?: string;
+    selectedTimeSlot?: string;
+  };
+
+  const bookingId = typeof data.bookingId === 'string' ? data.bookingId.trim() : '';
+  if (!bookingId) {
+    return { released: false };
+  }
+
+  const bookingRef = db.collection('bookings').doc(bookingId);
+  const bookingSnap = await bookingRef.get();
+  if (!bookingSnap.exists) {
+    return { released: false };
+  }
+
+  const bookingData = (bookingSnap.data() || {}) as Record<string, unknown>;
+  if (String(bookingData.clientId || '').trim() !== clientUid) {
+    throw new HttpsError('permission-denied', 'Cannot release another user’s checkout lock.');
+  }
+  if (String(bookingData.status || '').trim() !== 'pending_payment') {
+    return { released: false };
+  }
+
+  const slotLockId =
+    typeof bookingData.slotLockId === 'string' && bookingData.slotLockId.trim().length > 0
+      ? bookingData.slotLockId.trim()
+      : undefined;
+  const flashLockId =
+    typeof bookingData.flashLockId === 'string' && bookingData.flashLockId.trim().length > 0
+      ? bookingData.flashLockId.trim()
+      : undefined;
+
+  await cleanupCheckoutLocks({
+    slotLockId,
+    flashLockId,
+    bookingId,
+    markStatus: 'canceled',
+  });
+
+  return { released: true, bookingId };
+});
+
+/**
+ * Stripe Connect Webhook: Verify Artist Payout Account & Confirm Escrowed Deposits
  *
  * Handles:
- * - `account.updated`: Confirms Stripe Connect onboarding and records `stripeAccountId`
- *   inside the isolated `artists/{uid}/private/financials` subcollection.
- * - `payment_intent.succeeded`: Transitions booking status to `deposit_confirmed`
- *   and provisions the deposit-gated direct message thread (`chats/{threadId}`).
+ * - `account.updated`: Confirms Stripe Connect onboarding and records payout readiness
+ *   inside `artists/{uid}/private/financials` plus public `stripePayoutsReady` flag.
+ * - `payment_intent.succeeded`: Atomically confirms booking in escrow, marks one-off
+ *   flash claimed, decrements `free_bookings_remaining`, creates confirmed appointment,
+ *   provisions deposit-gated chat (`chats/thread_booking_{bookingId}`), and clears locks.
+ * - `payment_intent.payment_failed` / `payment_intent.canceled`: Releases 10-min checkout locks.
  */
 export const stripeConnectWebhook = onRequest(
-  { secrets: [stripeSecretKey] },
+  { secrets: [stripeSecretKey, stripeWebhookSecret] },
   async (req, res) => {
     const sig = req.headers['stripe-signature'];
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    const webhookSecret =
+      stripeWebhookSecret.value() || process.env.STRIPE_WEBHOOK_SECRET || '';
 
     if (!sig || !webhookSecret) {
       res.status(400).send('Missing Stripe signature or webhook secret.');
@@ -137,86 +760,360 @@ export const stripeConnectWebhook = onRequest(
       const account = event.data.object as Stripe.Account;
       const uid = account.metadata?.firebaseUid;
 
-      if (uid && account.details_submitted && account.charges_enabled && account.payouts_enabled) {
-        await admin.auth().setCustomUserClaims(uid, {
-          role: 'artist',
-          stripeAccountId: account.id,
-          verifiedArtist: true,
-        });
+      if (uid) {
+        const isReady =
+          account.details_submitted === true &&
+          account.charges_enabled === true &&
+          account.payouts_enabled === true;
 
-        await db
-          .collection('artists')
-          .doc(uid)
-          .collection('private')
-          .doc('financials')
-          .set(
-            {
-              stripeAccountId: account.id,
-              payoutsEnabled: account.payouts_enabled,
-              chargesEnabled: account.charges_enabled,
-              detailsSubmitted: account.details_submitted,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            },
-            { merge: true }
-          );
-      }
-    } else if (event.type === 'payment_intent.succeeded') {
-      const paymentIntent = event.data.object as Stripe.PaymentIntent;
-      const bookingId = paymentIntent.metadata?.booking_id;
-      const clientId = paymentIntent.metadata?.client_id;
-      const artistId = paymentIntent.metadata?.artist_id;
+        let externalAccountLabel = '';
+        let externalAccountLast4 = '';
+        let externalAccountType = '';
+        const externalAccounts = account.external_accounts?.data || [];
+        if (externalAccounts.length > 0) {
+          const primary = externalAccounts[0];
+          if (primary.object === 'bank_account') {
+            externalAccountType = 'bank_account';
+            externalAccountLast4 = primary.last4 || '';
+            externalAccountLabel = `${primary.bank_name || 'Bank Account'} •••• ${primary.last4 || ''}`.trim();
+          } else if (primary.object === 'card') {
+            externalAccountType = 'card';
+            externalAccountLast4 = primary.last4 || '';
+            externalAccountLabel = `${primary.brand || 'Debit Card'} •••• ${primary.last4 || ''}`.trim();
+          }
+        }
 
-      if (bookingId && clientId && artistId) {
+        const currentlyDue = account.requirements?.currently_due || [];
+
+        if (isReady) {
+          await admin.auth().setCustomUserClaims(uid, {
+            role: 'artist',
+            isArtist: true,
+            isClient: true,
+            stripeAccountId: account.id,
+            verifiedArtist: true,
+          });
+        }
+
         const batch = db.batch();
-        const bookingRef = db.collection('bookings').doc(bookingId);
         batch.set(
-          bookingRef,
+          db
+            .collection('artists')
+            .doc(uid)
+            .collection('private')
+            .doc('financials'),
           {
-            status: 'deposit_confirmed',
-            paymentIntentId: paymentIntent.id,
-            depositPaidCents: paymentIntent.amount,
-            confirmedAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-        // Provision the deposit-gated chat thread between Collector and Artist
-        const threadRef = db.collection('chats').doc(`thread_${bookingId}`);
-        batch.set(
-          threadRef,
-          {
-            id: `thread_${bookingId}`,
-            bookingId,
-            artistId,
-            clientId,
-            participants: [clientId, artistId],
-            status: 'active',
+            stripeAccountId: account.id,
+            payoutsEnabled: account.payouts_enabled === true,
+            chargesEnabled: account.charges_enabled === true,
+            detailsSubmitted: account.details_submitted === true,
+            requirementsCurrentlyDue: currentlyDue,
+            ...(externalAccountLabel
+              ? {
+                  externalAccountLabel,
+                  externalAccountLast4,
+                  externalAccountType,
+                }
+              : {}),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           },
           { merge: true }
         );
-
-        // Enqueue a booking confirmation notification for the artist
-        const notifId = `notif_deposit_${bookingId}`;
-        const notifRef = db.collection('notifications').doc(notifId);
         batch.set(
-          notifRef,
+          db.collection('artists').doc(uid),
           {
-            id: notifId,
-            senderId: clientId,
-            recipientId: artistId,
-            category: 'booking_confirmed',
-            type: 'booking_confirmed',
-            title: 'Deposit Confirmed',
-            body: 'A collector confirmed their flash deposit.',
-            message: 'A collector confirmed their flash deposit.',
-            appointmentId: bookingId,
-            createdAt: new Date().toISOString(),
+            stripePayoutsReady: isReady,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           },
           { merge: true }
         );
-
         await batch.commit();
+      }
+    } else if (event.type === 'payment_intent.succeeded') {
+      const paymentIntent = event.data.object as Stripe.PaymentIntent;
+      const metadata = paymentIntent.metadata || {};
+      const bookingId = (metadata.booking_id || '').trim();
+      const clientId = (metadata.client_id || '').trim();
+      const artistId = (metadata.artist_id || '').trim();
+      const flashId = (metadata.flash_id || '').trim();
+      const flashIsExclusive = metadata.flash_is_exclusive === 'true';
+      const promoFeeWaived = metadata.promo_fee_waived === 'true';
+      const slotLockId = (metadata.slot_lock_id || '').trim();
+      const flashLockId = (metadata.flash_lock_id || '').trim();
+
+      const chargeId =
+        typeof paymentIntent.latest_charge === 'string'
+          ? paymentIntent.latest_charge
+          : paymentIntent.latest_charge?.id || '';
+
+      if (bookingId && clientId && artistId) {
+        const bookingRef = db.collection('bookings').doc(bookingId);
+        const artistRef = db.collection('artists').doc(artistId);
+        const userRef = db.collection('users').doc(clientId);
+        const appointmentRef = db.collection('appointments').doc(`cal_${bookingId}`);
+        const threadId = `thread_booking_${bookingId}`;
+        const threadRef = db.collection('chats').doc(threadId);
+
+        await db.runTransaction(async (tx) => {
+          const [bookingSnap, artistSnap, userSnap] = await Promise.all([
+            tx.get(bookingRef),
+            flashId && flashIsExclusive ? tx.get(artistRef) : Promise.resolve(null),
+            promoFeeWaived ? tx.get(userRef) : Promise.resolve(null),
+          ]);
+
+          const existingBooking = (bookingSnap.exists ? bookingSnap.data() : {}) as Record<
+            string,
+            unknown
+          >;
+          const alreadyConfirmed = existingBooking.status === 'deposit_confirmed';
+
+          const depositCents =
+            Number(metadata.deposit_cents) ||
+            (typeof existingBooking.depositAmountCents === 'number'
+              ? existingBooking.depositAmountCents
+              : paymentIntent.amount);
+          const platformFeeCents =
+            Number(metadata.platform_fee_cents) ||
+            (typeof existingBooking.platformFeeCents === 'number'
+              ? existingBooking.platformFeeCents
+              : 0);
+          const totalPriceCents =
+            Number(metadata.total_price_cents) ||
+            (typeof existingBooking.totalPriceCents === 'number'
+              ? existingBooking.totalPriceCents
+              : depositCents * 3);
+
+          const depositDollars = Math.round(depositCents / 100);
+          const fullPriceDollars = Math.round(totalPriceCents / 100);
+          const flashTitle =
+            String(existingBooking.flashTitle || metadata.flash_title || 'Flash Tattoo').trim();
+          const clientName =
+            String(existingBooking.clientName || metadata.customer_name || 'Client').trim();
+          const artistName = String(existingBooking.artistName || 'Artist').trim();
+          const selectedDate = String(
+            existingBooking.selectedDate || metadata.selected_date || ''
+          ).trim();
+          const selectedTimeSlot = String(
+            existingBooking.selectedTimeSlot || metadata.selected_time_slot || ''
+          ).trim();
+          const placement = String(
+            existingBooking.placement || metadata.placement || 'Forearm'
+          ).trim();
+          const nowIso = new Date().toISOString();
+
+          tx.set(
+            bookingRef,
+            {
+              status: 'deposit_confirmed',
+              escrowStatus: 'held',
+              paymentIntentId: paymentIntent.id,
+              stripePaymentIntentId: paymentIntent.id,
+              ...(chargeId ? { chargeId } : {}),
+              depositPaidCents: depositCents,
+              platformFeeCents,
+              totalChargeCents: paymentIntent.amount,
+              artistPayoutCents: depositCents,
+              transferGroup: paymentIntent.transfer_group || `booking_${bookingId}`,
+              depositPaidAt: admin.firestore.FieldValue.serverTimestamp(),
+              confirmedAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              ...(promoFeeWaived ? { promoConsumed: true } : {}),
+            },
+            { merge: true }
+          );
+
+          // Decrement client's free booking promo allowance once (idempotently).
+          if (
+            promoFeeWaived &&
+            existingBooking.promoConsumed !== true &&
+            userSnap
+          ) {
+            const uData = (userSnap.exists ? userSnap.data() : {}) as Record<string, unknown>;
+            const currentRemaining =
+              typeof uData.free_bookings_remaining === 'number'
+                ? Math.floor(uData.free_bookings_remaining)
+                : DEFAULT_FREE_BOOKINGS_ALLOWANCE;
+            tx.set(
+              userRef,
+              {
+                free_bookings_remaining: Math.max(0, currentRemaining - 1),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+          }
+
+          // Mark one-off flash piece as claimed on the artist document.
+          if (artistSnap && artistSnap.exists && flashId && flashIsExclusive) {
+            const aData = (artistSnap.data() || {}) as Record<string, unknown>;
+            const artworks = Array.isArray(aData.flashArtworks) ? aData.flashArtworks : [];
+            let modified = false;
+            const updatedArtworks = artworks.map((item) => {
+              if (
+                item &&
+                typeof item === 'object' &&
+                String((item as Record<string, unknown>).id || '').trim() === flashId
+              ) {
+                modified = true;
+                return {
+                  ...(item as Record<string, unknown>),
+                  status: 'claimed',
+                  isClaimed: true,
+                };
+              }
+              return item;
+            });
+            if (modified) {
+              const availableCount = updatedArtworks.filter((item) => {
+                if (!item || typeof item !== 'object') return false;
+                return !isFlashClaimed(item as Record<string, unknown>);
+              }).length;
+              tx.set(
+                artistRef,
+                {
+                  flashArtworks: updatedArtworks,
+                  availablePieces: availableCount,
+                  updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                },
+                { merge: true }
+              );
+            }
+          }
+
+          // Create/update authoritative confirmed appointment record.
+          tx.set(
+            appointmentRef,
+            {
+              id: `cal_${bookingId}`,
+              bookingId,
+              clientId,
+              artistId,
+              clientName,
+              ...(existingBooking.clientAvatar
+                ? { clientAvatar: existingBooking.clientAvatar }
+                : {}),
+              artistName,
+              ...(existingBooking.artistAvatar
+                ? { artistAvatar: existingBooking.artistAvatar }
+                : {}),
+              studioName: String(existingBooking.studioName || 'Studio'),
+              studioAddress: String(existingBooking.studioLocation || ''),
+              serviceType: `Flash: ${flashTitle}`,
+              flashTitle,
+              duration: String(existingBooking.estimatedTime || '2.5 hrs'),
+              time: selectedTimeSlot,
+              scheduledDate: selectedDate,
+              date: selectedDate,
+              placement,
+              notes: String(existingBooking.clientNotes || ''),
+              isSilentAppointment: existingBooking.isSilentAppointment === true,
+              depositPaid: depositDollars,
+              fullPrice: fullPriceDollars,
+              balanceDue: Math.max(0, fullPriceDollars - depositDollars),
+              artworkImageUrl: String(existingBooking.flashImageUrl || ''),
+              visitType: 'Flash Tattoo',
+              status: 'confirmed',
+              escrowStatus: 'held',
+              paymentIntentId: paymentIntent.id,
+              updatedAt: nowIso,
+            },
+            { merge: true }
+          );
+
+          // Provision deposit-gated chat thread matching app thread ID convention.
+          tx.set(
+            threadRef,
+            {
+              id: threadId,
+              bookingId,
+              artistId,
+              clientId,
+              clientName,
+              artistName,
+              ...(existingBooking.clientAvatar
+                ? { clientAvatar: existingBooking.clientAvatar }
+                : {}),
+              ...(existingBooking.artistAvatar
+                ? { artistAvatar: existingBooking.artistAvatar }
+                : {}),
+              studioName: String(existingBooking.studioName || 'Studio'),
+              flashTitleContext: flashTitle,
+              participants: [clientId, artistId],
+              depositConfirmed: true,
+              status: 'active',
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+
+          // Release temporary 10-minute checkout locks now that slot is permanently booked.
+          if (slotLockId) {
+            tx.delete(db.collection(CHECKOUT_LOCKS_COLLECTION).doc(slotLockId));
+          }
+          if (flashLockId) {
+            tx.delete(db.collection(CHECKOUT_LOCKS_COLLECTION).doc(flashLockId));
+          }
+
+          if (!alreadyConfirmed) {
+            const artistNotifId = `notif_deposit_artist_${bookingId}`;
+            tx.set(
+              db.collection('notifications').doc(artistNotifId),
+              {
+                id: artistNotifId,
+                senderId: clientId,
+                recipientId: artistId,
+                category: 'booking_confirmed',
+                type: 'booking_confirmed',
+                title: 'New Booking Deposit Secured',
+                body: `${clientName} paid a $${depositDollars} deposit for "${flashTitle}" (held in escrow until check-in).`,
+                message: `${clientName} paid a $${depositDollars} deposit for "${flashTitle}".`,
+                appointmentId: `cal_${bookingId}`,
+                threadId,
+                createdAt: nowIso,
+              },
+              { merge: true }
+            );
+
+            const clientNotifId = `notif_deposit_client_${bookingId}`;
+            tx.set(
+              db.collection('notifications').doc(clientNotifId),
+              {
+                id: clientNotifId,
+                senderId: artistId,
+                recipientId: clientId,
+                category: 'booking_confirmed',
+                type: 'booking_confirmed',
+                title: 'Booking Confirmed!',
+                body: `Your $${depositDollars} deposit for "${flashTitle}" is safely held in escrow. Direct chat with ${artistName} is now unlocked.`,
+                message: `Your $${depositDollars} deposit for "${flashTitle}" is confirmed.`,
+                appointmentId: `cal_${bookingId}`,
+                threadId,
+                createdAt: nowIso,
+              },
+              { merge: true }
+            );
+          }
+        });
+      }
+    } else if (
+      event.type === 'payment_intent.payment_failed' ||
+      event.type === 'payment_intent.canceled'
+    ) {
+      const paymentIntent = event.data.object as Stripe.PaymentIntent;
+      const metadata = paymentIntent.metadata || {};
+      const bookingId = (metadata.booking_id || '').trim();
+      const slotLockId = (metadata.slot_lock_id || '').trim();
+      const flashLockId = (metadata.flash_lock_id || '').trim();
+      const markStatus =
+        event.type === 'payment_intent.canceled' ? 'canceled' : 'payment_failed';
+
+      if (bookingId || slotLockId || flashLockId) {
+        await cleanupCheckoutLocks({
+          slotLockId: slotLockId || undefined,
+          flashLockId: flashLockId || undefined,
+          bookingId: bookingId || undefined,
+          markStatus,
+        });
       }
     }
 

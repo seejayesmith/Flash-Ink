@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../providers/app_providers.dart';
 import '../../../../repositories/artist_repository.dart';
+import '../../../../screens/artist_dashboard/artist_manage_policies_screen.dart';
 import '../../../../screens/custom_request_screen.dart';
 import '../../../../screens/flash_details_screen.dart';
 import '../../../../services/auth_service.dart';
@@ -105,6 +106,7 @@ class _ArtistProfileContentState extends ConsumerState<_ArtistProfileContent> {
   bool _isLoadingMore = false;
   bool _isUpdatingBanner = false;
   String? _bannerUrlOverride;
+  List<StudioPolicy>? _policiesOverride;
   final Set<String> _claimedPieceIds = <String>{};
 
   @override
@@ -370,6 +372,30 @@ class _ArtistProfileContentState extends ConsumerState<_ArtistProfileContent> {
     }
   }
 
+  Future<void> _handleEditPolicies(ArtistProfile currentArtist) async {
+    final updatedPolicies = await Navigator.push<List<StudioPolicy>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ArtistManagePoliciesScreen(
+          initialPolicies: currentArtist.policies,
+          currentUid: currentArtist.id,
+          firestore: _resolveFirestore(),
+        ),
+      ),
+    );
+
+    if (updatedPolicies != null && mounted) {
+      setState(() {
+        _policiesOverride = updatedPolicies;
+      });
+      FlashSnackBar.showSuccess(
+        context,
+        'Studio policies updated successfully',
+        duration: const Duration(seconds: 2),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final liveArtistAsync =
@@ -399,6 +425,11 @@ class _ArtistProfileContentState extends ConsumerState<_ArtistProfileContent> {
     if (_bannerUrlOverride != null) {
       effectiveArtist =
           effectiveArtist.copyWith(bannerUrl: _bannerUrlOverride!);
+    }
+
+    if (_policiesOverride != null) {
+      effectiveArtist =
+          effectiveArtist.copyWith(policies: _policiesOverride!);
     }
 
     final claimedExclusiveCount = _claimedExclusiveCountFor(effectiveArtist);
@@ -692,6 +723,10 @@ class _ArtistProfileContentState extends ConsumerState<_ArtistProfileContent> {
           SliverToBoxAdapter(
             child: StudioPoliciesCard(
               artist: effectiveArtist,
+              isOwner: isOwnProfile,
+              onEditPolicies: isOwnProfile
+                  ? () => _handleEditPolicies(effectiveArtist)
+                  : null,
             ),
           ),
 

@@ -15,6 +15,7 @@ import 'package:flash_ink/screens/artist_dashboard/booking_request_detail_screen
 import 'package:flash_ink/screens/booking/flash_booking_screen.dart';
 import 'package:flash_ink/screens/flash_details_screen.dart';
 import 'package:flash_ink/services/booking_sync_service.dart';
+import 'package:flash_ink/services/stripe_service.dart';
 import 'package:flash_ink/theme/app_theme.dart';
 import 'package:flash_ink/widgets/flash_switch.dart';
 
@@ -799,6 +800,43 @@ void main() {
       );
       expect(find.text('Added to Calendar'), findsOneWidget);
       expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+    });
+
+    testWidgets(
+        'Step 3: Failed payment never confirms booking and surfaces server error',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final failingStripe = StripeService(
+        isProductionOverride: true,
+        isStripeConfiguredOverride: false,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FlashBookingScreen(
+            flash: testFlash,
+            artist: testArtist,
+            stripeService: failingStripe,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Continue to Details'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue to Payment'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Pay \$75 Deposit & Confirm'));
+      await tester.pumpAndSettle();
+
+      // Must NOT advance to Confirmation when payment fails
+      expect(find.text('Flash Claimed & Booked!'), findsNothing);
+      expect(find.text('PAYMENT BREAKDOWN'), findsOneWidget);
+      expect(find.textContaining('temporarily unavailable'), findsOneWidget);
     });
   });
 }

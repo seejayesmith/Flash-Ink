@@ -25,6 +25,7 @@ class UserProfile {
   final bool isAnonymous;
   final bool isArtist;
   final String? activeMode;
+  final int freeBookingsRemaining;
 
   const UserProfile({
     required this.uid,
@@ -50,6 +51,7 @@ class UserProfile {
     this.isAnonymous = false,
     this.isArtist = false,
     this.activeMode,
+    this.freeBookingsRemaining = 2,
   });
 
   /// Saved geographic coordinates for this user, if valid.
@@ -113,6 +115,12 @@ class UserProfile {
       isAnonymous: json['isAnonymous'] == true,
       isArtist: json['isArtist'] == true || json['role'] == 'artist',
       activeMode: json['activeMode']?.toString(),
+      freeBookingsRemaining:
+          (json['free_bookings_remaining'] is num)
+              ? (json['free_bookings_remaining'] as num).toInt()
+              : (json['freeBookingsRemaining'] is num)
+                  ? (json['freeBookingsRemaining'] as num).toInt()
+                  : 2,
     );
   }
 
@@ -168,6 +176,7 @@ class UserProfile {
     bool? isAnonymous,
     bool? isArtist,
     String? activeMode,
+    int? freeBookingsRemaining,
   }) {
     return UserProfile(
       uid: uid ?? this.uid,
@@ -193,6 +202,8 @@ class UserProfile {
       isAnonymous: isAnonymous ?? this.isAnonymous,
       isArtist: isArtist ?? this.isArtist,
       activeMode: activeMode ?? this.activeMode,
+      freeBookingsRemaining:
+          freeBookingsRemaining ?? this.freeBookingsRemaining,
     );
   }
 }

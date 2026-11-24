@@ -2,7 +2,44 @@ import 'package:flutter/foundation.dart';
 import '../../../../core/mock/mock_data_config.dart';
 import '../../../../core/mock/mock_fixtures.dart';
 
-enum ChatMessageType { text, receipt, image, file }
+enum ChatMessageType { text, receipt, image, file, proposal }
+
+/// A single proposed date and time slot offered by an artist for a custom request.
+class ProposedTimeOption {
+  final DateTime date;
+  final String timeSlot;
+
+  const ProposedTimeOption({
+    required this.date,
+    required this.timeSlot,
+  });
+
+  String get uniqueKey =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}__${timeSlot.split('(').first.trim().toUpperCase()}';
+
+  Map<String, dynamic> toMap() => {
+        'date': DateTime(date.year, date.month, date.day).toIso8601String(),
+        'timeSlot': timeSlot,
+      };
+
+  factory ProposedTimeOption.fromMap(Map<String, dynamic> map) {
+    final parsedDate = map['date'] is String
+        ? DateTime.tryParse(map['date'] as String) ?? DateTime.now()
+        : DateTime.now();
+    return ProposedTimeOption(
+      date: DateTime(parsedDate.year, parsedDate.month, parsedDate.day),
+      timeSlot: (map['timeSlot'] ?? map['time'] ?? '').toString(),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ProposedTimeOption && uniqueKey == other.uniqueKey;
+
+  @override
+  int get hashCode => uniqueKey.hashCode;
+}
 
 /// Individual chat message item.
 class ChatMessage {
@@ -27,6 +64,10 @@ class ChatMessage {
   final String? attachmentName;
   final String? attachmentMimeType;
   final int? attachmentSizeBytes;
+  final String? requestId;
+  final List<ProposedTimeOption> proposedSlots;
+  final int? estimatedTotalPrice;
+  final int? selectedProposalIndex;
 
   const ChatMessage({
     required this.id,
@@ -49,16 +90,77 @@ class ChatMessage {
     this.attachmentName,
     this.attachmentMimeType,
     this.attachmentSizeBytes,
+    this.requestId,
+    this.proposedSlots = const [],
+    this.estimatedTotalPrice,
+    this.selectedProposalIndex,
   });
+
+  ChatMessage copyWith({
+    String? id,
+    String? senderId,
+    String? senderName,
+    String? text,
+    DateTime? timestamp,
+    bool? isFromArtist,
+    ChatMessageType? type,
+    double? receiptAmount,
+    DateTime? appointmentDate,
+    String? appointmentTimeSlot,
+    int? appointmentDurationMinutes,
+    String? artistName,
+    String? studioLocation,
+    String? flashTitle,
+    String? placement,
+    String? flashImageUrl,
+    String? attachmentUrl,
+    String? attachmentName,
+    String? attachmentMimeType,
+    int? attachmentSizeBytes,
+    String? requestId,
+    List<ProposedTimeOption>? proposedSlots,
+    int? estimatedTotalPrice,
+    int? selectedProposalIndex,
+  }) {
+    return ChatMessage(
+      id: id ?? this.id,
+      senderId: senderId ?? this.senderId,
+      senderName: senderName ?? this.senderName,
+      text: text ?? this.text,
+      timestamp: timestamp ?? this.timestamp,
+      isFromArtist: isFromArtist ?? this.isFromArtist,
+      type: type ?? this.type,
+      receiptAmount: receiptAmount ?? this.receiptAmount,
+      appointmentDate: appointmentDate ?? this.appointmentDate,
+      appointmentTimeSlot: appointmentTimeSlot ?? this.appointmentTimeSlot,
+      appointmentDurationMinutes:
+          appointmentDurationMinutes ?? this.appointmentDurationMinutes,
+      artistName: artistName ?? this.artistName,
+      studioLocation: studioLocation ?? this.studioLocation,
+      flashTitle: flashTitle ?? this.flashTitle,
+      placement: placement ?? this.placement,
+      flashImageUrl: flashImageUrl ?? this.flashImageUrl,
+      attachmentUrl: attachmentUrl ?? this.attachmentUrl,
+      attachmentName: attachmentName ?? this.attachmentName,
+      attachmentMimeType: attachmentMimeType ?? this.attachmentMimeType,
+      attachmentSizeBytes: attachmentSizeBytes ?? this.attachmentSizeBytes,
+      requestId: requestId ?? this.requestId,
+      proposedSlots: proposedSlots ?? this.proposedSlots,
+      estimatedTotalPrice: estimatedTotalPrice ?? this.estimatedTotalPrice,
+      selectedProposalIndex:
+          selectedProposalIndex ?? this.selectedProposalIndex,
+    );
+  }
 
   /// Summary text used for inbox thread previews when [text] is empty on attachments.
   String get previewText {
     final trimmed = text.trim();
     if (trimmed.isNotEmpty) return trimmed;
     return switch (type) {
-      ChatMessageType.image => '📷 ${attachmentName ?? 'Photo'}',
+      ChatMessageType.image => '📷 Photo',
       ChatMessageType.file => '📎 ${attachmentName ?? 'Attachment'}',
       ChatMessageType.receipt => 'Booking Receipt',
+      ChatMessageType.proposal => 'Proposed Session Times',
       ChatMessageType.text => text,
     };
   }
@@ -86,6 +188,13 @@ class ChatMessage {
       if (attachmentName != null) 'attachmentName': attachmentName,
       if (attachmentMimeType != null) 'attachmentMimeType': attachmentMimeType,
       if (attachmentSizeBytes != null) 'attachmentSizeBytes': attachmentSizeBytes,
+      if (requestId != null) 'requestId': requestId,
+      if (proposedSlots.isNotEmpty)
+        'proposedSlots': proposedSlots.map((s) => s.toMap()).toList(),
+      if (estimatedTotalPrice != null)
+        'estimatedTotalPrice': estimatedTotalPrice,
+      if (selectedProposalIndex != null)
+        'selectedProposalIndex': selectedProposalIndex,
     };
   }
 
@@ -95,8 +204,17 @@ class ChatMessage {
       'receipt' => ChatMessageType.receipt,
       'image' => ChatMessageType.image,
       'file' => ChatMessageType.file,
+      'proposal' => ChatMessageType.proposal,
       _ => ChatMessageType.text,
     };
+    final rawProposed = map['proposedSlots'];
+    final parsedProposed = rawProposed is List
+        ? rawProposed
+            .whereType<Map>()
+            .map((m) => ProposedTimeOption.fromMap(Map<String, dynamic>.from(m)))
+            .where((o) => o.timeSlot.isNotEmpty)
+            .toList()
+        : const <ProposedTimeOption>[];
     return ChatMessage(
       id: (docId != null && docId.isNotEmpty)
           ? docId
@@ -125,6 +243,10 @@ class ChatMessage {
       attachmentName: map['attachmentName']?.toString(),
       attachmentMimeType: map['attachmentMimeType']?.toString(),
       attachmentSizeBytes: (map['attachmentSizeBytes'] as num?)?.toInt(),
+      requestId: map['requestId']?.toString(),
+      proposedSlots: parsedProposed,
+      estimatedTotalPrice: (map['estimatedTotalPrice'] as num?)?.toInt(),
+      selectedProposalIndex: (map['selectedProposalIndex'] as num?)?.toInt(),
     );
   }
 }
@@ -245,7 +367,7 @@ class MessageThread {
               '')
           .toString(),
       studioName: map['studioName']?.toString() ?? '',
-      lastMessage: map['lastMessage']?.toString() ?? '',
+      lastMessage: _normalizeLastMessage(map['lastMessage']?.toString() ?? ''),
       lastMessageTime: map['lastMessageTime'] is String
           ? DateTime.tryParse(map['lastMessageTime'] as String) ?? DateTime.now()
           : DateTime.now(),
@@ -254,6 +376,19 @@ class MessageThread {
       flashTitleContext: map['flashTitleContext']?.toString(),
       messages: parsedMsgs,
     );
+  }
+
+  /// Replaces legacy image filename previews (e.g. `📷 image_picker_...jpg`)
+  /// with a clean `📷 Photo` label.
+  static String _normalizeLastMessage(String raw) {
+    const prefix = '📷 ';
+    if (!raw.startsWith(prefix)) return raw;
+    final label = raw.substring(prefix.length).trim();
+    if (label.isEmpty || label == 'Photo') return '📷 Photo';
+    final looksLikeFileName = label.startsWith('image_picker_') ||
+        RegExp(r'\.(jpe?g|png|webp|heic|heif|gif)$', caseSensitive: false)
+            .hasMatch(label);
+    return looksLikeFileName ? '📷 Photo' : raw;
   }
 
   /// Notifier triggered whenever thread read states or unread counts change.

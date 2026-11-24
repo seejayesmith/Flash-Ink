@@ -12,7 +12,34 @@ const EXCLUDED_APPOINTMENT_STATUSES = new Set([
   'canceled',
   'declined',
   'passed',
+  'pending_payment',
+  'payment_failed',
+  'expired',
+  'refunded',
 ]);
+
+export const CHECKOUT_LOCKS_COLLECTION = 'checkout_locks';
+export const CHECKOUT_LOCK_TTL_MS = 10 * 60 * 1000; // 10-minute checkout lock
+
+function sanitizeLockSegment(raw: string): string {
+  return raw
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+export function buildSlotLockId(
+  artistId: string,
+  dateKey: string,
+  normalizedSlot: string
+): string {
+  return `slot_${sanitizeLockSegment(artistId)}_${sanitizeLockSegment(dateKey)}_${sanitizeLockSegment(normalizedSlot)}`;
+}
+
+export function buildFlashLockId(artistId: string, flashId: string): string {
+  return `flash_${sanitizeLockSegment(artistId)}_${sanitizeLockSegment(flashId)}`;
+}
 
 /**
  * Extracts `YYYY-MM-DD` directly from an ISO-8601 timestamp string or Firestore
@@ -42,16 +69,43 @@ export async function assertSlotIsAvailable(
   artistIdRaw: unknown,
   selectedDateRaw: unknown,
   selectedTimeSlotRaw: unknown,
-  currentBookingIdRaw?: unknown
+  currentBookingIdRaw?: unknown,
+  clientUidRaw?: unknown
 ): Promise<void> {
   const artistId = typeof artistIdRaw === 'string' ? artistIdRaw.trim() : '';
   const dateKey = extractDateKey(selectedDateRaw);
   const normalizedSlot = normalizeSlotLabel(selectedTimeSlotRaw);
   const currentBookingId =
     typeof currentBookingIdRaw === 'string' ? currentBookingIdRaw.trim() : '';
+  const clientUid =
+    typeof clientUidRaw === 'string' ? clientUidRaw.trim() : '';
 
   if (!artistId || !dateKey || !normalizedSlot) {
     return;
+  }
+
+  // Check active 10-minute checkout lock for this slot first.
+  const slotLockId = buildSlotLockId(artistId, dateKey, normalizedSlot);
+  const lockSnap = await db.collection(CHECKOUT_LOCKS_COLLECTION).doc(slotLockId).get();
+  if (lockSnap.exists) {
+    const lockData = (lockSnap.data() || {}) as Record<string, unknown>;
+    const expiresAtMs =
+      lockData.expiresAt instanceof admin.firestore.Timestamp
+        ? lockData.expiresAt.toMillis()
+        : typeof lockData.expiresAt === 'string'
+          ? Date.parse(lockData.expiresAt)
+          : 0;
+    const holderUid = String(lockData.holderClientId || '').trim();
+    const lockBookingId = String(lockData.bookingId || '').trim();
+    const isSameHolder =
+      (clientUid.length > 0 && holderUid === clientUid) ||
+      (currentBookingId.length > 0 && lockBookingId === currentBookingId);
+    if (expiresAtMs > Date.now() && !isSameHolder) {
+      throw new HttpsError(
+        'already-exists',
+        'Another collector is currently checking out this time slot. Please try again in a few minutes or choose another slot.'
+      );
+    }
   }
 
   const scheduleSnap = await db.collection('artist_schedules').doc(artistId).get();

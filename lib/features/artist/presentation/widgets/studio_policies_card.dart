@@ -8,15 +8,19 @@ import '../../domain/models/artist_profile.dart';
 /// Card presenting the artist's studio policies, deposit terms, and studio verification badge.
 class StudioPoliciesCard extends StatelessWidget {
   final ArtistProfile artist;
+  final bool isOwner;
+  final VoidCallback? onEditPolicies;
 
   const StudioPoliciesCard({
     super.key,
     required this.artist,
+    this.isOwner = false,
+    this.onEditPolicies,
   });
 
   @override
   Widget build(BuildContext context) {
-    final policies = artist.policies;
+    final policies = artist.policies.where((p) => p.isEnabled).toList();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
@@ -66,6 +70,36 @@ class StudioPoliciesCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (isOwner && onEditPolicies != null)
+                  InkWell(
+                    key: const Key('edit_studio_policies_button'),
+                    onTap: onEditPolicies,
+                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.edit_outlined,
+                            color: AppTheme.gold,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Edit',
+                            style: AppTypography.labelBold.copyWith(
+                              color: AppTheme.gold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: AppSpacing.spaceLg - 4),
@@ -131,6 +165,10 @@ class StudioPoliciesCard extends StatelessWidget {
     switch (key.toLowerCase()) {
       case 'deposit':
         return Icons.credit_card_outlined;
+      case 'cancellation':
+        return Icons.event_busy_outlined;
+      case 'refund':
+        return Icons.currency_exchange_outlined;
       case 'health':
         return Icons.health_and_safety_outlined;
       case 'etiquette':

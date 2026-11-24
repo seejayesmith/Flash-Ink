@@ -791,5 +791,58 @@ void main() {
       // Repeatable piece is STILL visible on the artist page
       expect(find.text(repeatablePiece.title), findsOneWidget);
     });
+
+    testWidgets('Owner viewing ArtistProfileScreen can edit Studio Policies directly from the policies card', (tester) async {
+      tester.view.physicalSize = const Size(800, 3600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final artist = Artist.mockArtists.first;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ArtistProfileScreen(
+            artist: artist,
+            isOwner: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Edit button is shown for the profile owner
+      final editPoliciesBtn = find.byKey(const Key('edit_studio_policies_button'));
+      expect(editPoliciesBtn, findsOneWidget);
+
+      await tester.tap(editPoliciesBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('manage_policies_app_bar_title')), findsOneWidget);
+
+      // Add a custom cancellation & refund policy
+      await tester.tap(find.byKey(const Key('add_custom_policy_button')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('custom_policy_title_field')),
+        'Cancellation & Refund Window',
+      );
+      await tester.enterText(
+        find.byKey(const Key('custom_policy_desc_field')),
+        'Deposits are refundable within 24 hours of booking if session is more than 7 days away.',
+      );
+      await tester.tap(find.byKey(const Key('add_custom_policy_submit_button')));
+      await tester.pumpAndSettle();
+
+      // Save policies
+      await tester.tap(find.byKey(const Key('save_policies_button')));
+      await tester.pumpAndSettle();
+
+      // Verify updated policy is rendered on the public profile card
+      expect(find.text('Cancellation & Refund Window'), findsOneWidget);
+      expect(
+        find.text('Deposits are refundable within 24 hours of booking if session is more than 7 days away.'),
+        findsOneWidget,
+      );
+    });
   });
 }

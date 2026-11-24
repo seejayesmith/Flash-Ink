@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../../core/mock/mock_data_config.dart';
+import '../../core/mock/mock_fixtures.dart';
 import '../../models/artist.dart';
 import '../../config/dev_config.dart';
 import '../../providers/app_providers.dart';
@@ -23,6 +24,7 @@ import '../../widgets/inline_phone_verification_tile.dart';
 import '../../widgets/photo_source_bottom_sheet.dart';
 import 'artist_edit_profile_screen.dart';
 import 'artist_account_settings_screen.dart';
+import 'artist_manage_policies_screen.dart';
 import '../location_settings_screen.dart';
 import '../app_info_screen.dart';
 import '../main_feed_screen.dart';
@@ -101,6 +103,9 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
   String _phoneNumber = '+1 (555) 345-6789';
   bool _phoneVerified = true;
   String? _photoUrl;
+  List<StudioPolicy> _policies = List<StudioPolicy>.from(
+    MockFixtures.defaultStudioPolicies,
+  );
 
   // Notification preferences
   bool _bookingAlerts = true;
@@ -147,6 +152,9 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
           : _displayName.toLowerCase().replaceAll(' ', '_').replaceAll('@', '');
       _bio = effective.bio;
       _location = effective.location;
+      if (effective.policies.isNotEmpty) {
+        _policies = List<StudioPolicy>.from(effective.policies);
+      }
       String? fallbackPhoto;
       try {
         fallbackPhoto = _authService.currentUser?.photoURL;
@@ -211,13 +219,16 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
         bio: _bio,
         location: _location,
         avatarUrl: effectiveAvatar,
+        policies: _policies,
       );
     }
     if (MockDataConfig.isEnabled) {
-      return Artist.mockArtists.firstWhere(
-        (a) => a.name.toLowerCase() == 'oddmaree',
-        orElse: () => Artist.mockArtists.first,
-      );
+      return Artist.mockArtists
+          .firstWhere(
+            (a) => a.name.toLowerCase() == 'oddmaree',
+            orElse: () => Artist.mockArtists.first,
+          )
+          .copyWith(policies: _policies);
     }
     final user = _authService.currentUser;
     return Artist(
@@ -232,6 +243,7 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
       availablePieces: 0,
       minDeposit: 50,
       images: const [],
+      policies: _policies,
     );
   }
 
@@ -322,6 +334,19 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
             }
             if (data['location'] != null && (data['location'] as String).isNotEmpty) {
               _location = data['location'] as String;
+            }
+            if (data['policies'] is List) {
+              final loadedPolicies = (data['policies'] as List)
+                  .whereType<Map>()
+                  .map(
+                    (item) => StudioPolicy.fromMap(
+                      Map<String, dynamic>.from(item),
+                    ),
+                  )
+                  .toList();
+              if (loadedPolicies.isNotEmpty) {
+                _policies = loadedPolicies;
+              }
             }
             if (artistStoredPhoto != null && artistStoredPhoto.isNotEmpty) {
               _photoUrl = artistStoredPhoto;
@@ -660,6 +685,32 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
     );
   }
 
+  Future<void> _showManagePoliciesScreen() async {
+    final currentUser = _authService.currentUser;
+    final injectedDb = _resolveInjectedFirestore();
+    final updatedPolicies = await Navigator.push<List<StudioPolicy>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ArtistManagePoliciesScreen(
+          initialPolicies: _policies,
+          currentUid: currentUser?.uid ?? widget.artist?.id,
+          firestore: injectedDb,
+        ),
+      ),
+    );
+
+    if (updatedPolicies != null && mounted) {
+      setState(() {
+        _policies = updatedPolicies;
+      });
+      FlashSnackBar.showSuccess(
+        context,
+        'Studio policies updated successfully',
+        duration: const Duration(seconds: 2),
+      );
+    }
+  }
+
   void _showAccountSettingsModal() {
     Navigator.push(
       context,
@@ -938,14 +989,12 @@ class _ArtistAccountScreenState extends State<ArtistAccountScreen> {
               ),
               const Divider(color: AppTheme.darkBorder, height: 1),
               _buildSettingsTile(
+                key: const Key('artist_manage_policies_tile'),
                 icon: Icons.gavel_outlined,
                 title: 'Studio Guidelines & Cancellation',
-                subtitle: 'Client booking policies, deposit rules, and consultation requirements',
+                subtitle: 'Create or edit cancellation, refund & deposit policies',
                 trailing: const Icon(Icons.chevron_right, color: Color(0xFF919696), size: 18),
-                onTap: () => _showInfoModal(
-                  'Studio Guidelines & Terms',
-                  'Flash deposits are non-refundable and applied to the final tattoo price. Cancellations made with at least 48 hours notice allow clients to reschedule once without forfeiting their deposit.',
-                ),
+                onTap: _showManagePoliciesScreen,
               ),
               const Divider(color: AppTheme.darkBorder, height: 1),
               _buildSettingsTile(

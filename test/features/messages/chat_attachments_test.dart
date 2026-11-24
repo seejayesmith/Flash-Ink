@@ -165,7 +165,7 @@ void main() {
         attachmentName: 'consent.pdf',
       );
 
-      expect(imgMsg.previewText, '📷 forearm_ref.jpg');
+      expect(imgMsg.previewText, '📷 Photo');
       expect(fileWithCaption.previewText, 'Signed consent form');
 
       await BookingSyncService.appendAndSyncChatMessage(
@@ -175,12 +175,38 @@ void main() {
 
       final updated =
           MessageThread.activeThreads.firstWhere((t) => t.id == targetThread.id);
-      expect(updated.lastMessage, '📷 forearm_ref.jpg');
+      expect(updated.lastMessage, '📷 Photo');
       expect(updated.messages.last.id, 'm_preview_img');
 
       MessageThread.resetMockThreads();
       BookingSyncService.enableCloudWrites = true;
       MockDataConfig.resetDebugOverride();
+    });
+
+    test('normalizes legacy image filename previews in MessageThread.fromMap', () {
+      final pickerThread = MessageThread.fromMap({
+        'id': 'thread_legacy_1',
+        'artistId': 'artist_1',
+        'artistName': 'goatdaddy',
+        'artistAvatar': '',
+        'studioName': 'Street Shop',
+        'lastMessage': '📷 image_picker_5D80C253-6710-4D3A.jpg',
+        'lastMessageTime': DateTime(2026, 11, 14, 16, 0).toIso8601String(),
+        'unreadCount': 1,
+      });
+      final extThread = MessageThread.fromMap({
+        'id': 'thread_legacy_2',
+        'artistId': 'artist_1',
+        'artistName': 'Elena',
+        'artistAvatar': '',
+        'studioName': 'Blackwork Studio',
+        'lastMessage': '📷 forearm_ref.png',
+        'lastMessageTime': DateTime(2026, 11, 14, 16, 0).toIso8601String(),
+        'unreadCount': 0,
+      });
+
+      expect(pickerThread.lastMessage, '📷 Photo');
+      expect(extThread.lastMessage, '📷 Photo');
     });
   });
 

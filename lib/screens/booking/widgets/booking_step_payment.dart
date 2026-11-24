@@ -206,14 +206,36 @@ class BookingStepPayment extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Icon(
-                    Icons.check_circle_outline,
+                    Icons.verified_user_outlined,
                     color: AppTheme.gold,
                     size: 16,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Your \$$deposit deposit locks this appointment exclusively for you. 100% applies directly to your tattoo total.',
+                      'Escrow Protection: Your \$$deposit deposit is held securely and released to $artistName only after mutual in-person check-in at your session.',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFFC0C5C5),
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.timer_outlined,
+                    color: AppTheme.gold,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '10-Minute Checkout Lock: Starting checkout reserves this slot and design exclusively for you for 10 minutes so nobody can claim it while you pay.',
                       style: GoogleFonts.plusJakartaSans(
                         color: const Color(0xFFC0C5C5),
                         fontSize: 12,

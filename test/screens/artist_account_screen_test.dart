@@ -159,6 +159,64 @@ void main() {
       expect(find.text('Health & Safety Protocol'), findsNothing);
     });
 
+    testWidgets('Tapping Studio Guidelines & Cancellation opens policy manager to edit and add policies', (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('artist_manage_policies_tile')),
+        200,
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('artist_manage_policies_tile')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('manage_policies_app_bar_title')), findsOneWidget);
+      expect(find.text('Deposits & Cancellations'), findsOneWidget);
+
+      // Edit the first policy (Deposits & Cancellations)
+      await tester.tap(find.byKey(const Key('edit_policy_btn_0')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('edit_policy_desc_field')),
+        'Deposits are non-refundable. 72 hours notice required for rescheduling.',
+      );
+      await tester.tap(find.byKey(const Key('save_policy_button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Deposits are non-refundable. 72 hours notice required for rescheduling.'),
+        findsOneWidget,
+      );
+
+      // Add a custom Refund Policy
+      await tester.tap(find.byKey(const Key('add_custom_policy_button')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('policy_icon_chip_refund')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('custom_policy_title_field')),
+        'Refund Policy',
+      );
+      await tester.enterText(
+        find.byKey(const Key('custom_policy_desc_field')),
+        'Full refund only if artist cancels the session.',
+      );
+      await tester.tap(find.byKey(const Key('add_custom_policy_submit_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Refund Policy'), findsOneWidget);
+
+      // Save all policies and return to Account screen
+      await tester.tap(find.byKey(const Key('save_policies_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Studio policies updated successfully'), findsOneWidget);
+    });
+
     testWidgets('Tapping Username opens edit profile screen and updates fields', (tester) async {
       await tester.pumpWidget(buildTestWidget());
       await tester.pumpAndSettle();

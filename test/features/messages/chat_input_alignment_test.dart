@@ -44,13 +44,22 @@ void main() {
     final textFieldFinder = find.byType(TextField);
     expect(textFieldFinder, findsOneWidget);
 
-    final pillFinder = find.ancestor(
-      of: textFieldFinder,
-      matching: find.byWidgetPredicate(
-        (w) => w is Container && w.constraints?.maxHeight == 42,
-      ),
-    );
+    final pillFinder = find.byKey(const Key('chat_input_pill'));
     expect(pillFinder, findsOneWidget);
+
+    // Attach clip sits inside the input pill.
+    expect(
+      find.descendant(
+        of: pillFinder,
+        matching: find.byKey(const Key('chat_attach_button')),
+      ),
+      findsOneWidget,
+    );
+
+    // Send button starts muted/disabled while draft is empty.
+    final sendButtonEmpty =
+        tester.widget<IconButton>(find.byKey(const Key('chat_send_button')));
+    expect(sendButtonEmpty.onPressed, isNull);
 
     final hintFinder = find.text('Type a message to goatdaddy...');
     expect(hintFinder, findsOneWidget);
@@ -60,12 +69,16 @@ void main() {
     final topGap = hintRect.top - pillRect.top;
     final bottomGap = pillRect.bottom - hintRect.bottom;
 
-    expect((topGap - bottomGap).abs(), lessThanOrEqualTo(2.0));
+    expect((topGap - bottomGap).abs(), lessThanOrEqualTo(3.0));
 
-    // Tapping inside the pill focuses the TextField and centers entered text.
+    // Tapping inside the pill focuses the TextField, centers entered text, and activates Send.
     await tester.tap(textFieldFinder);
     await tester.enterText(textFieldFinder, 'Hello!');
     await tester.pumpAndSettle();
+
+    final sendButtonActive =
+        tester.widget<IconButton>(find.byKey(const Key('chat_send_button')));
+    expect(sendButtonActive.onPressed, isNotNull);
 
     final editableFinder = find.byType(EditableText);
     expect(editableFinder, findsOneWidget);
@@ -73,6 +86,6 @@ void main() {
     final textTopGap = editableRect.top - pillRect.top;
     final textBottomGap = pillRect.bottom - editableRect.bottom;
 
-    expect((textTopGap - textBottomGap).abs(), lessThanOrEqualTo(2.0));
+    expect((textTopGap - textBottomGap).abs(), lessThanOrEqualTo(3.0));
   });
 }

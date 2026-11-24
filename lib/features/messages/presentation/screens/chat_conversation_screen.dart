@@ -15,6 +15,7 @@ import '../../../../widgets/keyboard_collapse_button.dart';
 import '../../../../widgets/user_avatar.dart';
 import '../../domain/models/message_thread.dart';
 import '../widgets/booking_receipt_message_tile.dart';
+import '../widgets/proposal_options_message_tile.dart';
 
 /// Interactive conversation screen for chatting directly between a client and a tattoo artist.
 class ChatConversationScreen extends StatefulWidget {
@@ -40,6 +41,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   late MessageThread _thread;
   final Map<String, Uint8List> _localAttachmentBytes = {};
   bool _isUploadingAttachment = false;
+  bool _hasDraftText = false;
 
   @override
   void initState() {
@@ -47,6 +49,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     _thread = widget.thread;
     _messages = List.from(widget.thread.messages);
     _messageFocusNode.addListener(_onFocusChange);
+    _textController.addListener(_onTextChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       MessageThread.markThreadAsRead(widget.thread.id);
     });
@@ -67,6 +70,13 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   void _onFocusChange() {
     if (mounted) {
       setState(() {});
+    }
+  }
+
+  void _onTextChanged() {
+    final hasText = _textController.text.trim().isNotEmpty;
+    if (hasText != _hasDraftText && mounted) {
+      setState(() => _hasDraftText = hasText);
     }
   }
 
@@ -130,6 +140,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   @override
   void dispose() {
     _messageFocusNode.removeListener(_onFocusChange);
+    _textController.removeListener(_onTextChanged);
     _messageFocusNode.unfocus();
     SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
     _messageFocusNode.dispose();
@@ -327,7 +338,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       isFromArtist: widget.isArtistView,
       type: isImage ? ChatMessageType.image : ChatMessageType.file,
       attachmentUrl: attachmentUrl,
-      attachmentName: fileName,
+      attachmentName: isImage ? 'Photo' : fileName,
       attachmentMimeType: mimeType,
       attachmentSizeBytes: bytes.length,
     );
@@ -413,16 +424,31 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
-  Widget _buildImageAttachment(ChatMessage msg) {
+  Widget _buildImageAttachment(
+    ChatMessage msg, {
+    required bool isOutgoing,
+    required bool hasCaption,
+  }) {
     final localBytes = _localAttachmentBytes[msg.id];
     final url = msg.attachmentUrl;
+    final radius = hasCaption
+        ? const BorderRadius.only(
+            topLeft: Radius.circular(17),
+            topRight: Radius.circular(17),
+          )
+        : BorderRadius.only(
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft: Radius.circular(isOutgoing ? 16 : 6),
+            bottomRight: Radius.circular(isOutgoing ? 6 : 16),
+          );
     return GestureDetector(
       onTap: () => _openImagePreview(msg),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: radius,
         child: SizedBox(
-          width: 200,
-          height: 150,
+          width: 224,
+          height: 180,
           child: localBytes != null
               ? Image.memory(localBytes, fit: BoxFit.cover)
               : (url != null && url.isNotEmpty && !url.startsWith('local://'))
@@ -501,6 +527,46 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     final minute = dt.minute.toString().padLeft(2, '0');
     final period = dt.hour >= 12 ? 'PM' : 'AM';
     return '$hour:$minute $period';
+  }
+
+  bool _isSameCalendarDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  String _formatDateDivider(DateTime dt) {
+    final now = DateTime.now();
+    if (_isSameCalendarDay(dt, now)) return 'Today';
+    final yesterday = now.subtract(const Duration(days: 1));
+    if (_isSameCalendarDay(dt, yesterday)) return 'Yesterday';
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final month = months[dt.month - 1];
+    return dt.year == now.year ? '$month ${dt.day}' : '$month ${dt.day}, ${dt.year}';
+  }
+
+  Widget _buildDateDivider(DateTime dt) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppTheme.onyxContainer,
+            borderRadius: BorderRadius.circular(AppRadius.radiusFull),
+            border: Border.all(color: AppTheme.darkBorder),
+          ),
+          child: Text(
+            _formatDateDivider(dt),
+            style: GoogleFonts.plusJakartaSans(
+              color: AppTheme.navInactive,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -637,73 +703,168 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter, vertical: 12),
                   itemCount: _messages.length,
                   itemBuilder: (context, index) {
-                  final msg = _messages[index];
-                  if (msg.type == ChatMessageType.receipt) {
-                    return BookingReceiptMessageTile(
-                      message: msg,
-                      thread: _thread,
+                    final msg = _messages[index];
+                    final prevMsg = index > 0 ? _messages[index - 1] : null;
+                    final isCardMessage = msg.type == ChatMessageType.receipt ||
+                        msg.type == ChatMessageType.proposal;
+                    final prevIsCard = prevMsg != null &&
+                        (prevMsg.type == ChatMessageType.receipt ||
+                            prevMsg.type == ChatMessageType.proposal);
+                    final showDateDivider = !isCardMessage &&
+                        (prevMsg == null ||
+                            prevIsCard ||
+                            !_isSameCalendarDay(prevMsg.timestamp, msg.timestamp));
+
+                    if (msg.type == ChatMessageType.receipt) {
+                      return BookingReceiptMessageTile(
+                        message: msg,
+                        thread: _thread,
+                      );
+                    }
+
+                    if (msg.type == ChatMessageType.proposal) {
+                      return ProposalOptionsMessageTile(
+                        message: msg,
+                        thread: _thread,
+                        isArtistView: widget.isArtistView,
+                        onProposalConfirmed: (result) {
+                          setState(() {
+                            _messages = _messages
+                                .map(
+                                  (m) => m.id == result.updatedProposal.id
+                                      ? result.updatedProposal
+                                      : m,
+                                )
+                                .toList()
+                              ..add(result.receiptMessage);
+                          });
+                          _scrollToBottom();
+                        },
+                      );
+                    }
+
+                    final isOutgoing = widget.isArtistView
+                        ? msg.isFromArtist
+                        : !msg.isFromArtist;
+                    final isPureImage =
+                        msg.type == ChatMessageType.image && msg.text.isEmpty;
+                    final isCaptionedImage =
+                        msg.type == ChatMessageType.image && msg.text.isNotEmpty;
+
+                    final bubbleRadius = BorderRadius.only(
+                      topLeft: const Radius.circular(18),
+                      topRight: const Radius.circular(18),
+                      bottomLeft: Radius.circular(isOutgoing ? 18 : 5),
+                      bottomRight: Radius.circular(isOutgoing ? 5 : 18),
                     );
-                  }
 
-                  final isClient = !msg.isFromArtist;
-
-                  return Align(
-                    alignment: isClient ? Alignment.centerRight : Alignment.centerLeft,
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      constraints: BoxConstraints(
-                        maxWidth: MediaQuery.of(context).size.width * 0.78,
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: isClient
-                            ? const Color(0xFF2C2818)
-                            : AppTheme.cardBackground,
-                        borderRadius: BorderRadius.only(
-                          topLeft: const Radius.circular(16),
-                          topRight: const Radius.circular(16),
-                          bottomLeft: Radius.circular(isClient ? 16 : 4),
-                          bottomRight: Radius.circular(isClient ? 4 : 16),
-                        ),
-                        border: Border.all(
-                          color: isClient ? AppTheme.goldBorder : AppTheme.cardBorder,
-                          width: 1,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment:
-                            isClient ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                        children: [
-                          if (msg.type == ChatMessageType.image)
-                            _buildImageAttachment(msg),
-                          if (msg.type == ChatMessageType.file)
-                            _buildFileAttachment(msg),
-                          if (msg.text.isNotEmpty) ...[
-                            if (msg.type == ChatMessageType.image ||
-                                msg.type == ChatMessageType.file)
-                              const SizedBox(height: 6),
-                            Text(
-                              msg.text,
-                              style: GoogleFonts.plusJakartaSans(
-                                color: AppTheme.textPrimary,
-                                fontSize: 13,
-                                height: 1.35,
+                    final bubbleWidget = isPureImage
+                        ? Container(
+                            decoration: BoxDecoration(
+                              borderRadius: bubbleRadius,
+                              border: Border.all(
+                                color: isOutgoing
+                                    ? AppTheme.gold.withValues(alpha: 0.35)
+                                    : AppTheme.cardBorder,
+                                width: 1,
                               ),
                             ),
-                          ],
-                          const SizedBox(height: 4),
-                          Text(
-                            _formatTime(msg.timestamp),
-                            style: GoogleFonts.plusJakartaSans(
-                              color: isClient ? AppTheme.gold : AppTheme.navInactive,
-                              fontSize: 9,
+                            child: _buildImageAttachment(
+                              msg,
+                              isOutgoing: isOutgoing,
+                              hasCaption: false,
+                            ),
+                          )
+                        : Container(
+                            constraints: BoxConstraints(
+                              maxWidth: MediaQuery.of(context).size.width * 0.78,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isOutgoing
+                                  ? const Color(0xFF332B14)
+                                  : const Color(0xFF1F1F23),
+                              borderRadius: bubbleRadius,
+                              border: Border.all(
+                                color: isOutgoing
+                                    ? AppTheme.gold.withValues(alpha: 0.35)
+                                    : Colors.white.withValues(alpha: 0.06),
+                                width: 1,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: isOutgoing
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isCaptionedImage)
+                                  _buildImageAttachment(
+                                    msg,
+                                    isOutgoing: isOutgoing,
+                                    hasCaption: true,
+                                  ),
+                                if (msg.type == ChatMessageType.file)
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                                    child: _buildFileAttachment(msg),
+                                  ),
+                                if (msg.text.isNotEmpty)
+                                  Padding(
+                                    padding: EdgeInsets.fromLTRB(
+                                      14,
+                                      isCaptionedImage || msg.type == ChatMessageType.file
+                                          ? 8
+                                          : 10,
+                                      14,
+                                      10,
+                                    ),
+                                    child: Text(
+                                      msg.text,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: AppTheme.textPrimary,
+                                        fontSize: 14.5,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (showDateDivider) _buildDateDivider(msg.timestamp),
+                        Align(
+                          alignment: isOutgoing
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Column(
+                              crossAxisAlignment: isOutgoing
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
+                              children: [
+                                bubbleWidget,
+                                const SizedBox(height: 4),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  child: Text(
+                                    _formatTime(msg.timestamp),
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: AppTheme.navInactive,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
@@ -723,59 +884,87 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 ),
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  IconButton(
-                    key: const Key('chat_attach_button'),
-                    onPressed: _isUploadingAttachment ? null : _showAttachmentOptions,
-                    icon: _isUploadingAttachment
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppTheme.gold,
-                            ),
-                          )
-                        : const Icon(
-                            Icons.attach_file_rounded,
-                            color: AppTheme.gold,
-                            size: 20,
-                          ),
-                    tooltip: 'Attach image or file',
-                  ),
                   Expanded(
                     child: Container(
-                      height: 42,
-                      alignment: Alignment.center,
+                      key: const Key('chat_input_pill'),
+                      constraints: const BoxConstraints(
+                        minHeight: 42,
+                        maxHeight: 112,
+                      ),
                       decoration: BoxDecoration(
                         color: AppTheme.cardBackground,
-                        borderRadius: BorderRadius.circular(AppRadius.radiusFull),
+                        borderRadius: BorderRadius.circular(22),
                         border: Border.all(color: AppTheme.cardBorder),
                       ),
-                      child: TextField(
-                        controller: _textController,
-                        focusNode: _messageFocusNode,
-                        textAlignVertical: TextAlignVertical.center,
-                        textInputAction: TextInputAction.send,
-                        onTapOutside: (_) => _dismissKeyboard(),
-                        style: GoogleFonts.plusJakartaSans(
-                          color: AppTheme.textPrimary,
-                          fontSize: 13,
-                        ),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          hintText: 'Type a message to $headerTitle...',
-                          hintStyle: GoogleFonts.plusJakartaSans(
-                            color: AppTheme.navInactive,
-                            fontSize: 12,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: IconButton(
+                              key: const Key('chat_attach_button'),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 40,
+                                minHeight: 40,
+                              ),
+                              onPressed: _isUploadingAttachment
+                                  ? null
+                                  : _showAttachmentOptions,
+                              icon: _isUploadingAttachment
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppTheme.gold,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.attach_file_rounded,
+                                      color: AppTheme.navInactive,
+                                      size: 20,
+                                    ),
+                              tooltip: 'Attach image or file',
+                            ),
                           ),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
+                          Expanded(
+                            child: TextField(
+                              controller: _textController,
+                              focusNode: _messageFocusNode,
+                              minLines: 1,
+                              maxLines: 4,
+                              keyboardType: TextInputType.multiline,
+                              textAlignVertical: TextAlignVertical.center,
+                              textInputAction: TextInputAction.send,
+                              onTapOutside: (_) => _dismissKeyboard(),
+                              style: GoogleFonts.plusJakartaSans(
+                                color: AppTheme.textPrimary,
+                                fontSize: 14,
+                                height: 1.35,
+                              ),
+                              decoration: InputDecoration(
+                                isDense: true,
+                                hintText: 'Type a message to $headerTitle...',
+                                hintStyle: GoogleFonts.plusJakartaSans(
+                                  color: AppTheme.navInactive,
+                                  fontSize: 13,
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.fromLTRB(
+                                  0,
+                                  10,
+                                  14,
+                                  10,
+                                ),
+                              ),
+                              onSubmitted: (_) => _sendMessage(),
+                            ),
                           ),
-                        ),
-                        onSubmitted: (_) => _sendMessage(),
+                        ],
                       ),
                     ),
                   ),
@@ -790,16 +979,30 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                   ],
                   const SizedBox(width: 8),
                   TextFieldTapRegion(
-                    child: Container(
+                    child: AnimatedContainer(
+                      key: const Key('chat_send_button_container'),
+                      duration: const Duration(milliseconds: 180),
                       width: 42,
                       height: 42,
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: AppTheme.gold,
+                        color: _hasDraftText
+                            ? AppTheme.gold
+                            : AppTheme.cardBackground,
+                        border: _hasDraftText
+                            ? null
+                            : Border.all(color: AppTheme.cardBorder),
                       ),
                       child: IconButton(
-                        icon: const Icon(Icons.send, color: AppTheme.onyxBackground, size: 18),
-                        onPressed: _sendMessage,
+                        key: const Key('chat_send_button'),
+                        icon: Icon(
+                          Icons.send,
+                          color: _hasDraftText
+                              ? AppTheme.onyxBackground
+                              : AppTheme.navInactive,
+                          size: 18,
+                        ),
+                        onPressed: _hasDraftText ? _sendMessage : null,
                       ),
                     ),
                   ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../features/messages/domain/models/message_thread.dart';
 import '../../models/artist_dashboard/auto_response_preset.dart';
-import '../../models/artist_dashboard/book_drop.dart';
 import '../../models/artist_dashboard/booking_request.dart';
 import '../../repositories/artist_dashboard_repository.dart';
 import '../../models/booking.dart';
@@ -41,9 +41,8 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
     DateTime candidate = widget.request.preferredDate ??
         DateTime.now().add(const Duration(days: 3));
     int guard = 0;
-    while ((!ArtistDashboardRepository.booksSchedule.isWorkingDay(candidate) ||
-            ArtistDashboardRepository.isClosedByWeeklyCap(candidate)) &&
-        guard < 30) {
+    while (!ArtistDashboardRepository.isDateBookable(date: candidate) &&
+        guard < 60) {
       candidate = candidate.add(const Duration(days: 1));
       guard++;
     }
@@ -55,7 +54,7 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
       _selectedTimeSlot = widget.request.preferredTimeSlot!;
     } else {
       final firstOpen = slots.firstWhere(
-        (s) => !ArtistDashboardRepository.isTimeSlotBooked(
+        (s) => ArtistDashboardRepository.isSlotBookable(
           date: _selectedDate,
           timeSlot: s.time,
         ),
@@ -64,6 +63,15 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
       _selectedTimeSlot = firstOpen.time;
     }
   }
+
+  static const List<String> _monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
+  static const List<String> _weekdays = [
+    'Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa',
+  ];
 
   String _formatShortDate(DateTime date) {
     const months = [
@@ -74,42 +82,41 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
     return '${days[date.weekday % 7]}, ${months[date.month - 1]} ${date.day}';
   }
 
-  List<DateTime> _getUpcomingWorkingDays({int count = 6}) {
-    final List<DateTime> result = [];
-    DateTime cursor = DateTime.now().add(const Duration(days: 1));
-    int attempts = 0;
-    while (result.length < count && attempts < 45) {
-      if (ArtistDashboardRepository.booksSchedule.isWorkingDay(cursor) &&
-          !ArtistDashboardRepository.isClosedByWeeklyCap(cursor)) {
-        result.add(DateTime(cursor.year, cursor.month, cursor.day));
-      }
-      cursor = cursor.add(const Duration(days: 1));
-      attempts++;
-    }
-    if (result.isEmpty) {
-      result.add(_selectedDate);
-    }
-    return result;
-  }
-
   void _openProposeTimeModal() {
-    final workingDays = _getUpcomingWorkingDays();
     DateTime tempDate = _selectedDate;
-    String tempSlot = _selectedTimeSlot;
+    DateTime displayMonth = DateTime(tempDate.year, tempDate.month, 1);
+    int tempDurationMinutes =
+        ArtistDashboardRepository.booksSchedule.slotDurationMinutes;
     int tempPrice = _estimatedPrice;
     int tempDeposit = _deposit;
+    String? limitHint;
 
     bool isSlotUnavailable(DateTime day, String slotTime) {
-      return ArtistDashboardRepository.isTimeSlotBooked(date: day, timeSlot: slotTime) ||
-          ArtistDashboardRepository.hasActiveHoldForSlot(date: day, timeSlot: slotTime);
+      return !ArtistDashboardRepository.isSlotBookable(
+        date: day,
+        timeSlot: slotTime,
+      );
     }
 
-    String firstAvailableSlotFor(DateTime day, List<BookingTimeSlot> slots, String fallback) {
-      for (final s in slots) {
-        if (!isSlotUnavailable(day, s.time)) return s.time;
+    final initialSlots =
+        ArtistDashboardRepository.booksSchedule.generateTimeSlots();
+    final List<ProposedTimeOption> selectedOptions = [];
+    if (!isSlotUnavailable(tempDate, _selectedTimeSlot)) {
+      selectedOptions.add(
+        ProposedTimeOption(date: tempDate, timeSlot: _selectedTimeSlot),
+      );
+    } else {
+      for (final s in initialSlots) {
+        if (!isSlotUnavailable(tempDate, s.time)) {
+          selectedOptions.add(
+            ProposedTimeOption(date: tempDate, timeSlot: s.time),
+          );
+          break;
+        }
       }
-      return fallback;
     }
+
+    const durationPresets = [60, 120, 180, 240, 300, 360];
 
     showModalBottomSheet(
       context: context,
@@ -118,12 +125,42 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
       builder: (modalContext) {
         return StatefulBuilder(
           builder: (ctx, setModalState) {
-            final slots = ArtistDashboardRepository.booksSchedule.generateTimeSlots();
-            final canSend = slots.any((s) => s.time == tempSlot && !isSlotUnavailable(tempDate, s.time));
+            final slots =
+                ArtistDashboardRepository.booksSchedule.generateTimeSlots();
+            final canSend = selectedOptions.isNotEmpty;
+            final now = DateTime.now();
+            final today = DateTime(now.year, now.month, now.day);
+            final firstOfCurrentMonth = DateTime(now.year, now.month, 1);
+            final daysInMonth =
+                DateTime(displayMonth.year, displayMonth.month + 1, 0).day;
+            final firstWeekday =
+                DateTime(displayMonth.year, displayMonth.month, 1).weekday % 7;
+            final rowCount = ((firstWeekday + daysInMonth) / 7).ceil();
+
+            void toggleOption(DateTime day, String slotTime) {
+              final candidate = ProposedTimeOption(date: day, timeSlot: slotTime);
+              final existingIdx = selectedOptions.indexOf(candidate);
+              setModalState(() {
+                limitHint = null;
+                if (existingIdx != -1) {
+                  selectedOptions.removeAt(existingIdx);
+                } else if (selectedOptions.length >= 3) {
+                  limitHint =
+                      'You can propose up to 3 times. Remove one to pick another.';
+                } else {
+                  selectedOptions.add(candidate);
+                  selectedOptions.sort((a, b) {
+                    final cmp = a.date.compareTo(b.date);
+                    if (cmp != 0) return cmp;
+                    return a.timeSlot.compareTo(b.timeSlot);
+                  });
+                }
+              });
+            }
 
             return ConstrainedBox(
               constraints: BoxConstraints(
-                maxHeight: MediaQuery.sizeOf(ctx).height * 0.85,
+                maxHeight: MediaQuery.sizeOf(ctx).height * 0.88,
               ),
               child: AdaptiveGlassContainer.bottomSheet(
                 glassEnabled: true,
@@ -136,273 +173,602 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                     20,
                     MediaQuery.viewInsetsOf(ctx).bottom + 24,
                   ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF333838),
-                          borderRadius: BorderRadius.circular(2),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF333838),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Propose Session Time & Quote',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                      const SizedBox(height: 16),
+                      Text(
+                        'Propose Session Time & Quote',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Select an open studio slot and finalize quote for ${widget.request.clientName}.',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFF8C9191),
-                        fontSize: 12,
+                      const SizedBox(height: 6),
+                      Text(
+                        'Pick up to 3 open dates & times for ${widget.request.clientName}. Availability is re-checked live when they choose.',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFF8C9191),
+                          fontSize: 12,
+                          height: 1.35,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      'SELECT WORKING DAY',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFFEEC200),
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: workingDays.map((day) {
-                        final isSelected = day.year == tempDate.year &&
-                            day.month == tempDate.month &&
-                            day.day == tempDate.day;
-                        return ChoiceChip(
-                          label: Text(_formatShortDate(day)),
-                          selected: isSelected,
-                          showCheckmark: false,
-                          selectedColor: const Color(0xFFEEC200),
-                          backgroundColor: const Color(0xFF1E2121),
-                          labelStyle: GoogleFonts.plusJakartaSans(
-                            color: isSelected ? const Color(0xFF121414) : Colors.white,
-                            fontSize: 12,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                          ),
-                          onSelected: (val) {
-                            if (val) {
-                              setModalState(() {
-                                tempDate = day;
-                                if (isSlotUnavailable(day, tempSlot)) {
-                                  tempSlot = firstAvailableSlotFor(day, slots, tempSlot);
-                                }
-                              });
-                            }
-                          },
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'SELECT TIME SLOT',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFFEEC200),
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: slots.map((slot) {
-                        final isBooked = ArtistDashboardRepository.isTimeSlotBooked(
-                          date: tempDate,
-                          timeSlot: slot.time,
-                        );
-                        final isHeld = !isBooked &&
-                            ArtistDashboardRepository.hasActiveHoldForSlot(
-                              date: tempDate,
-                              timeSlot: slot.time,
-                            );
-                        final isUnavailable = isBooked || isHeld;
-                        final isSelected = !isUnavailable && tempSlot == slot.time;
-                        final label = isBooked
-                            ? '${slot.time} (Booked)'
-                            : (isHeld ? '${slot.time} (Held 24h)' : slot.time);
+                      const SizedBox(height: 16),
 
-                        return ChoiceChip(
-                          label: Text(label),
-                          selected: isSelected,
-                          showCheckmark: false,
-                          selectedColor: const Color(0xFFEEC200),
-                          backgroundColor: const Color(0xFF1E2121),
-                          disabledColor: const Color(0xFF141616),
-                          labelStyle: GoogleFonts.plusJakartaSans(
-                            color: isUnavailable
-                                ? const Color(0xFF555A5A)
-                                : (isSelected ? const Color(0xFF121414) : Colors.white),
-                            fontSize: 12,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                          ),
-                          onSelected: isUnavailable
-                              ? null
-                              : (val) {
-                                  if (val) {
-                                    setModalState(() => tempSlot = slot.time);
-                                  }
-                                },
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'QUOTE & DEPOSIT',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFFEEC200),
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E2121),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF2C2F30)),
-                      ),
-                      child: Column(
+                      // Selected Proposed Options Summary
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'Estimated Price',
-                                  style: GoogleFonts.plusJakartaSans(color: const Color(0xFFC7CDCD), fontSize: 13),
+                          Text(
+                            'PROPOSED OPTIONS (${selectedOptions.length}/3)',
+                            key: const Key('proposed_options_counter'),
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFFEEC200),
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          if (selectedOptions.isNotEmpty)
+                            GestureDetector(
+                              onTap: () => setModalState(() {
+                                selectedOptions.clear();
+                                limitHint = null;
+                              }),
+                              child: Text(
+                                'Clear',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: const Color(0xFF8C9191),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    visualDensity: VisualDensity.compact,
-                                    icon: const Icon(Icons.remove_circle_outline, color: Color(0xFF8C9191), size: 18),
-                                    onPressed: tempPrice > 50
-                                        ? () => setModalState(() => tempPrice -= 25)
-                                        : null,
-                                  ),
-                                  Text(
-                                    '\$$tempPrice',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    visualDensity: VisualDensity.compact,
-                                    icon: const Icon(Icons.add_circle_outline, color: Color(0xFFEEC200), size: 18),
-                                    onPressed: () => setModalState(() => tempPrice += 25),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          const Divider(color: Color(0xFF2C2F30), height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'Fixed Deposit',
-                                  style: GoogleFonts.plusJakartaSans(color: const Color(0xFFC7CDCD), fontSize: 13),
-                                ),
-                              ),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    visualDensity: VisualDensity.compact,
-                                    icon: const Icon(Icons.remove_circle_outline, color: Color(0xFF8C9191), size: 18),
-                                    onPressed: tempDeposit > 20
-                                        ? () => setModalState(() => tempDeposit -= 10)
-                                        : null,
-                                  ),
-                                  Text(
-                                    '\$$tempDeposit',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      color: const Color(0xFFEEC200),
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    visualDensity: VisualDensity.compact,
-                                    icon: const Icon(Icons.add_circle_outline, color: Color(0xFFEEC200), size: 18),
-                                    onPressed: tempDeposit + 10 <= tempPrice
-                                        ? () => setModalState(() => tempDeposit += 10)
-                                        : null,
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
+                            ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    AppButtons.primaryCTA(
-                      key: const Key('confirm_proposal_button'),
-                      onPressed: !canSend
-                          ? null
-                          : () {
-                              final hold = CustomHold(
-                                id: 'hold_${DateTime.now().millisecondsSinceEpoch}',
-                                requestId: widget.request.id,
-                                clientName: widget.request.clientName,
-                                date: tempDate,
-                                timeSlot: tempSlot,
-                                durationMinutes: ArtistDashboardRepository.booksSchedule.slotDurationMinutes,
-                                estimatedPrice: tempPrice,
-                                deposit: tempDeposit,
-                                createdAt: DateTime.now(),
-                                expiresAt: DateTime.now().add(const Duration(hours: 24)),
-                              );
-                              ArtistDashboardRepository.addCustomHold(
-                                hold,
-                                artistId: widget.request.artistId,
-                              );
+                      const SizedBox(height: 8),
+                      if (selectedOptions.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E2121),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF2C2F30)),
+                          ),
+                          child: Text(
+                            'Tap an open date below, then select 1–3 time slots to send.',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF8C9191),
+                              fontSize: 12,
+                            ),
+                          ),
+                        )
+                      else
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: selectedOptions.asMap().entries.map((entry) {
+                            final opt = entry.value;
+                            return Container(
+                              key: Key('selected_proposal_chip_${entry.key}'),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0x24EEC200),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: const Color(0xFFEEC200),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${_formatShortDate(opt.date)} • ${opt.timeSlot}',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: const Color(0xFFEEC200),
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  GestureDetector(
+                                    key: Key('remove_proposal_chip_${entry.key}'),
+                                    onTap: () => setModalState(() {
+                                      selectedOptions.removeAt(entry.key);
+                                      limitHint = null;
+                                    }),
+                                    child: const Icon(
+                                      Icons.close_rounded,
+                                      color: Color(0xFFEEC200),
+                                      size: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      if (limitHint != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          limitHint!,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFFF59E0B),
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
 
-                              setState(() {
-                                _selectedDate = tempDate;
-                                _selectedTimeSlot = tempSlot;
-                                _estimatedPrice = tempPrice;
-                                _deposit = tempDeposit;
-                              });
-                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                              Navigator.pop(modalContext);
-                              FlashSnackBar.showSuccess(
-                                context,
-                                'Slot held for 24h & proposal sent to ${widget.request.clientName}.',
+                      // Interactive Calendar Picker
+                      Text(
+                        'SELECT AVAILABLE DATE',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFFEEC200),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF141616),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFF2C2F30)),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                IconButton(
+                                  key: const Key('proposal_calendar_prev_month'),
+                                  icon: Icon(
+                                    Icons.chevron_left,
+                                    color: displayMonth.isAfter(firstOfCurrentMonth)
+                                        ? Colors.white
+                                        : const Color(0xFF444848),
+                                    size: 20,
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: displayMonth.isAfter(firstOfCurrentMonth)
+                                      ? () => setModalState(() {
+                                            displayMonth = DateTime(
+                                              displayMonth.year,
+                                              displayMonth.month - 1,
+                                              1,
+                                            );
+                                          })
+                                      : null,
+                                ),
+                                Text(
+                                  '${_monthNames[displayMonth.month - 1]} ${displayMonth.year}',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                IconButton(
+                                  key: const Key('proposal_calendar_next_month'),
+                                  icon: const Icon(
+                                    Icons.chevron_right,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () => setModalState(() {
+                                    displayMonth = DateTime(
+                                      displayMonth.year,
+                                      displayMonth.month + 1,
+                                      1,
+                                    );
+                                  }),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: _weekdays
+                                  .map(
+                                    (d) => SizedBox(
+                                      width: 30,
+                                      child: Center(
+                                        child: Text(
+                                          d,
+                                          style: GoogleFonts.plusJakartaSans(
+                                            color: const Color(0xFF6B7272),
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                            const SizedBox(height: 6),
+                            Column(
+                              children: List.generate(rowCount, (rowIndex) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 2),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceAround,
+                                    children: List.generate(7, (colIndex) {
+                                      final dayNum =
+                                          rowIndex * 7 + colIndex - firstWeekday + 1;
+                                      if (dayNum < 1 || dayNum > daysInMonth) {
+                                        return const SizedBox(
+                                          width: 32,
+                                          height: 32,
+                                        );
+                                      }
+                                      final cellDate = DateTime(
+                                        displayMonth.year,
+                                        displayMonth.month,
+                                        dayNum,
+                                      );
+                                      final isPast = cellDate.isBefore(today);
+                                      final isBookable = !isPast &&
+                                          ArtistDashboardRepository.isDateBookable(
+                                            date: cellDate,
+                                          );
+                                      final isSelectedDay =
+                                          cellDate.year == tempDate.year &&
+                                              cellDate.month == tempDate.month &&
+                                              cellDate.day == tempDate.day;
+                                      final hasPickedOption = selectedOptions.any(
+                                        (o) =>
+                                            o.date.year == cellDate.year &&
+                                            o.date.month == cellDate.month &&
+                                            o.date.day == cellDate.day,
+                                      );
+
+                                      return GestureDetector(
+                                        key: Key('proposal_calendar_day_$dayNum'),
+                                        onTap: !isBookable
+                                            ? null
+                                            : () => setModalState(() {
+                                                  tempDate = cellDate;
+                                                  limitHint = null;
+                                                }),
+                                        child: Container(
+                                          width: 32,
+                                          height: 32,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: isSelectedDay
+                                                ? const Color(0xFFEEC200)
+                                                : Colors.transparent,
+                                            border: hasPickedOption && !isSelectedDay
+                                                ? Border.all(
+                                                    color: const Color(0xFFEEC200),
+                                                    width: 1.2,
+                                                  )
+                                                : null,
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              '$dayNum',
+                                              style: GoogleFonts.plusJakartaSans(
+                                                color: isSelectedDay
+                                                    ? const Color(0xFF121414)
+                                                    : (!isBookable
+                                                        ? const Color(0xFF424747)
+                                                        : Colors.white),
+                                                fontSize: 12,
+                                                fontWeight: isSelectedDay ||
+                                                        hasPickedOption
+                                                    ? FontWeight.bold
+                                                    : FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      Text(
+                        'SELECT TIME SLOTS FOR ${_formatShortDate(tempDate).toUpperCase()}',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFFEEC200),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: slots.map((slot) {
+                          final isBooked =
+                              ArtistDashboardRepository.isTimeSlotBooked(
+                            date: tempDate,
+                            timeSlot: slot.time,
+                          );
+                          final isHeld = !isBooked &&
+                              ArtistDashboardRepository.hasActiveHoldForSlot(
+                                date: tempDate,
+                                timeSlot: slot.time,
                               );
+                          final isUnavailable =
+                              isBooked || isHeld || isSlotUnavailable(tempDate, slot.time);
+                          final candidate = ProposedTimeOption(
+                            date: tempDate,
+                            timeSlot: slot.time,
+                          );
+                          final isSelected =
+                              !isUnavailable && selectedOptions.contains(candidate);
+                          final label = isBooked
+                              ? '${slot.time} (Booked)'
+                              : (isHeld ? '${slot.time} (Held 24h)' : slot.time);
+
+                          return ChoiceChip(
+                            key: Key('proposal_slot_${slot.time}'),
+                            label: Text(label),
+                            selected: isSelected,
+                            showCheckmark: false,
+                            selectedColor: const Color(0xFFEEC200),
+                            backgroundColor: const Color(0xFF1E2121),
+                            disabledColor: const Color(0xFF141616),
+                            labelStyle: GoogleFonts.plusJakartaSans(
+                              color: isUnavailable
+                                  ? const Color(0xFF555A5A)
+                                  : (isSelected
+                                      ? const Color(0xFF121414)
+                                      : Colors.white),
+                              fontSize: 12,
+                              fontWeight:
+                                  isSelected ? FontWeight.bold : FontWeight.w500,
+                            ),
+                            onSelected: isUnavailable
+                                ? null
+                                : (_) => toggleOption(tempDate, slot.time),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Session Duration Selector
+                      Text(
+                        'ESTIMATED SESSION DURATION',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFFEEC200),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: durationPresets.map((mins) {
+                          final hrs = mins ~/ 60;
+                          final isSel = tempDurationMinutes == mins;
+                          return ChoiceChip(
+                            key: Key('proposal_duration_$mins'),
+                            label: Text('$hrs ${hrs == 1 ? 'hr' : 'hrs'}'),
+                            selected: isSel,
+                            showCheckmark: false,
+                            selectedColor: const Color(0xFFEEC200),
+                            backgroundColor: const Color(0xFF1E2121),
+                            labelStyle: GoogleFonts.plusJakartaSans(
+                              color: isSel
+                                  ? const Color(0xFF121414)
+                                  : Colors.white,
+                              fontSize: 12,
+                              fontWeight:
+                                  isSel ? FontWeight.bold : FontWeight.w500,
+                            ),
+                            onSelected: (val) {
+                              if (val) {
+                                setModalState(() => tempDurationMinutes = mins);
+                              }
                             },
-                      text: canSend ? 'Send Proposal & Hold Slot (24h)' : 'No Open Slots on Date',
-                      backgroundColor: const Color(0xFFEEC200),
-                      foregroundColor: const Color(0xFF121414),
-                    ),
-                  ],
-                ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'QUOTE & DEPOSIT',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFFEEC200),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E2121),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF2C2F30)),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Estimated Price',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: const Color(0xFFC7CDCD),
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      visualDensity: VisualDensity.compact,
+                                      icon: const Icon(
+                                        Icons.remove_circle_outline,
+                                        color: Color(0xFF8C9191),
+                                        size: 18,
+                                      ),
+                                      onPressed: tempPrice > 50
+                                          ? () => setModalState(() => tempPrice -= 25)
+                                          : null,
+                                    ),
+                                    Text(
+                                      '\$$tempPrice',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    IconButton(
+                                      visualDensity: VisualDensity.compact,
+                                      icon: const Icon(
+                                        Icons.add_circle_outline,
+                                        color: Color(0xFFEEC200),
+                                        size: 18,
+                                      ),
+                                      onPressed: () =>
+                                          setModalState(() => tempPrice += 25),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const Divider(color: Color(0xFF2C2F30), height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Fixed Deposit',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: const Color(0xFFC7CDCD),
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      visualDensity: VisualDensity.compact,
+                                      icon: const Icon(
+                                        Icons.remove_circle_outline,
+                                        color: Color(0xFF8C9191),
+                                        size: 18,
+                                      ),
+                                      onPressed: tempDeposit > 20
+                                          ? () => setModalState(
+                                                () => tempDeposit -= 10,
+                                              )
+                                          : null,
+                                    ),
+                                    Text(
+                                      '\$$tempDeposit',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: const Color(0xFFEEC200),
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    IconButton(
+                                      visualDensity: VisualDensity.compact,
+                                      icon: const Icon(
+                                        Icons.add_circle_outline,
+                                        color: Color(0xFFEEC200),
+                                        size: 18,
+                                      ),
+                                      onPressed: tempDeposit + 10 <= tempPrice
+                                          ? () => setModalState(
+                                                () => tempDeposit += 10,
+                                              )
+                                          : null,
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      AppButtons.primaryCTA(
+                        key: const Key('confirm_proposal_button'),
+                        onPressed: !canSend
+                            ? null
+                            : () {
+                                ArtistDashboardRepository.sendCustomTimeProposal(
+                                  widget.request,
+                                  proposedSlots: List.of(selectedOptions),
+                                  durationMinutes: tempDurationMinutes,
+                                  estimatedPrice: tempPrice,
+                                  deposit: tempDeposit,
+                                );
+
+                                final primary = selectedOptions.first;
+                                setState(() {
+                                  _selectedDate = primary.date;
+                                  _selectedTimeSlot = primary.timeSlot;
+                                  _estimatedPrice = tempPrice;
+                                  _deposit = tempDeposit;
+                                });
+                                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                Navigator.pop(modalContext);
+                                final count = selectedOptions.length;
+                                FlashSnackBar.showSuccess(
+                                  context,
+                                  '$count proposed ${count == 1 ? 'time' : 'times'} sent to ${widget.request.clientName}.',
+                                );
+                              },
+                        text: canSend
+                            ? 'Send ${selectedOptions.length} Proposed ${selectedOptions.length == 1 ? 'Time' : 'Times'}'
+                            : 'Select at Least 1 Open Time',
+                        backgroundColor: const Color(0xFFEEC200),
+                        foregroundColor: const Color(0xFF121414),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );

@@ -486,6 +486,36 @@ class ArtistRepository {
     } catch (_) {}
   }
 
+  /// Updates the artist's studio, cancellation, and refund policies on `/artists/{uid}`.
+  static Future<void> updateArtistPolicies({
+    required String uid,
+    required List<StudioPolicy> policies,
+    FirebaseFirestore? firestore,
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    if (uid.trim().isEmpty) return;
+    FirebaseFirestore? db = firestore;
+    if (db == null) {
+      try {
+        db = FirebaseFirestore.instance;
+      } catch (_) {
+        return;
+      }
+    }
+
+    try {
+      await db
+          .collection('artists')
+          .doc(uid)
+          .set({
+            'id': uid,
+            'policies': policies.map((p) => p.toMap()).toList(growable: false),
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true))
+          .timeout(timeout);
+    } catch (_) {}
+  }
+
   /// Invokes the `completeArtistOnboarding` callable Cloud Function to stamp
   /// `{ role: 'artist', verifiedArtist: true }` custom claims and immediately
   /// refreshes the client's Firebase Auth token claims.

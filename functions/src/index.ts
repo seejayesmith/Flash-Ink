@@ -2,7 +2,11 @@
 import './firebase';
 
 export { completeArtistOnboarding } from './onboarding';
-export { createPaymentIntent, stripeConnectWebhook } from './payments';
+export {
+  createPaymentIntent,
+  releaseCheckoutLock,
+  stripeConnectWebhook,
+} from './payments';
 export {
   setArtistRoleClaim,
   requestRecoveryOtp,
