@@ -11,8 +11,11 @@ import '../../models/waitlist_entry.dart';
 import '../../services/auth_service.dart';
 import '../../services/booking_sync_service.dart';
 import '../../theme/app_buttons.dart';
+import '../../theme/app_radius.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/app_typography.dart';
+import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/flash_switch.dart';
 import '../../widgets/artist_top_bar.dart';
@@ -58,6 +61,7 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
   late bool _isBooksOpen;
   late DateTime _windowStart;
   late DateTime _windowEnd;
+  late bool _hasBookingWindow;
   late Set<int> _workingDays;
   Set<int>? _previousWorkingDays;
   late int _minLeadTimeHours;
@@ -66,6 +70,8 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
   late TimeOfDay _endTime;
   late int _slotDurationMinutes;
   late int _bufferMinutes;
+  late bool _preventDeadGaps;
+  late int _minBookableSessionMinutes;
   late int _defaultDeposit;
   late bool _acceptFlash;
   late bool _acceptCustom;
@@ -92,6 +98,7 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
     _isBooksOpen = schedule.isBooksOpen;
     _windowStart = schedule.bookingWindowStart;
     _windowEnd = schedule.bookingWindowEnd;
+    _hasBookingWindow = schedule.hasBookingWindow;
     _workingDays = Set<int>.from(schedule.workingDays);
     if (schedule.workingDays.length < 7) {
       _previousWorkingDays = Set<int>.from(schedule.workingDays);
@@ -102,6 +109,11 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
     _endTime = schedule.endTime;
     _slotDurationMinutes = schedule.slotDurationMinutes;
     _bufferMinutes = schedule.bufferDurationMinutes;
+    _preventDeadGaps = schedule.preventDeadGaps;
+    _minBookableSessionMinutes =
+        const [60, 90, 120].contains(schedule.minBookableSessionMinutes)
+            ? schedule.minBookableSessionMinutes
+            : 60;
     _defaultDeposit = schedule.defaultDepositAmount;
     _acceptFlash = schedule.acceptFlash;
     _acceptCustom = schedule.acceptCustom;
@@ -183,26 +195,446 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
   }
 
   Future<void> _pickDateRange() async {
-    final picked = await showDateRangePicker(
+    const monthNames = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    const weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final minAllowedDate = today.subtract(const Duration(days: 30));
+    final maxAllowedDate = today.add(const Duration(days: 365));
+
+    DateTime rangeStart =
+        DateTime(_windowStart.year, _windowStart.month, _windowStart.day);
+    DateTime? rangeEnd =
+        DateTime(_windowEnd.year, _windowEnd.month, _windowEnd.day);
+    if (rangeEnd.isBefore(rangeStart)) {
+      rangeEnd = rangeStart;
+    }
+    DateTime displayMonth = DateTime(rangeStart.year, rangeStart.month, 1);
+
+    final picked = await showModalBottomSheet<DateTimeRange>(
       context: context,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      initialDateRange: DateTimeRange(start: _windowStart, end: _windowEnd),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFFEEC200),
-              onPrimary: Color(0xFF121414),
-              surface: Color(0xFF1E2121),
-              onSurface: Colors.white,
-            ),
-          ),
-          child: child!,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalContext) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final daysInMonth =
+                DateTime(displayMonth.year, displayMonth.month + 1, 0).day;
+            final firstWeekday =
+                DateTime(displayMonth.year, displayMonth.month, 1).weekday % 7;
+            final rowCount = ((firstWeekday + daysInMonth) / 7).ceil();
+
+            final canGoPrevMonth = displayMonth.isAfter(
+              DateTime(minAllowedDate.year, minAllowedDate.month, 1),
+            );
+            final canGoNextMonth = displayMonth.isBefore(
+              DateTime(maxAllowedDate.year, maxAllowedDate.month, 1),
+            );
+
+            void handleDayTap(DateTime tapped) {
+              setModalState(() {
+                if (rangeEnd != null) {
+                  rangeStart = tapped;
+                  rangeEnd = null;
+                } else if (tapped.isBefore(rangeStart)) {
+                  rangeEnd = rangeStart;
+                  rangeStart = tapped;
+                } else {
+                  rangeEnd = tapped;
+                }
+              });
+            }
+
+            final canApply = rangeEnd != null;
+
+            return ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(ctx).height * 0.86,
+              ),
+              child: AdaptiveGlassContainer.bottomSheet(
+                glassEnabled: true,
+                androidSurfaceColor: const Color(0xFF171A1A),
+                topRadius: AppRadius.radiusSheet,
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    16,
+                    20,
+                    MediaQuery.viewInsetsOf(ctx).bottom + 24,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF333838),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Select Booking Window',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        rangeEnd == null
+                            ? 'Now tap a closing date for your booking window.'
+                            : 'Tap a start date, then an end date.',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFF8C9191),
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF161818),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: rangeEnd == null
+                                      ? AppTheme.gold
+                                      : const Color(0xFF2C2F30),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'OPEN DATE',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: const Color(0xFF8C9191),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _formatDate(rangeStart),
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: Colors.white,
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8),
+                            child: Icon(
+                              Icons.arrow_forward,
+                              color: AppTheme.gold,
+                              size: 16,
+                            ),
+                          ),
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF161818),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: rangeEnd == null
+                                      ? AppTheme.gold.withValues(alpha: 0.5)
+                                      : const Color(0xFF2C2F30),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'CLOSE DATE',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: const Color(0xFF8C9191),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    rangeEnd != null
+                                        ? _formatDate(rangeEnd!)
+                                        : 'Select end date',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: rangeEnd != null
+                                          ? Colors.white
+                                          : AppTheme.gold,
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF141616),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.radiusLg),
+                          border: Border.all(
+                            color: const Color(0xFF38352A),
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                IconButton(
+                                  key: const Key('range_calendar_prev_month'),
+                                  icon: Icon(
+                                    Icons.chevron_left,
+                                    color: canGoPrevMonth
+                                        ? Colors.white
+                                        : const Color(0xFF424747),
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: canGoPrevMonth
+                                      ? () => setModalState(() {
+                                            displayMonth = DateTime(
+                                              displayMonth.year,
+                                              displayMonth.month - 1,
+                                              1,
+                                            );
+                                          })
+                                      : null,
+                                ),
+                                Text(
+                                  '${monthNames[displayMonth.month - 1]} ${displayMonth.year}',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                IconButton(
+                                  key: const Key('range_calendar_next_month'),
+                                  icon: Icon(
+                                    Icons.chevron_right,
+                                    color: canGoNextMonth
+                                        ? Colors.white
+                                        : const Color(0xFF424747),
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: canGoNextMonth
+                                      ? () => setModalState(() {
+                                            displayMonth = DateTime(
+                                              displayMonth.year,
+                                              displayMonth.month + 1,
+                                              1,
+                                            );
+                                          })
+                                      : null,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: weekdays
+                                  .map(
+                                    (d) => SizedBox(
+                                      width: 34,
+                                      child: Center(
+                                        child: Text(
+                                          d,
+                                          style: GoogleFonts.plusJakartaSans(
+                                            color: const Color(0xFF6B7272),
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                            const SizedBox(height: 8),
+                            Column(
+                              children: List.generate(rowCount, (rowIndex) {
+                                return Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 3),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceAround,
+                                    children: List.generate(7, (colIndex) {
+                                      final dayNum = rowIndex * 7 +
+                                          colIndex -
+                                          firstWeekday +
+                                          1;
+                                      if (dayNum < 1 || dayNum > daysInMonth) {
+                                        return const SizedBox(
+                                          width: 36,
+                                          height: 36,
+                                        );
+                                      }
+                                      final cellDate = DateTime(
+                                        displayMonth.year,
+                                        displayMonth.month,
+                                        dayNum,
+                                      );
+                                      final isDisabled =
+                                          cellDate.isBefore(minAllowedDate) ||
+                                              cellDate.isAfter(maxAllowedDate);
+                                      final isStart = cellDate == rangeStart;
+                                      final isEnd = rangeEnd != null &&
+                                          cellDate == rangeEnd;
+                                      final isEndpoint = isStart || isEnd;
+                                      final isInRange = rangeEnd != null &&
+                                          cellDate.isAfter(rangeStart) &&
+                                          cellDate.isBefore(rangeEnd!);
+                                      final isToday = cellDate == today;
+
+                                      return GestureDetector(
+                                        key: Key('range_calendar_day_$dayNum'),
+                                        onTap: isDisabled
+                                            ? null
+                                            : () => handleDayTap(cellDate),
+                                        child: Container(
+                                          width: 36,
+                                          height: 36,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: isEndpoint
+                                                ? AppTheme.gold
+                                                : (isInRange
+                                                    ? AppTheme.gold
+                                                        .withValues(alpha: 0.18)
+                                                    : Colors.transparent),
+                                            border: isEndpoint
+                                                ? Border.all(
+                                                    color: AppTheme.gold,
+                                                    width: 1.5,
+                                                  )
+                                                : (isToday
+                                                    ? Border.all(
+                                                        color: const Color(
+                                                          0xFF4D5252,
+                                                        ),
+                                                        width: 1,
+                                                      )
+                                                    : null),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              '$dayNum',
+                                              style:
+                                                  GoogleFonts.plusJakartaSans(
+                                                color: isEndpoint
+                                                    ? AppTheme.onyxBackground
+                                                    : (isDisabled
+                                                        ? const Color(
+                                                            0xFF424747,
+                                                          )
+                                                        : (isInRange
+                                                            ? AppTheme.gold
+                                                            : Colors.white)),
+                                                fontSize: 13,
+                                                fontWeight: isEndpoint
+                                                    ? FontWeight.bold
+                                                    : (isInRange
+                                                        ? FontWeight.w600
+                                                        : FontWeight.w500),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      AppButtons.primaryCTA(
+                        key: const Key('apply_date_range_button'),
+                        onPressed: canApply
+                            ? () => Navigator.pop(
+                                  modalContext,
+                                  DateTimeRange(
+                                    start: rangeStart,
+                                    end: rangeEnd!,
+                                  ),
+                                )
+                            : null,
+                        text: canApply
+                            ? 'Apply Booking Window'
+                            : 'Select Closing Date',
+                        backgroundColor: AppTheme.gold,
+                        foregroundColor: AppTheme.onyxBackground,
+                      ),
+                      const SizedBox(height: 4),
+                      Center(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(modalContext),
+                          child: Text(
+                            'Cancel',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: AppTheme.navInactive,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
         );
       },
     );
-    if (picked != null) {
+
+    if (picked != null && mounted) {
       setState(() {
         _windowStart = picked.start;
         _windowEnd = picked.end;
@@ -246,6 +678,7 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
       isBooksOpen: _isBooksOpen,
       bookingWindowStart: _windowStart,
       bookingWindowEnd: _windowEnd,
+      hasBookingWindow: _hasBookingWindow,
       workingDays: Set<int>.from(_workingDays),
       minLeadTimeHours: _minLeadTimeHours,
       maxWorkingDaysPerWeek: _maxWorkingDaysPerWeek,
@@ -254,6 +687,8 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
       endTime: _endTime,
       slotDurationMinutes: _slotDurationMinutes,
       bufferDurationMinutes: _bufferMinutes,
+      preventDeadGaps: _preventDeadGaps,
+      minBookableSessionMinutes: _minBookableSessionMinutes,
       defaultDepositAmount: _defaultDeposit,
       acceptFlash: _acceptFlash,
       acceptCustom: _acceptCustom,
@@ -325,11 +760,24 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
             const SizedBox(height: 20),
             _buildStatusHeroCard(),
             const SizedBox(height: 18),
-            _buildSectionGroupHeader(
-              key: const Key('always_open_defaults_header'),
-              title: 'ALWAYS OPEN DEFAULTS',
-              subtitle:
-                  'Bookable date range, recurring weekdays & limits (also Drop templates)',
+            Builder(
+              builder: (context) {
+                final mode = ArtistDashboardRepository.bookingMode;
+                final drop = ArtistDashboardRepository.currentBookDrop;
+                final isDropActive = mode == BookingMode.drops &&
+                    drop != null &&
+                    drop.status != BookDropStatus.closed;
+                final headerSubtitle = isDropActive
+                    ? 'Book Drop active (${drop.title}) — defaults resume when the drop ends'
+                    : (_hasBookingWindow
+                        ? 'Bookings limited to your selected date range & working days'
+                        : 'Always open — accepts bookings on any future working day');
+                return _buildSectionGroupHeader(
+                  key: const Key('always_open_defaults_header'),
+                  title: 'ALWAYS OPEN DEFAULTS',
+                  subtitle: headerSubtitle,
+                );
+              },
             ),
             const SizedBox(height: 8),
             _buildBookingWindowCard(),
@@ -967,8 +1415,14 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
     );
   }
 
-  /// Booking window date range card
+  /// Booking window date range card (dynamic: Always Open vs. custom date range / Book Drop)
   Widget _buildBookingWindowCard() {
+    final mode = ArtistDashboardRepository.bookingMode;
+    final drop = ArtistDashboardRepository.currentBookDrop;
+    final isDropActive = mode == BookingMode.drops &&
+        drop != null &&
+        drop.status != BookDropStatus.closed;
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -986,18 +1440,50 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'BOOKING WINDOW',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFF8C9191),
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          'BOOKING WINDOW',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF8C9191),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                        if (isDropActive) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFA855F7)
+                                  .withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: const Color(0xFFA855F7)
+                                    .withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Text(
+                              'Drop Active',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: const Color(0xFFD8B4FE),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Dates clients can book appointments',
+                      _hasBookingWindow
+                          ? 'Only dates inside this window are open for booking'
+                          : 'No date limit — clients can book any future working day',
                       style: GoogleFonts.plusJakartaSans(
                         color: const Color(0xFF6B7272),
                         fontSize: 11,
@@ -1007,17 +1493,171 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              GestureDetector(
+              FlashSwitch(
+                key: const Key('booking_window_toggle'),
+                value: _hasBookingWindow,
+                onChanged: (val) {
+                  setState(() => _hasBookingWindow = val);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (!_hasBookingWindow)
+            GestureDetector(
+              key: const Key('booking_window_unlimited_banner'),
+              onTap: () {
+                setState(() => _hasBookingWindow = true);
+                _pickDateRange();
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF161818),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF2C2F30)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.all_inclusive_rounded,
+                      color: AppTheme.gold,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        isDropActive
+                            ? 'Book Drop dates active • Always open resumes after drop'
+                            : 'Always open unless blocked in Calendar',
+                        style: AppTypography.bodySmallBold.copyWith(
+                          color: AppTheme.textPrimary,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Set Dates',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppTheme.gold,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _pickDateRange,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF161818),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF2C2F30)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'OPEN DATE',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF8C9191),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _formatDate(_windowStart),
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8),
+                  child: Icon(
+                    Icons.arrow_forward,
+                    color: Color(0xFF8C9191),
+                    size: 16,
+                  ),
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _pickDateRange,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF161818),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF2C2F30)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'CLOSE DATE',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF8C9191),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _formatDate(_windowEnd),
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
                 key: const Key('booking_window_picker_button'),
                 onTap: _pickDateRange,
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.edit_calendar_outlined, color: Color(0xFFEEC200), size: 16),
+                    const Icon(
+                      Icons.edit_calendar_outlined,
+                      color: AppTheme.gold,
+                      size: 15,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       'Edit Range',
                       style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFFEEC200),
+                        color: AppTheme.gold,
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.5,
@@ -1026,81 +1666,8 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
                   ],
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF161818),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF2C2F30)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'OPEN DATE',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFF8C9191),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _formatDate(_windowStart),
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 8),
-                child: Icon(Icons.arrow_forward, color: Color(0xFF8C9191), size: 16),
-              ),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF161818),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF2C2F30)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'CLOSE DATE',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFF8C9191),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _formatDate(_windowEnd),
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ],
       ),
     );
@@ -1278,7 +1845,7 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Manage specific days off & overrides in Calendar',
+                      'Block specific dates in Calendar',
                       style: GoogleFonts.plusJakartaSans(
                         color: const Color(0xFFCCCCCC),
                         fontSize: 12,
@@ -1697,6 +2264,103 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
                 ),
               );
             }).toList(),
+          ),
+          const SizedBox(height: 16),
+          const Divider(color: AppTheme.darkBorder, height: 1),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Prevent awkward schedule gaps',
+                      style: AppTypography.bodySmallBold.copyWith(
+                        color: AppTheme.textPrimary,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Hides flash start times that strand unusable holes between sessions',
+                      style: AppTypography.bodySmall.copyWith(
+                        color: AppTheme.navInactive,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              FlashSwitch(
+                key: const Key('prevent_dead_gaps_switch'),
+                value: _preventDeadGaps,
+                onChanged: (val) => setState(() => _preventDeadGaps = val),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Minimum bookable session',
+                      style: AppTypography.bodySmallBold.copyWith(
+                        color: AppTheme.textPrimary,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Smallest tattoo session used to judge usable gaps',
+                      style: AppTypography.bodySmall.copyWith(
+                        color: AppTheme.navInactive,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.onyxSurface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppTheme.darkBorder),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    key: const Key('min_bookable_session_dropdown'),
+                    value: _minBookableSessionMinutes,
+                    isDense: true,
+                    dropdownColor: AppTheme.onyxContainer,
+                    iconEnabledColor: AppTheme.gold,
+                    style: AppTypography.bodySmallBold.copyWith(
+                      color: AppTheme.textPrimary,
+                      fontSize: 13,
+                    ),
+                    items: const [60, 90, 120]
+                        .map(
+                          (mins) => DropdownMenuItem<int>(
+                            value: mins,
+                            child: Text('$mins min'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() => _minBookableSessionMinutes = val);
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

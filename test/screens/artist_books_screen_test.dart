@@ -126,7 +126,7 @@ void main() {
         expect(find.byKey(Key('working_day_$i')), findsOneWidget);
       }
 
-      // Hours & slot sizing
+      // Hours & slot sizing + Smart gap protection
       expect(find.text('HOURS & SLOT SIZING'), findsOneWidget);
       expect(find.byKey(const Key('hours_all_modes_badge')), findsOneWidget);
       expect(find.text('All Modes'), findsOneWidget);
@@ -134,6 +134,10 @@ void main() {
       expect(find.byKey(const Key('books_end_time_button')), findsOneWidget);
       expect(find.text('DEFAULT SLOT DURATION'), findsOneWidget);
       expect(find.text('BUFFER BETWEEN SESSIONS'), findsOneWidget);
+      expect(find.text('Prevent awkward schedule gaps'), findsOneWidget);
+      expect(find.byKey(const Key('prevent_dead_gaps_switch')), findsOneWidget);
+      expect(find.text('Minimum bookable session'), findsOneWidget);
+      expect(find.byKey(const Key('min_bookable_session_dropdown')), findsOneWidget);
 
       // Accepted types
       expect(find.text('ACCEPTED SESSION TYPES'), findsOneWidget);
@@ -190,7 +194,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap Save
-      await tester.tap(find.byKey(const Key('save_books_schedule_button')));
+      final saveBtn = find.byKey(const Key('save_books_schedule_button'));
+      await tester.ensureVisible(saveBtn);
+      await tester.tap(saveBtn);
       await tester.pumpAndSettle();
 
       // Verify repository updated working days contains 1 and not 6
@@ -209,6 +215,7 @@ void main() {
 
       // Tap save
       final saveButton = find.byKey(const Key('save_books_schedule_button'));
+      await tester.ensureVisible(saveButton);
       await tester.tap(saveButton);
       await tester.pumpAndSettle();
 

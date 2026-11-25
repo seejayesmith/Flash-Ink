@@ -95,11 +95,12 @@ void main() {
       expect(find.text('by Maree Raven'), findsOneWidget);
       expect(find.text('Deposit: \$75 • Full: \$250'), findsOneWidget);
 
-      // Calendar & Time slots
+      // Calendar & Time slots (hourly grid with smart dead-gap filtering)
       expect(find.text('SELECT DATE'), findsOneWidget);
       expect(find.text('SELECT TIME SLOT'), findsOneWidget);
       expect(find.text('Session Est. 3.0 hrs'), findsOneWidget);
-      expect(find.text('1:30 PM'), findsOneWidget);
+      expect(find.text('11:00 AM'), findsOneWidget);
+      expect(find.text('1:00 PM'), findsOneWidget);
       expect(find.text('3:00 PM'), findsOneWidget);
 
       // Placement & Silent appointment toggle
@@ -397,19 +398,22 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
-      // Customize artist working hours: 10:00 AM to 3:30 PM, 60 min slot + 30 min buffer (90 min step)
+      // Customize artist working hours: 10:00 AM to 5:00 PM, hourly grid
       ArtistDashboardRepository.updateBooksSchedule(
         ArtistDashboardRepository.booksSchedule.copyWith(
           startTime: const TimeOfDay(hour: 10, minute: 0),
-          endTime: const TimeOfDay(hour: 15, minute: 30),
-          slotDurationMinutes: 60,
-          bufferDurationMinutes: 30,
+          endTime: const TimeOfDay(hour: 17, minute: 0),
+          slotDurationMinutes: 120,
+          bufferDurationMinutes: 60,
         ),
         artistId: testArtist.id,
       );
 
       final generated = ArtistDashboardRepository.booksSchedule.generateTimeSlots();
-      expect(generated.map((s) => s.time).toList(), ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM']);
+      expect(
+        generated.map((s) => s.time).toList(),
+        ['10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM'],
+      );
 
       await tester.pumpWidget(
         const MaterialApp(
@@ -421,9 +425,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      // For a 3.0-hr piece on 10:00 AM – 5:00 PM, 10:00 AM, 12:00 PM, 1:00 PM, 2:00 PM are shown
+      // while 11:00 AM is hidden by dead-gap protection!
       expect(find.text('10:00 AM'), findsOneWidget);
+      expect(find.text('11:00 AM'), findsNothing);
       expect(find.text('1:00 PM'), findsOneWidget);
-      expect(find.text('2:30 PM'), findsOneWidget);
+      expect(find.text('2:00 PM'), findsOneWidget);
     });
 
     testWidgets('End-to-End Custom Request Flow: submitting brief, proposing time, and artist acceptance syncs calendar, client appointments, and chat receipt',

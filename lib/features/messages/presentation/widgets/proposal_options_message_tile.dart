@@ -90,11 +90,20 @@ class _ProposalOptionsMessageTileState
   bool _isOptionAvailable(ProposedTimeOption opt) {
     if (_unavailableKeys.contains(opt.uniqueKey)) return false;
     final artistId = _effectiveArtistId.isNotEmpty ? _effectiveArtistId : null;
+    final effectiveSchedule =
+        _remoteSchedule ?? ArtistDashboardRepository.booksSchedule;
+    final durationMins = opt.durationMinutes > 0
+        ? opt.durationMinutes
+        : (widget.message.appointmentDurationMinutes ??
+            effectiveSchedule.slotDurationMinutes);
     return ArtistDashboardRepository.isSlotBookable(
       date: opt.date,
       timeSlot: opt.timeSlot,
       schedule: _remoteSchedule,
       artistId: artistId,
+      startMinutes: opt.startMinutes,
+      durationMinutes: durationMins,
+      bufferMinutes: effectiveSchedule.bufferDurationMinutes,
     );
   }
 

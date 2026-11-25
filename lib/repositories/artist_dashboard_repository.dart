@@ -12,6 +12,7 @@ import '../models/artist_dashboard/dashboard_appointment.dart';
 import '../models/booking.dart';
 import '../models/waitlist_entry.dart';
 import '../services/booking_sync_service.dart';
+import '../services/scheduling/booking_slot_profile.dart';
 import 'artist_availability_calculator.dart';
 
 /// Repository for the artist dashboard, calendar, books, waitlist, and earnings.
@@ -121,12 +122,16 @@ class ArtistDashboardRepository {
 
   static void _syncHeldSlots({String? artistId}) {
     final now = DateTime.now();
+    final bufferMins = booksSchedule.bufferDurationMinutes;
     final activeEntries = customHolds
         .where((h) => !now.isAfter(h.expiresAt))
         .map(
           (h) => ScheduleSlotEntry(
             dateKey: ArtistBooksSchedule.dateKey(h.date),
             timeSlot: h.timeSlot,
+            durationMinutes: h.durationMinutes,
+            bufferMinutes: bufferMins,
+            holdId: h.id,
             expiresAt: h.expiresAt,
           ),
         )
@@ -345,6 +350,10 @@ class ArtistDashboardRepository {
     required String timeSlot,
     ArtistBooksSchedule? schedule,
     DateTime? now,
+    int? startMinutes,
+    int? durationMinutes,
+    int? bufferMinutes,
+    String? ignoreHoldId,
   }) =>
       ArtistAvailabilityCalculator.hasActiveHoldForSlot(
         date: date,
@@ -353,6 +362,10 @@ class ArtistDashboardRepository {
         repoSchedule: booksSchedule,
         customHolds: customHolds,
         now: now,
+        startMinutes: startMinutes,
+        durationMinutes: durationMinutes,
+        bufferMinutes: bufferMinutes,
+        ignoreHoldId: ignoreHoldId,
       );
 
   static bool isSlotBookable({
@@ -362,6 +375,10 @@ class ArtistDashboardRepository {
     String? artistId,
     BookingMode? mode,
     DateTime? now,
+    int? startMinutes,
+    int? durationMinutes,
+    int? bufferMinutes,
+    String? ignoreHoldId,
   }) =>
       ArtistAvailabilityCalculator.isSlotBookable(
         date: date,
@@ -374,6 +391,10 @@ class ArtistDashboardRepository {
         isPaused: isPaused,
         artistId: artistId,
         now: now,
+        startMinutes: startMinutes,
+        durationMinutes: durationMinutes,
+        bufferMinutes: bufferMinutes,
+        ignoreHoldId: ignoreHoldId,
       );
 
   static bool isDateBookable({
@@ -382,6 +403,8 @@ class ArtistDashboardRepository {
     String? artistId,
     BookingMode? mode,
     DateTime? now,
+    int? durationMinutes,
+    BookingSlotType slotType = BookingSlotType.flash,
   }) =>
       ArtistAvailabilityCalculator.isDateBookable(
         date: date,
@@ -393,6 +416,8 @@ class ArtistDashboardRepository {
         isPaused: isPaused,
         artistId: artistId,
         now: now,
+        durationMinutes: durationMinutes,
+        slotType: slotType,
       );
 
   static int getRemainingOpenMinutes(DateTime date) =>
@@ -848,12 +873,12 @@ class ArtistDashboardRepository {
 
     // 2. Determine available time slot on that date
     String effectiveTimeSlot = timeSlot ?? request.preferredTimeSlot ?? '';
+    final candidateSlots = booksSchedule.generateTimeSlots();
     if (effectiveTimeSlot.isEmpty) {
-      final candidateSlots = booksSchedule.generateTimeSlots();
       final available = candidateSlots.firstWhere(
         (s) => !isTimeSlotBooked(date: effectiveDate, timeSlot: s.time),
         orElse: () =>
-            const BookingTimeSlot(time: '1:30 PM', period: 'Afternoon'),
+            const BookingTimeSlot(time: '1:00 PM', period: 'Afternoon'),
       );
       effectiveTimeSlot = available.time;
     }
@@ -1152,6 +1177,10 @@ class ArtistDashboardRepository {
         : (thread != null && thread.artistId.trim().isNotEmpty
             ? thread.artistId.trim()
             : proposalMessage.senderId.trim());
+    final durationMins = option.durationMinutes > 0
+        ? option.durationMinutes
+        : (proposalMessage.appointmentDurationMinutes ??
+            booksSchedule.slotDurationMinutes);
 
     ArtistBooksSchedule? resolvedSchedule;
     if (firestore != null || !MockDataConfig.isEnabled) {
@@ -1159,6 +1188,8 @@ class ArtistDashboardRepository {
         artistId: effectiveArtistId,
         date: option.date,
         timeSlot: option.timeSlot,
+        startMinutes: option.startMinutes,
+        durationMinutes: durationMins,
         firestore: firestore,
       );
       resolvedSchedule = check.schedule;
@@ -1176,6 +1207,9 @@ class ArtistDashboardRepository {
       final isOpen = isSlotBookable(
         date: option.date,
         timeSlot: option.timeSlot,
+        startMinutes: option.startMinutes,
+        durationMinutes: durationMins,
+        bufferMinutes: booksSchedule.bufferDurationMinutes,
         artistId: effectiveArtistId.isNotEmpty ? effectiveArtistId : null,
       );
       if (!isOpen) {
@@ -1193,8 +1227,6 @@ class ArtistDashboardRepository {
     final normalizedDate =
         DateTime(option.date.year, option.date.month, option.date.day);
     final formattedDate = _formatDisplayDate(normalizedDate);
-    final durationMins = proposalMessage.appointmentDurationMinutes ??
-        booksSchedule.slotDurationMinutes;
     final durationHrs = durationMins / 60.0;
     final durationLabel = durationHrs == durationHrs.roundToDouble()
         ? '${durationHrs.toInt()} hrs'
@@ -1330,12 +1362,17 @@ class ArtistDashboardRepository {
       }
     }
 
+    final effectiveBuffer =
+        (resolvedSchedule ?? booksSchedule).bufferDurationMinutes;
     final updatedSchedule = resolvedSchedule?.copyWith(
       bookedSlots: [
         ...resolvedSchedule.bookedSlots,
         ScheduleSlotEntry(
           dateKey: ArtistBooksSchedule.dateKey(normalizedDate),
           timeSlot: option.timeSlot,
+          startMinutes: option.startMinutes,
+          durationMinutes: durationMins,
+          bufferMinutes: effectiveBuffer,
         ),
       ],
     );
@@ -1469,12 +1506,15 @@ class ArtistDashboardRepository {
         .toSet();
   }
 
-  /// Checks if a time slot is already booked for an artist on a given date.
+  /// Checks if a time slot interval overlaps an existing booking for an artist on a given date.
   static bool isTimeSlotBooked({
     required DateTime date,
     required String timeSlot,
     ArtistBooksSchedule? schedule,
     String? artistId,
+    int? startMinutes,
+    int? durationMinutes,
+    int? bufferMinutes,
   }) =>
       ArtistAvailabilityCalculator.isTimeSlotBooked(
         date: date,
@@ -1483,6 +1523,9 @@ class ArtistDashboardRepository {
         repoSchedule: booksSchedule,
         calendarAppointments: calendarAppointments,
         artistId: artistId,
+        startMinutes: startMinutes,
+        durationMinutes: durationMinutes,
+        bufferMinutes: bufferMinutes,
       );
 
   /// Adds a confirmed booking appointment to the artist's calendar schedule.

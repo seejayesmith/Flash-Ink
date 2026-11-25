@@ -11,6 +11,14 @@ import {
   extractDateKey,
   normalizeSlotLabel,
 } from './schedule';
+import {
+  assertIntervalIsAvailable,
+  DEFAULT_FALLBACK_BUFFER_MINUTES,
+  DEFAULT_FALLBACK_DURATION_MINUTES,
+  parseDurationStringMinutes,
+  parseTimeLabelToMinutes,
+  throwTimeSlotConflict,
+} from './scheduling/intervalUtils';
 
 const stripeSecretKey = defineSecret('STRIPE_SECRET_KEY');
 const stripeWebhookSecret = defineSecret('STRIPE_WEBHOOK_SECRET');
@@ -162,6 +170,10 @@ export const createPaymentIntent = onCall(
       bookingId?: string;
       selectedDate?: string;
       selectedTimeSlot?: string;
+      startMinutes?: number;
+      durationMinutes?: number;
+      bufferMinutes?: number;
+      holdId?: string;
       placement?: string;
       clientNotes?: string;
       isSilentAppointment?: boolean;
@@ -183,12 +195,20 @@ export const createPaymentIntent = onCall(
 
     const dateKey = extractDateKey(data.selectedDate);
     const normalizedSlot = normalizeSlotLabel(data.selectedTimeSlot);
-    if (!dateKey || !normalizedSlot) {
+    const parsedStartMinutes =
+      typeof data.startMinutes === 'number' && Number.isFinite(data.startMinutes)
+        ? Math.floor(data.startMinutes)
+        : parseTimeLabelToMinutes(normalizedSlot);
+    if (!dateKey || !normalizedSlot || parsedStartMinutes === null) {
       throw new HttpsError(
         'invalid-argument',
         'A valid appointment date and time slot are required.'
       );
     }
+    const cleanHoldId =
+      typeof data.holdId === 'string' && data.holdId.trim().length > 0
+        ? data.holdId.trim()
+        : undefined;
 
     const bookingId = sanitizeBookingId(data.bookingId);
     const flashId = typeof data.flashId === 'string' ? data.flashId.trim() : '';
@@ -207,10 +227,11 @@ export const createPaymentIntent = onCall(
       throw new HttpsError('invalid-argument', 'Only USD deposits are supported.');
     }
 
-    // 1. Load payment config, artist profile, private artist Stripe account, and client profile.
-    const [config, artistSnap, financialsSnap, userSnap] = await Promise.all([
+    // 1. Load payment config, artist profile, schedule, private artist Stripe account, and client profile.
+    const [config, artistSnap, schedulePreSnap, financialsSnap, userSnap] = await Promise.all([
       loadPaymentConfig(),
       db.collection('artists').doc(targetArtistId).get(),
+      db.collection('artist_schedules').doc(targetArtistId).get(),
       db
         .collection('artists')
         .doc(targetArtistId)
@@ -247,6 +268,21 @@ export const createPaymentIntent = onCall(
       );
     }
 
+    const schedulePreData = (schedulePreSnap.exists ? schedulePreSnap.data() : {}) as Record<
+      string,
+      unknown
+    >;
+    const scheduleSlotDuration =
+      typeof schedulePreData.slotDurationMinutes === 'number' &&
+      schedulePreData.slotDurationMinutes > 0
+        ? Math.floor(schedulePreData.slotDurationMinutes)
+        : DEFAULT_FALLBACK_DURATION_MINUTES;
+    const resolvedBufferMinutes =
+      typeof schedulePreData.bufferDurationMinutes === 'number' &&
+      schedulePreData.bufferDurationMinutes >= 0
+        ? Math.floor(schedulePreData.bufferDurationMinutes)
+        : DEFAULT_FALLBACK_BUFFER_MINUTES;
+
     // 2. Authoritative server-side price & availability resolution.
     let depositCents = 0;
     let totalPriceCents = 0;
@@ -255,7 +291,11 @@ export const createPaymentIntent = onCall(
         ? data.flashTitle.trim()
         : 'Tattoo Deposit';
     let resolvedImageUrl = '';
-    let resolvedDuration = '2.5 hrs';
+    let resolvedDuration = '2.0 hrs';
+    let resolvedDurationMinutes =
+      typeof data.durationMinutes === 'number' && data.durationMinutes > 0
+        ? Math.floor(data.durationMinutes)
+        : scheduleSlotDuration;
     let exclusiveFlash = false;
 
     if (flashId) {
@@ -309,6 +349,10 @@ export const createPaymentIntent = onCall(
         typeof matched.estimatedTime === 'string' && matched.estimatedTime.trim().length > 0
           ? matched.estimatedTime.trim()
           : resolvedDuration;
+      resolvedDurationMinutes = parseDurationStringMinutes(
+        matched.estimatedTime,
+        resolvedDurationMinutes
+      );
     } else if (customRequestId) {
       const reqSnap = await db.collection('custom_requests').doc(customRequestId).get();
       if (!reqSnap.exists) {
@@ -342,6 +386,11 @@ export const createPaymentIntent = onCall(
           : 'Custom Tattoo Deposit';
       resolvedImageUrl =
         typeof reqData.sketchImageUrl === 'string' ? reqData.sketchImageUrl.trim() : '';
+      if (typeof reqData.durationMinutes === 'number' && reqData.durationMinutes > 0) {
+        resolvedDurationMinutes = Math.floor(reqData.durationMinutes);
+      }
+      const hrs = resolvedDurationMinutes / 60;
+      resolvedDuration = Number.isInteger(hrs) ? `${hrs} hrs` : `${hrs.toFixed(1)} hrs`;
     }
 
     if (depositCents < 50 || depositCents > 1000000) {
@@ -365,13 +414,22 @@ export const createPaymentIntent = onCall(
     const platformFeeCents = promoFeeWaived ? 0 : basePlatformFeeCents;
     const totalChargeCents = depositCents + platformFeeCents;
 
-    // 4. Pre-check appointments/bookings collections for slot conflicts.
+    const resolvedEndMinutes =
+      parsedStartMinutes + resolvedDurationMinutes + resolvedBufferMinutes;
+
+    // 4. Pre-check appointments/bookings/locks/schedule collections for interval conflicts.
     await assertSlotIsAvailable(
       targetArtistId,
       dateKey,
       normalizedSlot,
       bookingId,
-      clientUid
+      clientUid,
+      {
+        startMinutes: parsedStartMinutes,
+        durationMinutes: resolvedDurationMinutes,
+        bufferMinutes: resolvedBufferMinutes,
+        ignoreHoldId: cleanHoldId,
+      }
     );
 
     // 5. Atomically acquire 10-minute checkout locks (time slot + one-off flash piece)
@@ -403,55 +461,18 @@ export const createPaymentIntent = onCall(
           flashId && exclusiveFlash ? tx.get(artistRef) : Promise.resolve(null),
         ]);
 
-      // Re-verify schedule inside transaction to eliminate race windows.
+      // Re-verify schedule intervals inside transaction to eliminate race windows.
       if (schedTxSnap.exists) {
         const sched = (schedTxSnap.data() || {}) as Record<string, unknown>;
-        if (sched.isBooksOpen === false) {
-          throw new HttpsError(
-            'failed-precondition',
-            "This artist's books are currently closed."
-          );
-        }
-        const blocked = Array.isArray(sched.blockedDates)
-          ? sched.blockedDates.map((d) => String(d).trim())
-          : [];
-        if (blocked.includes(dateKey)) {
-          throw new HttpsError('failed-precondition', 'The selected date is unavailable.');
-        }
-        const booked = Array.isArray(sched.bookedSlots) ? sched.bookedSlots : [];
-        for (const entry of booked) {
-          if (entry && typeof entry === 'object') {
-            const rec = entry as Record<string, unknown>;
-            if (
-              extractDateKey(rec.date) === dateKey &&
-              normalizeSlotLabel(rec.time) === normalizedSlot
-            ) {
-              throw new HttpsError(
-                'already-exists',
-                'This time slot has already been booked. Please select another time slot.'
-              );
-            }
-          }
-        }
-        const held = Array.isArray(sched.heldSlots) ? sched.heldSlots : [];
-        for (const entry of held) {
-          if (entry && typeof entry === 'object') {
-            const rec = entry as Record<string, unknown>;
-            const heldExp = rec.expiresAt
-              ? Date.parse(String(rec.expiresAt))
-              : Number.POSITIVE_INFINITY;
-            if (
-              extractDateKey(rec.date) === dateKey &&
-              normalizeSlotLabel(rec.time) === normalizedSlot &&
-              (Number.isNaN(heldExp) || heldExp > nowMs)
-            ) {
-              throw new HttpsError(
-                'already-exists',
-                'This time slot is currently on a 24-hour hold. Please select another time slot.'
-              );
-            }
-          }
-        }
+        assertIntervalIsAvailable({
+          scheduleData: sched,
+          dateKey,
+          candidateStartMinutes: parsedStartMinutes,
+          durationMinutes: resolvedDurationMinutes,
+          bufferMinutes: resolvedBufferMinutes,
+          nowMs,
+          ignoreHoldId: cleanHoldId,
+        });
       }
 
       // Re-verify slot checkout lock.
@@ -460,9 +481,8 @@ export const createPaymentIntent = onCall(
         const lockExp = readTimestampMillis(lockData.expiresAt);
         const holder = String(lockData.holderClientId || '').trim();
         if (lockExp > nowMs && holder && holder !== clientUid) {
-          throw new HttpsError(
-            'already-exists',
-            'Another collector is currently checking out this time slot. Please try again shortly or pick another time.'
+          throwTimeSlotConflict(
+            'TIME_SLOT_CONFLICT: Another collector is currently checking out this time slot. Please try again shortly or pick another time.'
           );
         }
       }
@@ -504,6 +524,10 @@ export const createPaymentIntent = onCall(
         artistId: targetArtistId,
         dateKey,
         timeSlot: normalizedSlot,
+        startMinutes: parsedStartMinutes,
+        durationMinutes: resolvedDurationMinutes,
+        bufferMinutes: resolvedBufferMinutes,
+        endMinutes: resolvedEndMinutes,
         bookingId,
         holderClientId: clientUid,
         createdAt: nowTimestamp,
@@ -554,6 +578,10 @@ export const createPaymentIntent = onCall(
           selectedDate: data.selectedDate || dateKey,
           selectedDateKey: dateKey,
           selectedTimeSlot: String(data.selectedTimeSlot || normalizedSlot).trim(),
+          startMinutes: parsedStartMinutes,
+          durationMinutes: resolvedDurationMinutes,
+          bufferMinutes: resolvedBufferMinutes,
+          endMinutes: resolvedEndMinutes,
           placement: String(data.placement || 'Forearm').trim(),
           clientName: String(
             data.customerName || userData.displayName || userData.username || 'Client'
@@ -617,6 +645,9 @@ export const createPaymentIntent = onCall(
           customer_name: String(data.customerName || '').trim(),
           selected_date: dateKey,
           selected_time_slot: String(data.selectedTimeSlot || normalizedSlot).trim(),
+          start_minutes: String(parsedStartMinutes),
+          duration_minutes: String(resolvedDurationMinutes),
+          buffer_minutes: String(resolvedBufferMinutes),
           placement: String(data.placement || '').trim(),
           deposit_cents: String(depositCents),
           platform_fee_cents: String(platformFeeCents),
@@ -1000,7 +1031,19 @@ export const stripeConnectWebhook = onRequest(
               studioAddress: String(existingBooking.studioLocation || ''),
               serviceType: `Flash: ${flashTitle}`,
               flashTitle,
-              duration: String(existingBooking.estimatedTime || '2.5 hrs'),
+              duration: String(existingBooking.estimatedTime || '2.0 hrs'),
+              ...(typeof existingBooking.startMinutes === 'number'
+                ? { startMinutes: existingBooking.startMinutes }
+                : {}),
+              ...(typeof existingBooking.durationMinutes === 'number'
+                ? { durationMinutes: existingBooking.durationMinutes }
+                : {}),
+              ...(typeof existingBooking.bufferMinutes === 'number'
+                ? { bufferMinutes: existingBooking.bufferMinutes }
+                : {}),
+              ...(typeof existingBooking.endMinutes === 'number'
+                ? { endMinutes: existingBooking.endMinutes }
+                : {}),
               time: selectedTimeSlot,
               scheduledDate: selectedDate,
               date: selectedDate,

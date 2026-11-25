@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../models/artist.dart';
 import '../../../models/artist_dashboard/artist_books_schedule.dart';
+import '../../../models/artist_dashboard/book_drop.dart';
+import '../../../repositories/artist_availability_calculator.dart';
 import '../../../repositories/artist_dashboard_repository.dart';
+import '../../../services/scheduling/booking_slot_profile.dart';
+import '../../../services/scheduling/slot_availability_engine.dart';
 import '../../../theme/app_radius.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/adaptive_glass_container.dart';
@@ -13,6 +17,7 @@ import '../../../widgets/flash_switch.dart';
 /// time slot chips, placement selector, and silent appointment toggle.
 class BookingStepSchedule extends StatelessWidget {
   final FlashArtwork flash;
+  final int flashDurationMinutes;
   final String artistName;
   final String? artistId;
   final ArtistBooksSchedule schedule;
@@ -31,6 +36,7 @@ class BookingStepSchedule extends StatelessWidget {
   const BookingStepSchedule({
     super.key,
     required this.flash,
+    this.flashDurationMinutes = 120,
     required this.artistName,
     required this.artistId,
     required this.schedule,
@@ -268,6 +274,8 @@ class BookingStepSchedule extends StatelessWidget {
                           date: cellDate,
                           schedule: schedule,
                           artistId: artistId,
+                          durationMinutes: flashDurationMinutes,
+                          slotType: BookingSlotType.flash,
                         );
                     final isDisabled = !isBookableDate;
                     final isSelected = cellDate.year == selectedDate.year &&
@@ -324,7 +332,37 @@ class BookingStepSchedule extends StatelessWidget {
   }
 
   Widget _buildTimeSlotsGrid() {
-    final slots = schedule.generateTimeSlots();
+    final now = DateTime.now();
+    final repoSchedule = ArtistDashboardRepository.booksSchedule;
+    final slots = SlotAvailabilityEngine.generateAvailableSlots(
+      date: selectedDate,
+      schedule: schedule,
+      slotType: BookingSlotType.flash,
+      requestedDurationMinutes: flashDurationMinutes,
+      localAppointments: ArtistAvailabilityCalculator.matchingAppointments(
+        schedule: schedule,
+        repoSchedule: repoSchedule,
+        calendarAppointments: ArtistDashboardRepository.calendarAppointments,
+        artistId: artistId,
+      ),
+      localHolds: ArtistAvailabilityCalculator.activeLocalHolds(
+        schedule: schedule,
+        repoSchedule: repoSchedule,
+        customHolds: ArtistDashboardRepository.customHolds,
+        now: now,
+      ),
+      now: now,
+      enforceLeadTime:
+          ArtistDashboardRepository.bookingMode == BookingMode.alwaysOpen,
+      hasBookingOrHoldOnDay: ArtistDashboardRepository.isDateOccupied(
+        selectedDate,
+        schedule: schedule,
+        artistId: artistId,
+        now: now,
+      ),
+      includeConflicted: true,
+    );
+
     if (slots.isEmpty) {
       return Text(
         'No available time slots configured.',
@@ -335,32 +373,13 @@ class BookingStepSchedule extends StatelessWidget {
       );
     }
 
-    final now = DateTime.now();
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: slots.map((slot) {
-        final isBooked = ArtistDashboardRepository.isTimeSlotBooked(
-          date: selectedDate,
-          timeSlot: slot.time,
-          schedule: schedule,
-          artistId: artistId,
-        );
-        final isHeld = !isBooked &&
-            ArtistDashboardRepository.hasActiveHoldForSlot(
-              date: selectedDate,
-              timeSlot: slot.time,
-              schedule: schedule,
-              now: now,
-            );
-        final isAvailable = ArtistDashboardRepository.isSlotBookable(
-          date: selectedDate,
-          timeSlot: slot.time,
-          schedule: schedule,
-          artistId: artistId,
-          now: now,
-        );
-        final isDisabled = isBooked || isHeld || !isAvailable;
+        final isBooked = slot.isBookedConflict;
+        final isHeld = slot.isHeldConflict;
+        final isDisabled = slot.isConflicted;
         final isSelected = !isDisabled && selectedTimeSlot == slot.time;
 
         final chipLabel = isBooked

@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../features/messages/domain/models/message_thread.dart';
+import '../../models/artist_dashboard/artist_books_schedule.dart';
 import '../../models/artist_dashboard/auto_response_preset.dart';
+import '../../models/artist_dashboard/book_drop.dart';
 import '../../models/artist_dashboard/booking_request.dart';
 import '../../repositories/artist_dashboard_repository.dart';
 import '../../models/booking.dart';
+import '../../services/scheduling/booking_slot_profile.dart';
+import '../../services/scheduling/slot_availability_engine.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/adaptive_glass_container.dart';
 import '../../widgets/flash_image.dart';
 import '../../widgets/flash_snack_bar.dart';
@@ -41,7 +46,10 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
     DateTime candidate = widget.request.preferredDate ??
         DateTime.now().add(const Duration(days: 3));
     int guard = 0;
-    while (!ArtistDashboardRepository.isDateBookable(date: candidate) &&
+    while (!ArtistDashboardRepository.isDateBookable(
+          date: candidate,
+          slotType: BookingSlotType.custom,
+        ) &&
         guard < 60) {
       candidate = candidate.add(const Duration(days: 1));
       guard++;
@@ -58,7 +66,7 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
           date: _selectedDate,
           timeSlot: s.time,
         ),
-        orElse: () => const BookingTimeSlot(time: '1:30 PM', period: 'Afternoon'),
+        orElse: () => const BookingTimeSlot(time: '1:00 PM', period: 'Afternoon'),
       );
       _selectedTimeSlot = firstOpen.time;
     }
@@ -91,29 +99,49 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
     int tempDeposit = _deposit;
     String? limitHint;
 
-    bool isSlotUnavailable(DateTime day, String slotTime) {
-      return !ArtistDashboardRepository.isSlotBookable(
-        date: day,
-        timeSlot: slotTime,
-      );
-    }
-
-    final initialSlots =
-        ArtistDashboardRepository.booksSchedule.generateTimeSlots();
+    final scheduleAtOpen = ArtistDashboardRepository.booksSchedule;
+    final openNow = DateTime.now();
+    final initialSlots = SlotAvailabilityEngine.generateAvailableSlots(
+      date: tempDate,
+      schedule: scheduleAtOpen,
+      slotType: BookingSlotType.custom,
+      requestedDurationMinutes: tempDurationMinutes,
+      localAppointments: ArtistDashboardRepository.calendarAppointments,
+      localHolds: ArtistDashboardRepository.customHolds,
+      now: openNow,
+      enforceLeadTime:
+          ArtistDashboardRepository.bookingMode == BookingMode.alwaysOpen,
+      hasBookingOrHoldOnDay: ArtistDashboardRepository.isDateOccupied(
+        tempDate,
+        now: openNow,
+      ),
+    );
     final List<ProposedTimeOption> selectedOptions = [];
-    if (!isSlotUnavailable(tempDate, _selectedTimeSlot)) {
+    final matchingDefault =
+        initialSlots.where((s) => s.time == _selectedTimeSlot).toList();
+    if (matchingDefault.isNotEmpty) {
+      final s = matchingDefault.first;
       selectedOptions.add(
-        ProposedTimeOption(date: tempDate, timeSlot: _selectedTimeSlot),
+        ProposedTimeOption(
+          date: tempDate,
+          timeSlot: s.time,
+          startMinutes: s.startMinutes,
+          durationMinutes: tempDurationMinutes,
+        ),
       );
-    } else {
-      for (final s in initialSlots) {
-        if (!isSlotUnavailable(tempDate, s.time)) {
-          selectedOptions.add(
-            ProposedTimeOption(date: tempDate, timeSlot: s.time),
-          );
-          break;
-        }
-      }
+    } else if (initialSlots.isNotEmpty) {
+      final optimalFirst = initialSlots.firstWhere(
+        (s) => s.isOptimal,
+        orElse: () => initialSlots.first,
+      );
+      selectedOptions.add(
+        ProposedTimeOption(
+          date: tempDate,
+          timeSlot: optimalFirst.time,
+          startMinutes: optimalFirst.startMinutes,
+          durationMinutes: tempDurationMinutes,
+        ),
+      );
     }
 
     const durationPresets = [60, 120, 180, 240, 300, 360];
@@ -125,10 +153,25 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
       builder: (modalContext) {
         return StatefulBuilder(
           builder: (ctx, setModalState) {
-            final slots =
-                ArtistDashboardRepository.booksSchedule.generateTimeSlots();
-            final canSend = selectedOptions.isNotEmpty;
+            final schedule = ArtistDashboardRepository.booksSchedule;
             final now = DateTime.now();
+            final slots = SlotAvailabilityEngine.generateAvailableSlots(
+              date: tempDate,
+              schedule: schedule,
+              slotType: BookingSlotType.custom,
+              requestedDurationMinutes: tempDurationMinutes,
+              localAppointments: ArtistDashboardRepository.calendarAppointments,
+              localHolds: ArtistDashboardRepository.customHolds,
+              now: now,
+              enforceLeadTime: ArtistDashboardRepository.bookingMode ==
+                  BookingMode.alwaysOpen,
+              hasBookingOrHoldOnDay: ArtistDashboardRepository.isDateOccupied(
+                tempDate,
+                now: now,
+              ),
+              includeConflicted: true,
+            );
+            final canSend = selectedOptions.isNotEmpty;
             final today = DateTime(now.year, now.month, now.day);
             final firstOfCurrentMonth = DateTime(now.year, now.month, 1);
             final daysInMonth =
@@ -137,9 +180,13 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                 DateTime(displayMonth.year, displayMonth.month, 1).weekday % 7;
             final rowCount = ((firstWeekday + daysInMonth) / 7).ceil();
 
-            void toggleOption(DateTime day, String slotTime) {
-              final candidate = ProposedTimeOption(date: day, timeSlot: slotTime);
-              final existingIdx = selectedOptions.indexOf(candidate);
+            void toggleOption(DateTime day, AvailableSlot slot) {
+              final dayKey = ArtistBooksSchedule.dateKey(day);
+              final existingIdx = selectedOptions.indexWhere(
+                (o) =>
+                    ArtistBooksSchedule.dateKey(o.date) == dayKey &&
+                    o.startMinutes == slot.startMinutes,
+              );
               setModalState(() {
                 limitHint = null;
                 if (existingIdx != -1) {
@@ -148,11 +195,18 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                   limitHint =
                       'You can propose up to 3 times. Remove one to pick another.';
                 } else {
-                  selectedOptions.add(candidate);
+                  selectedOptions.add(
+                    ProposedTimeOption(
+                      date: day,
+                      timeSlot: slot.time,
+                      startMinutes: slot.startMinutes,
+                      durationMinutes: tempDurationMinutes,
+                    ),
+                  );
                   selectedOptions.sort((a, b) {
                     final cmp = a.date.compareTo(b.date);
                     if (cmp != 0) return cmp;
-                    return a.timeSlot.compareTo(b.timeSlot);
+                    return a.startMinutes.compareTo(b.startMinutes);
                   });
                 }
               });
@@ -438,6 +492,8 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                                       final isBookable = !isPast &&
                                           ArtistDashboardRepository.isDateBookable(
                                             date: cellDate,
+                                            durationMinutes: tempDurationMinutes,
+                                            slotType: BookingSlotType.custom,
                                           );
                                       final isSelectedDay =
                                           cellDate.year == tempDate.year &&
@@ -516,59 +572,106 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                         spacing: 8,
                         runSpacing: 8,
                         children: slots.map((slot) {
-                          final isBooked =
-                              ArtistDashboardRepository.isTimeSlotBooked(
-                            date: tempDate,
-                            timeSlot: slot.time,
-                          );
-                          final isHeld = !isBooked &&
-                              ArtistDashboardRepository.hasActiveHoldForSlot(
-                                date: tempDate,
-                                timeSlot: slot.time,
+                          final isBooked = slot.isBookedConflict;
+                          final isHeld = slot.isHeldConflict;
+                          final isUnavailable = slot.isConflicted;
+                          final dayKey = ArtistBooksSchedule.dateKey(tempDate);
+                          final isSelected = !isUnavailable &&
+                              selectedOptions.any(
+                                (o) =>
+                                    ArtistBooksSchedule.dateKey(o.date) ==
+                                        dayKey &&
+                                    o.startMinutes == slot.startMinutes,
                               );
-                          final isUnavailable =
-                              isBooked || isHeld || isSlotUnavailable(tempDate, slot.time);
-                          final candidate = ProposedTimeOption(
-                            date: tempDate,
-                            timeSlot: slot.time,
-                          );
-                          final isSelected =
-                              !isUnavailable && selectedOptions.contains(candidate);
+                          final isGapWarning =
+                              !isUnavailable && slot.createsDeadGap;
                           final label = isBooked
                               ? '${slot.time} (Booked)'
-                              : (isHeld ? '${slot.time} (Held 24h)' : slot.time);
+                              : (isHeld
+                                  ? '${slot.time} (Held 24h)'
+                                  : slot.time);
 
                           return ChoiceChip(
                             key: Key('proposal_slot_${slot.time}'),
-                            label: Text(label),
+                            label: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(label),
+                                if (isGapWarning) ...[
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.warning_amber_rounded,
+                                    size: 13,
+                                    color: isSelected
+                                        ? AppTheme.onyxBackground
+                                        : const Color(0xFFF59E0B),
+                                  ),
+                                ],
+                              ],
+                            ),
                             selected: isSelected,
                             showCheckmark: false,
-                            selectedColor: const Color(0xFFEEC200),
+                            selectedColor: AppTheme.gold,
                             backgroundColor: const Color(0xFF1E2121),
                             disabledColor: const Color(0xFF141616),
+                            side: BorderSide(
+                              color: isSelected
+                                  ? AppTheme.gold
+                                  : (isUnavailable
+                                      ? const Color(0xFF222525)
+                                      : (isGapWarning
+                                          ? const Color(0xFFF59E0B)
+                                              .withValues(alpha: 0.55)
+                                          : AppTheme.gold
+                                              .withValues(alpha: 0.6))),
+                              width: isSelected ? 1.4 : 1.0,
+                            ),
                             labelStyle: GoogleFonts.plusJakartaSans(
                               color: isUnavailable
                                   ? const Color(0xFF555A5A)
                                   : (isSelected
-                                      ? const Color(0xFF121414)
-                                      : Colors.white),
+                                      ? AppTheme.onyxBackground
+                                      : AppTheme.textPrimary),
                               fontSize: 12,
                               fontWeight:
-                                  isSelected ? FontWeight.bold : FontWeight.w500,
+                                  isSelected ? FontWeight.bold : FontWeight.w600,
                             ),
                             onSelected: isUnavailable
                                 ? null
-                                : (_) => toggleOption(tempDate, slot.time),
+                                : (_) => toggleOption(tempDate, slot),
                           );
                         }).toList(),
                       ),
+                      if (slots.any((s) => !s.isConflicted && s.createsDeadGap)) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              size: 13,
+                              color: Color(0xFFF59E0B),
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                'Gold-bordered times avoid dead gaps; amber-flagged times leave an awkward <2h hole.',
+                                key: const Key('proposal_dead_gap_hint'),
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: const Color(0xFF8C9191),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 16),
 
                       // Session Duration Selector
                       Text(
                         'ESTIMATED SESSION DURATION',
                         style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFFEEC200),
+                          color: AppTheme.gold,
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 0.8,
@@ -586,11 +689,11 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                             label: Text('$hrs ${hrs == 1 ? 'hr' : 'hrs'}'),
                             selected: isSel,
                             showCheckmark: false,
-                            selectedColor: const Color(0xFFEEC200),
+                            selectedColor: AppTheme.gold,
                             backgroundColor: const Color(0xFF1E2121),
                             labelStyle: GoogleFonts.plusJakartaSans(
                               color: isSel
-                                  ? const Color(0xFF121414)
+                                  ? AppTheme.onyxBackground
                                   : Colors.white,
                               fontSize: 12,
                               fontWeight:
@@ -598,7 +701,32 @@ class _BookingRequestDetailScreenState extends State<BookingRequestDetailScreen>
                             ),
                             onSelected: (val) {
                               if (val) {
-                                setModalState(() => tempDurationMinutes = mins);
+                                setModalState(() {
+                                  tempDurationMinutes = mins;
+                                  final retained = <ProposedTimeOption>[];
+                                  int droppedCount = 0;
+                                  for (final opt in selectedOptions) {
+                                    if (ArtistDashboardRepository.isSlotBookable(
+                                      date: opt.date,
+                                      timeSlot: opt.timeSlot,
+                                      startMinutes: opt.startMinutes,
+                                      durationMinutes: mins,
+                                    )) {
+                                      retained.add(
+                                        opt.copyWith(durationMinutes: mins),
+                                      );
+                                    } else {
+                                      droppedCount++;
+                                    }
+                                  }
+                                  selectedOptions
+                                    ..clear()
+                                    ..addAll(retained);
+                                  if (droppedCount > 0) {
+                                    limitHint =
+                                        'Removed $droppedCount ${droppedCount == 1 ? 'option' : 'options'} that no longer fit a ${mins ~/ 60}h session.';
+                                  }
+                                });
                               }
                             },
                           );

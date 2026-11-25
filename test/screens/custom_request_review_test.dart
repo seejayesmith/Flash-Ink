@@ -85,21 +85,21 @@ void main() {
       expect(find.byType(BackdropFilter), findsWidgets);
       expect(find.text('PROPOSED OPTIONS (1/3)'), findsOneWidget);
 
-      // Select 2 more open time slots to reach 3/3
+      // Select 2 more open hourly time slots to reach 3/3
+      final slot100 = find.byKey(const Key('proposal_slot_1:00 PM'));
       final slot300 = find.byKey(const Key('proposal_slot_3:00 PM'));
-      final slot430 = find.byKey(const Key('proposal_slot_4:30 PM'));
+      await tester.ensureVisible(slot100);
+      await tester.tap(slot100);
+      await tester.pumpAndSettle();
       await tester.ensureVisible(slot300);
       await tester.tap(slot300);
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(slot430);
-      await tester.tap(slot430);
       await tester.pumpAndSettle();
       expect(find.text('PROPOSED OPTIONS (3/3)'), findsOneWidget);
 
       // Attempting a 4th slot shows max-3 hint instead of exceeding 3
-      final slot600 = find.byKey(const Key('proposal_slot_6:00 PM'));
-      await tester.ensureVisible(slot600);
-      await tester.tap(slot600);
+      final slot500 = find.byKey(const Key('proposal_slot_5:00 PM'));
+      await tester.ensureVisible(slot500);
+      await tester.tap(slot500);
       await tester.pumpAndSettle();
       expect(find.text('PROPOSED OPTIONS (3/3)'), findsOneWidget);
       expect(
@@ -167,9 +167,9 @@ void main() {
         placement: 'Forearm',
         requestId: testRequest.id,
         proposedSlots: [
-          ProposedTimeOption(date: dayA, timeSlot: '3:00 PM'),
-          ProposedTimeOption(date: dayA, timeSlot: '4:30 PM'),
-          ProposedTimeOption(date: dayB, timeSlot: '1:30 PM'),
+          ProposedTimeOption(date: dayA, timeSlot: '1:00 PM', durationMinutes: 180),
+          ProposedTimeOption(date: dayA, timeSlot: '3:00 PM', durationMinutes: 180),
+          ProposedTimeOption(date: dayB, timeSlot: '1:00 PM', durationMinutes: 180),
         ],
       );
       final thread = MessageThread(
@@ -203,14 +203,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Client selects option 0 (dayA at 3:00 PM)
+      // Client selects option 0 (dayA at 1:00 PM)
       await tester.tap(find.byKey(const Key('proposal_option_0')));
       await tester.pumpAndSettle();
 
-      // Before client taps Confirm, another client takes dayA at 3:00 PM!
+      // Before client taps Confirm, another client takes dayA at 1:00 PM!
       await fakeDb.collection('artist_schedules').doc('artist_prop_1').set({
         'bookedSlots': [
-          {'date': keyA, 'time': '3:00 PM'},
+          {'date': keyA, 'time': '1:00 PM'},
         ],
       }, SetOptions(merge: true));
 
@@ -218,14 +218,14 @@ void main() {
       await tester.pumpAndSettle();
 
       // Double-booking is blocked, option 0 is marked Taken, and error banner appears
-      expect(find.text('Taken'), findsOneWidget);
+      expect(find.text('Taken'), findsWidgets);
       expect(find.text('SESSION TIME CONFIRMED'), findsNothing);
       expect(
         find.textContaining('That time slot is no longer available'),
         findsOneWidget,
       );
 
-      // Client instead selects option 2 (dayB at 1:30 PM), which is still open
+      // Client instead selects option 2 (dayB at 1:00 PM), which is still open
       await tester.tap(find.byKey(const Key('proposal_option_2')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('confirm_proposed_slot_button')));
@@ -236,7 +236,7 @@ void main() {
       expect(find.text('Confirmed'), findsOneWidget);
       expect(
         ArtistDashboardRepository.calendarAppointments.any(
-          (a) => a.time == '1:30 PM' && a.clientName == 'Jordan K.',
+          (a) => a.time == '1:00 PM' && a.clientName == 'Jordan K.',
         ),
         isTrue,
       );

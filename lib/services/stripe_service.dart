@@ -160,6 +160,10 @@ class StripeService {
     String? bookingId,
     String? selectedDate,
     String? selectedTimeSlot,
+    int? startMinutes,
+    int? durationMinutes,
+    int? bufferMinutes,
+    String? holdId,
     String? placement,
     String? clientNotes,
     bool isSilentAppointment = false,
@@ -222,6 +226,10 @@ class StripeService {
         'bookingId': bookingId,
         'selectedDate': selectedDate,
         'selectedTimeSlot': selectedTimeSlot,
+        'startMinutes': ?startMinutes,
+        'durationMinutes': ?durationMinutes,
+        'bufferMinutes': ?bufferMinutes,
+        if (holdId != null && holdId.trim().isNotEmpty) 'holdId': holdId.trim(),
         'placement': placement,
         if (clientNotes != null && clientNotes.trim().isNotEmpty)
           'clientNotes': clientNotes.trim(),
@@ -262,9 +270,14 @@ class StripeService {
               (data['freeBookingsRemaining'] as num).toInt();
         }
       } on FirebaseFunctionsException catch (e) {
+        final detailsCode =
+            e.details is Map ? (e.details as Map)['code']?.toString() : null;
+        final isConflict = e.code == 'already-exists' ||
+            detailsCode == 'TIME_SLOT_CONFLICT' ||
+            (e.message?.contains('TIME_SLOT_CONFLICT') ?? false);
         return StripePaymentResponse(
           status: StripePaymentStatus.failed,
-          isSlotConflict: e.code == 'already-exists',
+          isSlotConflict: isConflict,
           errorMessage: _mapFunctionsPaymentError(e),
         );
       } catch (_) {
@@ -419,7 +432,7 @@ class StripeService {
             (metadata['flash_title'] ?? 'Flash Artwork').toString();
         final customerName = (metadata['customer_name'] ?? 'Client').toString();
         final timeSlot =
-            (metadata['selected_time_slot'] ?? '1:30 PM').toString();
+            (metadata['selected_time_slot'] ?? '1:00 PM').toString();
         final placement = (metadata['placement'] ?? 'Forearm').toString();
         final dateStr = (metadata['selected_date'] ?? '').toString();
         final parsedDate = DateTime.tryParse(dateStr) ??

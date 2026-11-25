@@ -10,10 +10,12 @@ import '../models/artist_dashboard/booking_request.dart';
 import '../models/artist_dashboard/dashboard_appointment.dart';
 import '../models/booking_notification.dart';
 import '../models/waitlist_entry.dart';
+import '../repositories/artist_dashboard_repository.dart';
 import 'auth_service.dart';
 import 'booking/booking_cloud_hydrator.dart';
 import 'booking/chat_cloud_sync.dart';
 import 'booking/schedule_cloud_sync.dart';
+import 'scheduling/slot_availability_engine.dart';
 
 /// Multi-device Cloud Firestore synchronization and notification service for bookings.
 ///
@@ -155,6 +157,9 @@ class BookingSyncService {
     String? flashImageUrl,
     String? selectedDate,
     String? selectedTimeSlot,
+    int? startMinutes,
+    int? durationMinutes,
+    int? bufferMinutes,
     String? placement,
     String? clientName,
     String? clientAvatar,
@@ -171,6 +176,18 @@ class BookingSyncService {
             !clientAvatar.trim().startsWith('local://'))
         ? clientAvatar.trim()
         : null;
+    final resolvedStart = startMinutes ??
+        (selectedTimeSlot != null
+            ? ScheduleSlotEntry.parseTimeLabelToMinutes(selectedTimeSlot)
+            : null);
+    final resolvedDuration =
+        durationMinutes ?? ArtistDashboardRepository.booksSchedule.slotDurationMinutes;
+    final resolvedBuffer =
+        bufferMinutes ?? ArtistDashboardRepository.booksSchedule.bufferDurationMinutes;
+    final resolvedEnd = resolvedStart != null
+        ? resolvedStart + resolvedDuration + resolvedBuffer
+        : null;
+
     final payload = <String, dynamic>{
       'id': bookingId,
       'bookingId': bookingId,
@@ -185,6 +202,10 @@ class BookingSyncService {
       'artworkImageUrl': ?flashImageUrl,
       'selectedDate': ?selectedDate,
       'selectedTimeSlot': ?selectedTimeSlot,
+      'startMinutes': ?resolvedStart,
+      'durationMinutes': resolvedDuration,
+      'bufferMinutes': resolvedBuffer,
+      'endMinutes': ?resolvedEnd,
       'placement': ?placement,
       'clientName': ?clientName,
       'clientAvatar': ?safeClientAvatar,
@@ -233,6 +254,15 @@ class BookingSyncService {
             ? appointment.artistId!.trim()
             : resolveCurrentUid('artist_unknown'));
 
+    final schedule = ArtistDashboardRepository.booksSchedule;
+    final cleanTime = appointment.time.split('(').first.trim();
+    final parsedStart = ScheduleSlotEntry.parseTimeLabelToMinutes(cleanTime);
+    final parsedDuration = SlotAvailabilityEngine.parseDurationMinutes(
+      appointment.duration,
+      fallbackMinutes: schedule.slotDurationMinutes,
+    );
+    final bufferMins = schedule.bufferDurationMinutes;
+
     final payload = {
       'id': appointment.id,
       'clientId': effectiveClientId,
@@ -244,6 +274,11 @@ class BookingSyncService {
         'clientAvatar': appointment.clientAvatar!.trim(),
       'serviceType': appointment.serviceType,
       'duration': appointment.duration,
+      'durationMinutes': parsedDuration,
+      'bufferMinutes': bufferMins,
+      'startMinutes': ?parsedStart,
+      if (parsedStart != null)
+        'endMinutes': parsedStart + parsedDuration + bufferMins,
       'time': appointment.time,
       'date': appointment.date,
       'scheduledDate': appointment.scheduledDate?.toIso8601String(),
@@ -275,11 +310,14 @@ class BookingSyncService {
       if (isActiveBooking &&
           canWriteSchedule &&
           appointment.scheduledDate != null &&
-          appointment.time.trim().isNotEmpty &&
+          cleanTime.isNotEmpty &&
           effectiveArtistId.isNotEmpty) {
         final slotEntry = ScheduleSlotEntry(
           dateKey: ArtistBooksSchedule.dateKey(appointment.scheduledDate!),
-          timeSlot: appointment.time.split('(').first.trim(),
+          timeSlot: cleanTime,
+          startMinutes: parsedStart,
+          durationMinutes: parsedDuration,
+          bufferMinutes: bufferMins,
         );
         try {
           await db.collection('artist_schedules').doc(effectiveArtistId).set({
@@ -394,12 +432,20 @@ class BookingSyncService {
     required String artistId,
     required DateTime date,
     required String timeSlot,
+    int? startMinutes,
+    int? durationMinutes,
+    int? bufferMinutes,
+    String? ignoreHoldId,
     FirebaseFirestore? firestore,
   }) =>
       ScheduleCloudSync.verifySlotAvailableInCloud(
         artistId: artistId,
         date: date,
         timeSlot: timeSlot,
+        startMinutes: startMinutes,
+        durationMinutes: durationMinutes,
+        bufferMinutes: bufferMinutes,
+        ignoreHoldId: ignoreHoldId,
         firestore: firestore,
       );
 

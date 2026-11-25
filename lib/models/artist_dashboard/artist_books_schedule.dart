@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../core/mock/mock_data_config.dart';
 import '../booking.dart';
+import 'schedule_slot_entry.dart';
+
+export 'schedule_slot_entry.dart';
 
 enum DayCapacityStatus {
   open,
@@ -8,39 +11,6 @@ enum DayCapacityStatus {
   full,
   blocked,
   closed,
-}
-
-/// Compact anonymized slot entry stored on `artist_schedules` so clients
-/// can enforce booked/held capacity without reading private `/appointments`.
-class ScheduleSlotEntry {
-  final String dateKey;
-  final String timeSlot;
-  final DateTime? expiresAt;
-
-  const ScheduleSlotEntry({
-    required this.dateKey,
-    required this.timeSlot,
-    this.expiresAt,
-  });
-
-  bool isActiveAt(DateTime now) =>
-      expiresAt == null || now.isBefore(expiresAt!);
-
-  Map<String, dynamic> toMap() => {
-        'date': dateKey,
-        'time': timeSlot,
-        if (expiresAt != null) 'expiresAt': expiresAt!.toIso8601String(),
-      };
-
-  factory ScheduleSlotEntry.fromMap(Map<String, dynamic> map) {
-    return ScheduleSlotEntry(
-      dateKey: (map['date'] ?? '').toString(),
-      timeSlot: (map['time'] ?? '').toString(),
-      expiresAt: map['expiresAt'] != null
-          ? DateTime.tryParse(map['expiresAt'].toString())
-          : null,
-    );
-  }
 }
 
 /// Represents the configuration for an artist's booking schedule ("Books").
@@ -51,6 +21,7 @@ class ArtistBooksSchedule {
   final int earlyAccessHours;
   final DateTime bookingWindowStart;
   final DateTime bookingWindowEnd;
+  final bool hasBookingWindow; // false = Always Open (no date limit)
   final Set<int> workingDays; // 1 = Mon, 7 = Sun (DateTime weekday constants)
   final Set<String> blockedDates; // YYYY-MM-DD explicit day-off overrides
   final Set<String> openOverrideDates; // YYYY-MM-DD forced-open overrides
@@ -60,8 +31,10 @@ class ArtistBooksSchedule {
   final List<ScheduleSlotEntry> heldSlots; // Unexpired 24h artist holds
   final TimeOfDay startTime;
   final TimeOfDay endTime;
-  final int slotDurationMinutes; // e.g. 60, 120, 180
-  final int bufferDurationMinutes; // e.g. 15, 30, 45, 60
+  final int slotDurationMinutes; // e.g. 60, 120, 180, 240
+  final int bufferDurationMinutes; // default 60 min cleanup between bookings
+  final bool preventDeadGaps; // default true
+  final int minBookableSessionMinutes; // default 60 (60, 90, or 120)
   final int defaultDepositAmount; // e.g. 50, 80, 100
   final bool acceptFlash;
   final bool acceptCustom;
@@ -75,6 +48,7 @@ class ArtistBooksSchedule {
     this.earlyAccessHours = 24,
     required this.bookingWindowStart,
     required this.bookingWindowEnd,
+    this.hasBookingWindow = true,
     this.workingDays = const {2, 3, 4, 5, 6}, // Tue - Sat
     this.blockedDates = const {},
     this.openOverrideDates = const {},
@@ -85,7 +59,9 @@ class ArtistBooksSchedule {
     this.startTime = const TimeOfDay(hour: 11, minute: 0),
     this.endTime = const TimeOfDay(hour: 19, minute: 0),
     this.slotDurationMinutes = 120,
-    this.bufferDurationMinutes = 30,
+    this.bufferDurationMinutes = 60,
+    this.preventDeadGaps = true,
+    this.minBookableSessionMinutes = 60,
     this.defaultDepositAmount = 80,
     this.acceptFlash = true,
     this.acceptCustom = true,
@@ -113,23 +89,9 @@ class ArtistBooksSchedule {
 
   /// Parses [timeSlot] on [date] into a local [DateTime], or `null` if invalid.
   static DateTime? parseSlotDateTime(DateTime date, String timeSlot) {
-    final cleaned = normalizeTimeLabel(timeSlot);
-    final match12 = RegExp(r'^(\d{1,2}):(\d{2})\s*(AM|PM)$').firstMatch(cleaned);
-    if (match12 != null) {
-      var hour = int.tryParse(match12.group(1)!) ?? 0;
-      final minute = int.tryParse(match12.group(2)!) ?? 0;
-      final meridiem = match12.group(3)!;
-      if (meridiem == 'PM' && hour != 12) hour += 12;
-      if (meridiem == 'AM' && hour == 12) hour = 0;
-      return DateTime(date.year, date.month, date.day, hour, minute);
-    }
-    final match24 = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(cleaned);
-    if (match24 != null) {
-      final hour = int.tryParse(match24.group(1)!) ?? 0;
-      final minute = int.tryParse(match24.group(2)!) ?? 0;
-      return DateTime(date.year, date.month, date.day, hour, minute);
-    }
-    return null;
+    final mins = ScheduleSlotEntry.parseTimeLabelToMinutes(timeSlot);
+    if (mins == null) return null;
+    return DateTime(date.year, date.month, date.day, mins ~/ 60, mins % 60);
   }
 
   bool isDateBlocked(DateTime date) => blockedDates.contains(dateKey(date));
@@ -137,8 +99,10 @@ class ArtistBooksSchedule {
   bool isDateForceOpened(DateTime date) =>
       openOverrideDates.contains(dateKey(date));
 
-  /// Returns true if [date] falls inside `[bookingWindowStart, bookingWindowEnd]` (inclusive).
+  /// Returns true if [date] falls inside `[bookingWindowStart, bookingWindowEnd]` (inclusive),
+  /// or `true` for all dates when [hasBookingWindow] is `false` (Always Open).
   bool isWithinBookingWindow(DateTime date) {
+    if (!hasBookingWindow) return true;
     final dayOnly = DateTime(date.year, date.month, date.day);
     final startOnly = DateTime(
       bookingWindowStart.year,
@@ -164,46 +128,39 @@ class ArtistBooksSchedule {
     return workingDays.contains(date.weekday);
   }
 
-  /// Generates available time slots from the artist's configured working hours,
-  /// session duration, and buffer time.
-  List<BookingTimeSlot> generateTimeSlots({bool forceDynamic = false}) {
+  /// Generates candidate hourly time slots anchored to [startTime] where a session
+  /// of [durationMinutes] (default [slotDurationMinutes]) finishes on or before [endTime].
+  ///
+  /// Cleanup buffer is required *between* bookings (`requireBufferBeforeClose = false`),
+  /// so the final session of the day may run right up to [endTime].
+  List<BookingTimeSlot> generateTimeSlots({
+    bool forceDynamic = false,
+    int? durationMinutes,
+  }) {
     if (!isBooksOpen) return const [];
-    final isDefaultConfig = !forceDynamic &&
-        startTime.hour == 11 &&
-        startTime.minute == 0 &&
-        endTime.hour == 19 &&
-        endTime.minute == 0 &&
-        slotDurationMinutes == 120 &&
-        bufferDurationMinutes == 30;
-    if (isDefaultConfig) {
-      return BookingTimeSlot.defaultSlots;
-    }
-
     final startTotalMinutes = startTime.hour * 60 + startTime.minute;
     final endTotalMinutes = endTime.hour * 60 + endTime.minute;
-    final step = (slotDurationMinutes + bufferDurationMinutes).clamp(15, 720);
+    final effectiveDuration =
+        (durationMinutes ?? slotDurationMinutes).clamp(15, 720);
+    const int hourlyStep = 60;
     final List<BookingTimeSlot> slots = [];
 
     int currentMinutes = startTotalMinutes;
-    while (currentMinutes + slotDurationMinutes <= endTotalMinutes) {
+    while (currentMinutes + effectiveDuration <= endTotalMinutes) {
       final hour24 = currentMinutes ~/ 60;
-      final minute = currentMinutes % 60;
       final periodLabel = hour24 < 12
           ? 'Morning'
           : (hour24 < 17 ? 'Afternoon' : 'Evening');
-      final suffix = hour24 >= 12 ? 'PM' : 'AM';
-      final hour12 = hour24 == 0 ? 12 : (hour24 > 12 ? hour24 - 12 : hour24);
-      final minStr = minute.toString().padLeft(2, '0');
       slots.add(
         BookingTimeSlot(
-          time: '$hour12:$minStr $suffix',
+          time: ScheduleSlotEntry.formatMinutesToTimeLabel(currentMinutes),
           period: periodLabel,
         ),
       );
-      currentMinutes += step;
+      currentMinutes += hourlyStep;
     }
 
-    return slots.isEmpty ? BookingTimeSlot.defaultSlots : slots;
+    return slots;
   }
 
   bool get isEffectiveBooksOpen {
@@ -241,6 +198,7 @@ class ArtistBooksSchedule {
     int? earlyAccessHours,
     DateTime? bookingWindowStart,
     DateTime? bookingWindowEnd,
+    bool? hasBookingWindow,
     Set<int>? workingDays,
     Set<String>? blockedDates,
     Set<String>? openOverrideDates,
@@ -253,6 +211,8 @@ class ArtistBooksSchedule {
     TimeOfDay? endTime,
     int? slotDurationMinutes,
     int? bufferDurationMinutes,
+    bool? preventDeadGaps,
+    int? minBookableSessionMinutes,
     int? defaultDepositAmount,
     bool? acceptFlash,
     bool? acceptCustom,
@@ -268,6 +228,7 @@ class ArtistBooksSchedule {
       earlyAccessHours: earlyAccessHours ?? this.earlyAccessHours,
       bookingWindowStart: bookingWindowStart ?? this.bookingWindowStart,
       bookingWindowEnd: bookingWindowEnd ?? this.bookingWindowEnd,
+      hasBookingWindow: hasBookingWindow ?? this.hasBookingWindow,
       workingDays: workingDays ?? this.workingDays,
       blockedDates: blockedDates ?? this.blockedDates,
       openOverrideDates: openOverrideDates ?? this.openOverrideDates,
@@ -282,6 +243,9 @@ class ArtistBooksSchedule {
       slotDurationMinutes: slotDurationMinutes ?? this.slotDurationMinutes,
       bufferDurationMinutes:
           bufferDurationMinutes ?? this.bufferDurationMinutes,
+      preventDeadGaps: preventDeadGaps ?? this.preventDeadGaps,
+      minBookableSessionMinutes:
+          minBookableSessionMinutes ?? this.minBookableSessionMinutes,
       defaultDepositAmount: defaultDepositAmount ?? this.defaultDepositAmount,
       acceptFlash: acceptFlash ?? this.acceptFlash,
       acceptCustom: acceptCustom ?? this.acceptCustom,
@@ -298,6 +262,7 @@ class ArtistBooksSchedule {
       'earlyAccessHours': earlyAccessHours,
       'bookingWindowStart': bookingWindowStart.toIso8601String(),
       'bookingWindowEnd': bookingWindowEnd.toIso8601String(),
+      'hasBookingWindow': hasBookingWindow,
       'workingDays': workingDays.toList()..sort(),
       'blockedDates': blockedDates.toList()..sort(),
       'openOverrideDates': openOverrideDates.toList()..sort(),
@@ -311,6 +276,8 @@ class ArtistBooksSchedule {
       'endMinute': endTime.minute,
       'slotDurationMinutes': slotDurationMinutes,
       'bufferDurationMinutes': bufferDurationMinutes,
+      'preventDeadGaps': preventDeadGaps,
+      'minBookableSessionMinutes': minBookableSessionMinutes,
       'defaultDepositAmount': defaultDepositAmount,
       'acceptFlash': acceptFlash,
       'acceptCustom': acceptCustom,
@@ -320,6 +287,9 @@ class ArtistBooksSchedule {
   }
 
   factory ArtistBooksSchedule.fromMap(Map<String, dynamic> map) {
+    final parsedSlotDuration =
+        (map['slotDurationMinutes'] as num?)?.toInt() ?? 120;
+    final parsedBuffer = (map['bufferDurationMinutes'] as num?)?.toInt() ?? 60;
     return ArtistBooksSchedule(
       isBooksOpen: map['isBooksOpen'] as bool? ?? true,
       isEarlyAccessOnly: map['isEarlyAccessOnly'] as bool? ?? false,
@@ -335,6 +305,10 @@ class ArtistBooksSchedule {
           ? DateTime.tryParse(map['bookingWindowEnd'] as String) ??
               DateTime(2026, 12, 31)
           : DateTime(2026, 12, 31),
+      hasBookingWindow: map.containsKey('hasBookingWindow')
+          ? (map['hasBookingWindow'] as bool? ?? false)
+          : (map['bookingWindowStart'] != null &&
+              map['bookingWindowEnd'] != null),
       workingDays: map['workingDays'] != null
           ? (map['workingDays'] as List).map((e) => (e as num).toInt()).toSet()
           : const {2, 3, 4, 5, 6},
@@ -352,14 +326,30 @@ class ArtistBooksSchedule {
       maxWorkingDaysPerWeek: (map['maxWorkingDaysPerWeek'] as num?)?.toInt(),
       bookedSlots: (map['bookedSlots'] as List?)
               ?.whereType<Map>()
-              .map((e) => ScheduleSlotEntry.fromMap(Map<String, dynamic>.from(e)))
-              .where((e) => e.dateKey.isNotEmpty && e.timeSlot.isNotEmpty)
+              .map(
+                (e) => ScheduleSlotEntry.fromMap(
+                  Map<String, dynamic>.from(e),
+                  fallbackDurationMinutes:
+                      ScheduleSlotEntry.defaultFallbackDurationMinutes,
+                  fallbackBufferMinutes:
+                      ScheduleSlotEntry.defaultFallbackBufferMinutes,
+                ),
+              )
+              .where((e) => e.date.isNotEmpty && e.time.isNotEmpty)
               .toList() ??
           const [],
       heldSlots: (map['heldSlots'] as List?)
               ?.whereType<Map>()
-              .map((e) => ScheduleSlotEntry.fromMap(Map<String, dynamic>.from(e)))
-              .where((e) => e.dateKey.isNotEmpty && e.timeSlot.isNotEmpty)
+              .map(
+                (e) => ScheduleSlotEntry.fromMap(
+                  Map<String, dynamic>.from(e),
+                  fallbackDurationMinutes:
+                      ScheduleSlotEntry.defaultFallbackDurationMinutes,
+                  fallbackBufferMinutes:
+                      ScheduleSlotEntry.defaultFallbackBufferMinutes,
+                ),
+              )
+              .where((e) => e.date.isNotEmpty && e.time.isNotEmpty)
               .toList() ??
           const [],
       startTime: TimeOfDay(
@@ -370,9 +360,11 @@ class ArtistBooksSchedule {
         hour: (map['endHour'] as num?)?.toInt() ?? 19,
         minute: (map['endMinute'] as num?)?.toInt() ?? 0,
       ),
-      slotDurationMinutes: (map['slotDurationMinutes'] as num?)?.toInt() ?? 120,
-      bufferDurationMinutes:
-          (map['bufferDurationMinutes'] as num?)?.toInt() ?? 30,
+      slotDurationMinutes: parsedSlotDuration,
+      bufferDurationMinutes: parsedBuffer,
+      preventDeadGaps: map['preventDeadGaps'] as bool? ?? true,
+      minBookableSessionMinutes:
+          (map['minBookableSessionMinutes'] as num?)?.toInt() ?? 60,
       defaultDepositAmount:
           (map['defaultDepositAmount'] as num?)?.toInt() ?? 80,
       acceptFlash: map['acceptFlash'] as bool? ?? true,

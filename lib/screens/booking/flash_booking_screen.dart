@@ -9,10 +9,14 @@ import '../../features/appointments/domain/models/appointment_item.dart';
 import '../../features/messages/domain/models/message_thread.dart';
 import '../../models/artist.dart';
 import '../../models/artist_dashboard/artist_books_schedule.dart';
+import '../../models/artist_dashboard/book_drop.dart';
 import '../../models/artist_dashboard/dashboard_appointment.dart';
 import '../../models/booking.dart';
+import '../../repositories/artist_availability_calculator.dart';
 import '../../repositories/artist_dashboard_repository.dart';
 import '../../services/booking_sync_service.dart';
+import '../../services/scheduling/booking_slot_profile.dart';
+import '../../services/scheduling/slot_availability_engine.dart';
 import '../../services/stripe_service.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';
@@ -66,13 +70,18 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
     return widget.flash.artistId.trim();
   }
 
+  int get _flashDurationMinutes => SlotAvailabilityEngine.parseDurationMinutes(
+        widget.flash.estimatedTime,
+        fallbackMinutes: _effectiveSchedule.slotDurationMinutes,
+      );
+
   bool _addedToCalendar = false;
   bool _isAddingToCalendar = false;
 
   // Step 1 State: Date & Time
   late DateTime _currentMonth;
   late DateTime _selectedDate;
-  String _selectedTimeSlot = '1:30 PM';
+  String _selectedTimeSlot = '10:00 AM';
   late String _selectedPlacement;
   bool _isSilentSession = false;
 
@@ -163,7 +172,9 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
   void _syncDefaultSelectionForSchedule({DateTime? now}) {
     final effectiveNow = now ?? DateTime.now();
     final schedule = _effectiveSchedule;
+    final repoSchedule = ArtistDashboardRepository.booksSchedule;
     final artistId = _effectiveArtistId.isNotEmpty ? _effectiveArtistId : null;
+    final durationMins = _flashDurationMinutes;
 
     DateTime candidate = DateTime(
       effectiveNow.year,
@@ -176,6 +187,8 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           schedule: schedule,
           artistId: artistId,
           now: effectiveNow,
+          durationMinutes: durationMins,
+          slotType: BookingSlotType.flash,
         ) &&
         guard < 60) {
       candidate = DateTime(candidate.year, candidate.month, candidate.day + 1);
@@ -186,35 +199,43 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       schedule: schedule,
       artistId: artistId,
       now: effectiveNow,
+      durationMinutes: durationMins,
+      slotType: BookingSlotType.flash,
     )) {
       _selectedDate = candidate;
     }
     _currentMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
 
-    final initialSlots = schedule.generateTimeSlots();
-    if (initialSlots.isNotEmpty) {
-      final currentStillOpen = initialSlots.any((s) =>
-          s.time == _selectedTimeSlot &&
-          ArtistDashboardRepository.isSlotBookable(
-            date: _selectedDate,
-            timeSlot: s.time,
-            schedule: schedule,
-            artistId: artistId,
-            now: effectiveNow,
-          ));
-      if (!currentStillOpen) {
-        final firstAvailable = initialSlots.firstWhere(
-          (s) => ArtistDashboardRepository.isSlotBookable(
-            date: _selectedDate,
-            timeSlot: s.time,
-            schedule: schedule,
-            artistId: artistId,
-            now: effectiveNow,
-          ),
-          orElse: () => initialSlots.first,
-        );
-        _selectedTimeSlot = firstAvailable.time;
-      }
+    final openSlots = SlotAvailabilityEngine.generateAvailableSlots(
+      date: _selectedDate,
+      schedule: schedule,
+      slotType: BookingSlotType.flash,
+      requestedDurationMinutes: durationMins,
+      localAppointments: ArtistAvailabilityCalculator.matchingAppointments(
+        schedule: schedule,
+        repoSchedule: repoSchedule,
+        calendarAppointments: ArtistDashboardRepository.calendarAppointments,
+        artistId: artistId,
+      ),
+      localHolds: ArtistAvailabilityCalculator.activeLocalHolds(
+        schedule: schedule,
+        repoSchedule: repoSchedule,
+        customHolds: ArtistDashboardRepository.customHolds,
+        now: effectiveNow,
+      ),
+      now: effectiveNow,
+      enforceLeadTime:
+          ArtistDashboardRepository.bookingMode == BookingMode.alwaysOpen,
+      hasBookingOrHoldOnDay: ArtistDashboardRepository.isDateOccupied(
+        _selectedDate,
+        schedule: schedule,
+        artistId: artistId,
+        now: effectiveNow,
+      ),
+    );
+    if (openSlots.isNotEmpty &&
+        !openSlots.any((s) => s.time == _selectedTimeSlot)) {
+      _selectedTimeSlot = openSlots.first.time;
     }
   }
 
@@ -401,26 +422,41 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
 
   void _handleDateSelected(DateTime cellDate) {
     final artistId = _effectiveArtistId.isNotEmpty ? _effectiveArtistId : null;
+    final schedule = _effectiveSchedule;
+    final repoSchedule = ArtistDashboardRepository.booksSchedule;
+    final now = DateTime.now();
     setState(() {
       _selectedDate = cellDate;
-      final slots = _effectiveSchedule.generateTimeSlots();
-      if (slots.isNotEmpty &&
-          !ArtistDashboardRepository.isSlotBookable(
-            date: cellDate,
-            timeSlot: _selectedTimeSlot,
-            schedule: _effectiveSchedule,
-            artistId: artistId,
-          )) {
-        final firstOpen = slots.firstWhere(
-          (s) => ArtistDashboardRepository.isSlotBookable(
-            date: cellDate,
-            timeSlot: s.time,
-            schedule: _effectiveSchedule,
-            artistId: artistId,
-          ),
-          orElse: () => slots.first,
-        );
-        _selectedTimeSlot = firstOpen.time;
+      final openSlots = SlotAvailabilityEngine.generateAvailableSlots(
+        date: cellDate,
+        schedule: schedule,
+        slotType: BookingSlotType.flash,
+        requestedDurationMinutes: _flashDurationMinutes,
+        localAppointments: ArtistAvailabilityCalculator.matchingAppointments(
+          schedule: schedule,
+          repoSchedule: repoSchedule,
+          calendarAppointments: ArtistDashboardRepository.calendarAppointments,
+          artistId: artistId,
+        ),
+        localHolds: ArtistAvailabilityCalculator.activeLocalHolds(
+          schedule: schedule,
+          repoSchedule: repoSchedule,
+          customHolds: ArtistDashboardRepository.customHolds,
+          now: now,
+        ),
+        now: now,
+        enforceLeadTime:
+            ArtistDashboardRepository.bookingMode == BookingMode.alwaysOpen,
+        hasBookingOrHoldOnDay: ArtistDashboardRepository.isDateOccupied(
+          cellDate,
+          schedule: schedule,
+          artistId: artistId,
+          now: now,
+        ),
+      );
+      if (openSlots.isNotEmpty &&
+          !openSlots.any((s) => s.time == _selectedTimeSlot)) {
+        _selectedTimeSlot = openSlots.first.time;
       }
     });
   }
@@ -479,12 +515,20 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       _isProcessingPayment = true;
     });
 
+    final selectedStartMinutes =
+        ScheduleSlotEntry.parseTimeLabelToMinutes(_selectedTimeSlot);
+    final selectedDurationMinutes = _flashDurationMinutes;
+    final selectedBufferMinutes = _effectiveSchedule.bufferDurationMinutes;
+
     if (_effectiveArtistId.isNotEmpty &&
         (!MockDataConfig.isEnabled || widget.firestore != null)) {
       final check = await BookingSyncService.verifySlotAvailableInCloud(
         artistId: _effectiveArtistId,
         date: _selectedDate,
         timeSlot: _selectedTimeSlot,
+        startMinutes: selectedStartMinutes,
+        durationMinutes: selectedDurationMinutes,
+        bufferMinutes: selectedBufferMinutes,
         firestore: widget.firestore,
       );
       if (!mounted) return;
@@ -517,6 +561,9 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       bookingId: _confirmationCode,
       selectedDate: _selectedDate.toIso8601String(),
       selectedTimeSlot: _selectedTimeSlot,
+      startMinutes: selectedStartMinutes,
+      durationMinutes: selectedDurationMinutes,
+      bufferMinutes: selectedBufferMinutes,
       placement: _selectedPlacement,
       clientNotes: _notesController.text.trim().isNotEmpty
           ? _notesController.text.trim()
@@ -585,6 +632,9 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           flashImageUrl: widget.flash.imageUrl,
           selectedDate: booking.selectedDate.toIso8601String(),
           selectedTimeSlot: booking.selectedTimeSlot,
+          startMinutes: selectedStartMinutes,
+          durationMinutes: selectedDurationMinutes,
+          bufferMinutes: selectedBufferMinutes,
           placement: booking.placement,
           clientName: booking.clientName,
           clientAvatar: clientAvatar,
@@ -633,6 +683,9 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         final newEntry = ScheduleSlotEntry(
           dateKey: ArtistBooksSchedule.dateKey(booking.selectedDate),
           timeSlot: booking.selectedTimeSlot,
+          startMinutes: selectedStartMinutes,
+          durationMinutes: selectedDurationMinutes,
+          bufferMinutes: selectedBufferMinutes,
         );
         _remoteArtistSchedule = _remoteArtistSchedule!.copyWith(
           bookedSlots: [..._remoteArtistSchedule!.bookedSlots, newEntry],
@@ -826,6 +879,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       case 0:
         return BookingStepSchedule(
           flash: widget.flash,
+          flashDurationMinutes: _flashDurationMinutes,
           artistName: _artistName,
           artistId: artistId,
           schedule: _effectiveSchedule,

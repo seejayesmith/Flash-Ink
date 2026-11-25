@@ -1,6 +1,8 @@
 import '../models/artist_dashboard/artist_books_schedule.dart';
 import '../models/artist_dashboard/book_drop.dart';
 import '../models/artist_dashboard/dashboard_appointment.dart';
+import '../services/scheduling/booking_slot_profile.dart';
+import '../services/scheduling/slot_availability_engine.dart';
 
 /// Stateless availability, occupancy, weekly-cap, and capacity calculator for
 /// an artist's booking schedule.
@@ -188,7 +190,36 @@ class ArtistAvailabilityCalculator {
     required ArtistBooksSchedule repoSchedule,
     required List<DashboardAppointment> calendarAppointments,
     String? artistId,
+    int? startMinutes,
+    int? durationMinutes,
+    int? bufferMinutes,
   }) {
+    final resolvedStart =
+        startMinutes ?? ScheduleSlotEntry.parseTimeLabelToMinutes(timeSlot);
+    if (resolvedStart != null) {
+      final resolvedDuration = durationMinutes ?? schedule.slotDurationMinutes;
+      final resolvedBuffer = bufferMinutes ?? schedule.bufferDurationMinutes;
+      final candidateEnd = resolvedStart + resolvedDuration + resolvedBuffer;
+      final occupied = SlotAvailabilityEngine.collectOccupiedForDate(
+        date: date,
+        schedule: schedule,
+        localAppointments: matchingAppointments(
+          schedule: schedule,
+          repoSchedule: repoSchedule,
+          calendarAppointments: calendarAppointments,
+          artistId: artistId,
+        ),
+      );
+      return occupied.booked.any(
+        (b) => SlotAvailabilityEngine.intervalsOverlap(
+          resolvedStart,
+          candidateEnd,
+          b.startMinutes,
+          b.endMinutes,
+        ),
+      );
+    }
+
     final key = ArtistBooksSchedule.dateKey(date);
     final targetTime = ArtistBooksSchedule.normalizeTimeLabel(timeSlot);
 
@@ -210,7 +241,7 @@ class ArtistAvailabilityCalculator {
     });
   }
 
-  /// Checks whether a time slot currently has an active (non-expired) 24h custom hold.
+  /// Checks whether a time slot interval overlaps an active (non-expired) 24h custom hold.
   static bool hasActiveHoldForSlot({
     required DateTime date,
     required String timeSlot,
@@ -218,14 +249,47 @@ class ArtistAvailabilityCalculator {
     required ArtistBooksSchedule repoSchedule,
     required List<CustomHold> customHolds,
     DateTime? now,
+    int? startMinutes,
+    int? durationMinutes,
+    int? bufferMinutes,
+    String? ignoreHoldId,
   }) {
     final effectiveNow = now ?? DateTime.now();
+    final resolvedStart =
+        startMinutes ?? ScheduleSlotEntry.parseTimeLabelToMinutes(timeSlot);
+    if (resolvedStart != null) {
+      final resolvedDuration = durationMinutes ?? schedule.slotDurationMinutes;
+      final resolvedBuffer = bufferMinutes ?? schedule.bufferDurationMinutes;
+      final candidateEnd = resolvedStart + resolvedDuration + resolvedBuffer;
+      final occupied = SlotAvailabilityEngine.collectOccupiedForDate(
+        date: date,
+        schedule: schedule,
+        localHolds: activeLocalHolds(
+          schedule: schedule,
+          repoSchedule: repoSchedule,
+          customHolds: customHolds,
+          now: effectiveNow,
+        ),
+        now: effectiveNow,
+        ignoreHoldId: ignoreHoldId,
+      );
+      return occupied.held.any(
+        (h) => SlotAvailabilityEngine.intervalsOverlap(
+          resolvedStart,
+          candidateEnd,
+          h.startMinutes,
+          h.endMinutes,
+        ),
+      );
+    }
+
     final key = ArtistBooksSchedule.dateKey(date);
     final targetTime = ArtistBooksSchedule.normalizeTimeLabel(timeSlot);
 
     if (schedule.heldSlots.any((entry) =>
         entry.dateKey == key &&
         entry.isActiveAt(effectiveNow) &&
+        (ignoreHoldId == null || entry.holdId != ignoreHoldId) &&
         ArtistBooksSchedule.normalizeTimeLabel(entry.timeSlot) == targetTime)) {
       return true;
     }
@@ -236,6 +300,7 @@ class ArtistAvailabilityCalculator {
       customHolds: customHolds,
       now: effectiveNow,
     ).any((hold) {
+      if (ignoreHoldId != null && hold.id == ignoreHoldId) return false;
       return ArtistBooksSchedule.dateKey(hold.date) == key &&
           ArtistBooksSchedule.normalizeTimeLabel(hold.timeSlot) == targetTime;
     });
@@ -292,7 +357,40 @@ class ArtistAvailabilityCalculator {
     required BookingMode mode,
     required DateTime now,
     required bool hasBookingOrHoldOnDay,
+    int? startMinutes,
+    int? durationMinutes,
+    int? bufferMinutes,
+    String? ignoreHoldId,
   }) {
+    final resolvedStart =
+        startMinutes ?? ScheduleSlotEntry.parseTimeLabelToMinutes(timeSlot);
+    if (resolvedStart != null) {
+      return SlotAvailabilityEngine.isIntervalAvailable(
+        date: dayOnly,
+        startMinutes: resolvedStart,
+        durationMinutes: durationMinutes ?? schedule.slotDurationMinutes,
+        bufferMinutes: bufferMinutes ?? schedule.bufferDurationMinutes,
+        schedule: schedule,
+        localAppointments: matchingAppointments(
+          schedule: schedule,
+          repoSchedule: repoSchedule,
+          calendarAppointments: calendarAppointments,
+          artistId: artistId,
+        ),
+        localHolds: activeLocalHolds(
+          schedule: schedule,
+          repoSchedule: repoSchedule,
+          customHolds: customHolds,
+          now: now,
+        ),
+        now: now,
+        enforceLeadTime: mode == BookingMode.alwaysOpen,
+        hasBookingOrHoldOnDay: hasBookingOrHoldOnDay,
+        requireBufferBeforeClose: false,
+        ignoreHoldId: ignoreHoldId,
+      );
+    }
+
     if (isTimeSlotBooked(
       date: dayOnly,
       timeSlot: timeSlot,
@@ -310,6 +408,7 @@ class ArtistAvailabilityCalculator {
       repoSchedule: repoSchedule,
       customHolds: customHolds,
       now: now,
+      ignoreHoldId: ignoreHoldId,
     )) {
       return false;
     }
@@ -338,6 +437,10 @@ class ArtistAvailabilityCalculator {
     required bool isPaused,
     String? artistId,
     DateTime? now,
+    int? startMinutes,
+    int? durationMinutes,
+    int? bufferMinutes,
+    String? ignoreHoldId,
   }) {
     final effectiveNow = now ?? DateTime.now();
     final dayOnly = DateTime(date.year, date.month, date.day);
@@ -379,6 +482,10 @@ class ArtistAvailabilityCalculator {
       mode: mode,
       now: effectiveNow,
       hasBookingOrHoldOnDay: hasBookingOrHoldOnDay,
+      startMinutes: startMinutes,
+      durationMinutes: durationMinutes,
+      bufferMinutes: bufferMinutes,
+      ignoreHoldId: ignoreHoldId,
     );
   }
 
@@ -392,6 +499,8 @@ class ArtistAvailabilityCalculator {
     required bool isPaused,
     String? artistId,
     DateTime? now,
+    int? durationMinutes,
+    BookingSlotType slotType = BookingSlotType.flash,
   }) {
     final effectiveNow = now ?? DateTime.now();
     final dayOnly = DateTime(date.year, date.month, date.day);
@@ -413,9 +522,6 @@ class ArtistAvailabilityCalculator {
       return false;
     }
 
-    final slots = schedule.generateTimeSlots();
-    if (slots.isEmpty) return false;
-
     final hasBookingOrHoldOnDay = isDateOccupied(
       date: dayOnly,
       schedule: schedule,
@@ -426,20 +532,29 @@ class ArtistAvailabilityCalculator {
       now: effectiveNow,
     );
 
-    return slots.any(
-      (slot) => _isSlotBookableOnPrevalidatedDay(
-        dayOnly: dayOnly,
-        timeSlot: slot.time,
+    final availableSlots = SlotAvailabilityEngine.generateAvailableSlots(
+      date: dayOnly,
+      schedule: schedule,
+      slotType: slotType,
+      requestedDurationMinutes: durationMinutes,
+      localAppointments: matchingAppointments(
         schedule: schedule,
         repoSchedule: repoSchedule,
         calendarAppointments: calendarAppointments,
-        customHolds: customHolds,
         artistId: artistId,
-        mode: mode,
-        now: effectiveNow,
-        hasBookingOrHoldOnDay: hasBookingOrHoldOnDay,
       ),
+      localHolds: activeLocalHolds(
+        schedule: schedule,
+        repoSchedule: repoSchedule,
+        customHolds: customHolds,
+        now: effectiveNow,
+      ),
+      now: effectiveNow,
+      enforceLeadTime: mode == BookingMode.alwaysOpen,
+      hasBookingOrHoldOnDay: hasBookingOrHoldOnDay,
     );
+
+    return availableSlots.isNotEmpty;
   }
 
   static bool _isDateInActiveDrop(DateTime date, BookDrop? drop) {

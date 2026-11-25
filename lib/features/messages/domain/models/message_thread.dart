@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../../../core/mock/mock_data_config.dart';
 import '../../../../core/mock/mock_fixtures.dart';
+import '../../../../models/artist_dashboard/schedule_slot_entry.dart';
 
 enum ChatMessageType { text, receipt, image, file, proposal }
 
@@ -8,27 +9,61 @@ enum ChatMessageType { text, receipt, image, file, proposal }
 class ProposedTimeOption {
   final DateTime date;
   final String timeSlot;
+  final int startMinutes;
+  final int durationMinutes;
 
-  const ProposedTimeOption({
+  ProposedTimeOption({
     required this.date,
-    required this.timeSlot,
-  });
+    String? timeSlot,
+    int? startMinutes,
+    this.durationMinutes = 120,
+  })  : startMinutes = startMinutes ??
+            ScheduleSlotEntry.parseTimeLabelToMinutes(timeSlot ?? '') ??
+            0,
+        timeSlot = (timeSlot != null && timeSlot.trim().isNotEmpty)
+            ? timeSlot.trim()
+            : ScheduleSlotEntry.formatMinutesToTimeLabel(startMinutes ?? 0);
 
   String get uniqueKey =>
-      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}__${timeSlot.split('(').first.trim().toUpperCase()}';
+      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}__$startMinutes';
+
+  ProposedTimeOption copyWith({
+    DateTime? date,
+    String? timeSlot,
+    int? startMinutes,
+    int? durationMinutes,
+  }) {
+    return ProposedTimeOption(
+      date: date ?? this.date,
+      timeSlot: timeSlot ?? this.timeSlot,
+      startMinutes: startMinutes ?? this.startMinutes,
+      durationMinutes: durationMinutes ?? this.durationMinutes,
+    );
+  }
 
   Map<String, dynamic> toMap() => {
         'date': DateTime(date.year, date.month, date.day).toIso8601String(),
         'timeSlot': timeSlot,
+        'startMinutes': startMinutes,
+        'durationMinutes': durationMinutes,
       };
 
   factory ProposedTimeOption.fromMap(Map<String, dynamic> map) {
     final parsedDate = map['date'] is String
         ? DateTime.tryParse(map['date'] as String) ?? DateTime.now()
         : DateTime.now();
+    final rawTime = (map['timeSlot'] ?? map['time'] ?? '').toString();
+    final parsedStart = (map['startMinutes'] as num?)?.toInt() ??
+        ScheduleSlotEntry.parseTimeLabelToMinutes(rawTime) ??
+        0;
+    final parsedDuration = (map['durationMinutes'] as num?)?.toInt() ?? 120;
     return ProposedTimeOption(
       date: DateTime(parsedDate.year, parsedDate.month, parsedDate.day),
-      timeSlot: (map['timeSlot'] ?? map['time'] ?? '').toString(),
+      timeSlot: rawTime.isNotEmpty
+          ? rawTime
+          : ScheduleSlotEntry.formatMinutesToTimeLabel(parsedStart),
+      startMinutes: parsedStart,
+      durationMinutes: parsedDuration,
     );
   }
 

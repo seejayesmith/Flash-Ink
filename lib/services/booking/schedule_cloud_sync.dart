@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../models/artist_dashboard/artist_books_schedule.dart';
 import '../../models/waitlist_entry.dart';
 import '../../repositories/artist_dashboard_repository.dart';
+import '../scheduling/slot_availability_engine.dart';
 
 /// Handles Firestore synchronization and availability verification for artist
 /// booking schedules, 24h held slots, and VIP waitlist entries.
@@ -127,6 +128,10 @@ class ScheduleCloudSync {
     required String artistId,
     required DateTime date,
     required String timeSlot,
+    int? startMinutes,
+    int? durationMinutes,
+    int? bufferMinutes,
+    String? ignoreHoldId,
     FirebaseFirestore? firestore,
   }) async {
     final cleanArtistId = artistId.trim();
@@ -147,6 +152,8 @@ class ScheduleCloudSync {
       cleanArtistId,
       firestore: db,
     );
+    ArtistBooksSchedule effectiveSchedule =
+        fetched ?? ArtistDashboardRepository.booksSchedule;
 
     final extraBooked = <ScheduleSlotEntry>[];
     const excludedStatuses = {
@@ -156,7 +163,15 @@ class ScheduleCloudSync {
       'passed',
     };
 
-    void collectSlot(dynamic rawDate, dynamic rawTime, dynamic rawStatus) {
+    void collectSlot(
+      dynamic rawDate,
+      dynamic rawTime,
+      dynamic rawStatus, {
+      dynamic rawStartMinutes,
+      dynamic rawDurationMinutes,
+      dynamic rawDurationLabel,
+      dynamic rawBufferMinutes,
+    }) {
       final status = (rawStatus ?? 'confirmed').toString().trim().toLowerCase();
       if (excludedStatuses.contains(status)) return;
       DateTime? parsedDate;
@@ -167,11 +182,28 @@ class ScheduleCloudSync {
       }
       if (parsedDate == null) return;
       final rawTimeStr = (rawTime ?? '').toString().split('(').first.trim();
-      if (rawTimeStr.isEmpty) return;
+      final parsedStart = rawStartMinutes is num
+          ? rawStartMinutes.toInt()
+          : ScheduleSlotEntry.parseTimeLabelToMinutes(rawTimeStr);
+      if (rawTimeStr.isEmpty && parsedStart == null) return;
+
+      final resolvedDuration = rawDurationMinutes is num
+          ? rawDurationMinutes.toInt()
+          : SlotAvailabilityEngine.parseDurationMinutes(
+              rawDurationLabel?.toString(),
+              fallbackMinutes: effectiveSchedule.slotDurationMinutes,
+            );
+      final resolvedBuffer = rawBufferMinutes is num
+          ? rawBufferMinutes.toInt()
+          : effectiveSchedule.bufferDurationMinutes;
+
       extraBooked.add(
         ScheduleSlotEntry(
           dateKey: ArtistBooksSchedule.dateKey(parsedDate),
           timeSlot: rawTimeStr,
+          startMinutes: parsedStart,
+          durationMinutes: resolvedDuration,
+          bufferMinutes: resolvedBuffer,
         ),
       );
     }
@@ -183,7 +215,15 @@ class ScheduleCloudSync {
           .get();
       for (final doc in aptSnap.docs) {
         final data = doc.data();
-        collectSlot(data['scheduledDate'], data['time'], data['status']);
+        collectSlot(
+          data['scheduledDate'],
+          data['time'],
+          data['status'],
+          rawStartMinutes: data['startMinutes'],
+          rawDurationMinutes: data['durationMinutes'],
+          rawDurationLabel: data['duration'],
+          rawBufferMinutes: data['bufferMinutes'],
+        );
       }
     } catch (_) {}
 
@@ -198,20 +238,20 @@ class ScheduleCloudSync {
           data['selectedDate'],
           data['selectedTimeSlot'],
           data['status'],
+          rawStartMinutes: data['startMinutes'],
+          rawDurationMinutes: data['durationMinutes'],
+          rawDurationLabel: data['duration'],
+          rawBufferMinutes: data['bufferMinutes'],
         );
       }
     } catch (_) {}
 
-    ArtistBooksSchedule effectiveSchedule =
-        fetched ?? ArtistDashboardRepository.booksSchedule;
     if (extraBooked.isNotEmpty) {
       final merged = <String, ScheduleSlotEntry>{
         for (final e in effectiveSchedule.bookedSlots)
-          '${e.dateKey}__${ArtistBooksSchedule.normalizeTimeLabel(e.timeSlot)}':
-              e,
+          '${e.dateKey}__${e.startMinutes}__${e.endMinutes}': e,
         for (final e in extraBooked)
-          '${e.dateKey}__${ArtistBooksSchedule.normalizeTimeLabel(e.timeSlot)}':
-              e,
+          '${e.dateKey}__${e.startMinutes}__${e.endMinutes}': e,
       };
       effectiveSchedule = effectiveSchedule.copyWith(
         bookedSlots: merged.values.toList(),
@@ -223,6 +263,10 @@ class ScheduleCloudSync {
       timeSlot: timeSlot,
       schedule: effectiveSchedule,
       artistId: cleanArtistId,
+      startMinutes: startMinutes,
+      durationMinutes: durationMinutes,
+      bufferMinutes: bufferMinutes ?? effectiveSchedule.bufferDurationMinutes,
+      ignoreHoldId: ignoreHoldId,
     );
     return (
       available: isAvailable,

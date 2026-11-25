@@ -13,13 +13,13 @@ class BookingTimeSlot {
   });
 
   static const List<BookingTimeSlot> defaultSlots = [
-    BookingTimeSlot(time: '10:00 AM', period: 'Morning'),
-    BookingTimeSlot(time: '11:30 AM', period: 'Morning'),
-    BookingTimeSlot(time: '1:30 PM', period: 'Afternoon'),
+    BookingTimeSlot(time: '11:00 AM', period: 'Morning'),
+    BookingTimeSlot(time: '12:00 PM', period: 'Afternoon'),
+    BookingTimeSlot(time: '1:00 PM', period: 'Afternoon'),
+    BookingTimeSlot(time: '2:00 PM', period: 'Afternoon'),
     BookingTimeSlot(time: '3:00 PM', period: 'Afternoon'),
-    BookingTimeSlot(time: '4:30 PM', period: 'Afternoon'),
-    BookingTimeSlot(time: '6:00 PM', period: 'Evening'),
-    BookingTimeSlot(time: '7:30 PM', period: 'Evening'),
+    BookingTimeSlot(time: '4:00 PM', period: 'Afternoon'),
+    BookingTimeSlot(time: '5:00 PM', period: 'Evening'),
   ];
 }
 

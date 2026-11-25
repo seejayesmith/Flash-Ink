@@ -50,6 +50,7 @@ void main() {
       artistName: 'Ari Ink',
       title: 'Dagger Study',
       imageUrl: 'assets/images/flash_traditional_dagger.jpg',
+      estimatedTime: '2.0 hrs',
       price: 250,
       deposit: 80,
     );
@@ -84,7 +85,7 @@ void main() {
         openOverrideDates: const {'2026-12-20'},
         minLeadTimeHours: 48,
         maxWorkingDaysPerWeek: 3,
-        bookedSlots: const [
+        bookedSlots: [
           ScheduleSlotEntry(dateKey: '2026-12-10', timeSlot: '1:30 PM'),
         ],
         heldSlots: [
@@ -176,6 +177,26 @@ void main() {
         ),
         isTrue,
       );
+
+      // When hasBookingWindow is false (Always Open default), any future working day is bookable
+      ArtistDashboardRepository.booksSchedule =
+          ArtistDashboardRepository.booksSchedule.copyWith(
+        hasBookingWindow: false,
+      );
+      expect(
+        ArtistDashboardRepository.isDateBookable(
+          date: DateTime(2026, 12, 4),
+          now: fixedNow,
+        ),
+        isTrue,
+      );
+      expect(
+        ArtistDashboardRepository.isDateBookable(
+          date: DateTime(2027, 6, 15),
+          now: fixedNow,
+        ),
+        isTrue,
+      );
     });
 
     test('empty-day minimum lead time blocks empty early days but keeps already-booked days open', () {
@@ -199,7 +220,7 @@ void main() {
         isFalse,
       );
 
-      // Empty tomorrow (Dec 2): 10:00 AM is < 2:00 PM cutoff, 3:00 PM >= cutoff
+      // Empty tomorrow (Dec 2): 11:00 AM is < 2:00 PM cutoff, 3:00 PM >= cutoff
       expect(
         ArtistDashboardRepository.isDateBookable(date: wedDec2, now: fixedNow),
         isTrue,
@@ -207,7 +228,7 @@ void main() {
       expect(
         ArtistDashboardRepository.isSlotBookable(
           date: wedDec2,
-          timeSlot: '10:00 AM',
+          timeSlot: '11:00 AM',
           now: fixedNow,
         ),
         isFalse,
@@ -221,8 +242,8 @@ void main() {
         isTrue,
       );
 
-      // Add a confirmed appointment on Wed Dec 2 at 6:00 PM -> day is no longer empty,
-      // so remaining future morning slot 10:00 AM unlocks for client booking!
+      // Add a confirmed appointment on Wed Dec 2 at 5:00 PM -> day is no longer empty,
+      // so remaining future morning slot 11:00 AM unlocks for client booking!
       ArtistDashboardRepository.calendarAppointments
         ..clear()
         ..add(
@@ -230,14 +251,14 @@ void main() {
             'clientName': 'Existing Client',
             'serviceType': 'Flash Session',
             'duration': '2 hrs',
-            'time': '6:00 PM',
+            'time': '5:00 PM',
             'scheduledDate': DateTime(2026, 12, 2).toIso8601String(),
           }, 'apt_dec2'),
         );
       expect(
         ArtistDashboardRepository.isSlotBookable(
           date: wedDec2,
-          timeSlot: '10:00 AM',
+          timeSlot: '11:00 AM',
           now: fixedNow,
         ),
         isTrue,
@@ -259,7 +280,7 @@ void main() {
             'clientName': 'Booker One',
             'serviceType': 'Custom Tattoo',
             'duration': '2 hrs',
-            'time': '1:30 PM',
+            'time': '2:00 PM',
             'scheduledDate': tueDec8.toIso8601String(),
           }, 'apt_cap_1'),
         );
@@ -309,7 +330,7 @@ void main() {
       expect(
         ArtistDashboardRepository.isSlotBookable(
           date: tueDec8,
-          timeSlot: '10:00 AM',
+          timeSlot: '11:00 AM',
           now: fixedNow,
         ),
         isTrue,
@@ -317,7 +338,7 @@ void main() {
       expect(
         ArtistDashboardRepository.isSlotBookable(
           date: thuDec10,
-          timeSlot: '10:00 AM',
+          timeSlot: '11:00 AM',
           now: fixedNow,
         ),
         isTrue,
@@ -378,6 +399,8 @@ void main() {
         bookingWindowEnd: DateTime(now.year, now.month + 3, 1),
         workingDays: const {2, 3, 4, 5, 6},
         blockedDates: {ArtistBooksSchedule.dateKey(targetWed)},
+        startTime: const TimeOfDay(hour: 10, minute: 0),
+        endTime: const TimeOfDay(hour: 19, minute: 0),
         minLeadTimeHours: 0,
         maxWorkingDaysPerWeek: 1,
         heldSlots: const [],
@@ -391,17 +414,17 @@ void main() {
         [
           ScheduleSlotEntry(
             dateKey: ArtistBooksSchedule.dateKey(targetTue),
-            timeSlot: '3:00 PM',
+            timeSlot: '5:00 PM',
             expiresAt: now.add(const Duration(hours: 24)),
           ),
         ],
         artistId: artist.id,
         firestore: fakeDb,
       );
-      // Simulate server Cloud Function writing anonymized bookedSlots
+      // Simulate server Cloud Function writing anonymized bookedSlots (legacy {date, time} format)
       await fakeDb.collection('artist_schedules').doc(artist.id).set({
         'bookedSlots': [
-          {'date': ArtistBooksSchedule.dateKey(targetTue), 'time': '1:30 PM'},
+          {'date': ArtistBooksSchedule.dateKey(targetTue), 'time': '1:00 PM'},
         ],
       }, SetOptions(merge: true));
 
@@ -411,8 +434,8 @@ void main() {
       );
       expect(fetched, isNotNull);
       expect(fetched!.blockedDates, {ArtistBooksSchedule.dateKey(targetWed)});
-      expect(fetched.bookedSlots.single.timeSlot, '1:30 PM');
-      expect(fetched.heldSlots.single.timeSlot, '3:00 PM');
+      expect(fetched.bookedSlots.single.timeSlot, '1:00 PM');
+      expect(fetched.heldSlots.single.timeSlot, '5:00 PM');
 
       // Remote schedule has targetTue booked/held and cap=1, so targetThu (same week) is cap-closed
       expect(
@@ -445,7 +468,7 @@ void main() {
       expect(
         ArtistDashboardRepository.isSlotBookable(
           date: targetTue,
-          timeSlot: '1:30 PM',
+          timeSlot: '1:00 PM',
           schedule: fetched,
           artistId: artist.id,
           now: now,
@@ -455,7 +478,7 @@ void main() {
       expect(
         ArtistDashboardRepository.isSlotBookable(
           date: targetTue,
-          timeSlot: '3:00 PM',
+          timeSlot: '5:00 PM',
           schedule: fetched,
           artistId: artist.id,
           now: now,
@@ -499,13 +522,15 @@ void main() {
         'bookingWindowStart': DateTime(now.year, now.month, 1).toIso8601String(),
         'bookingWindowEnd': DateTime(now.year, now.month + 3, 1).toIso8601String(),
         'workingDays': [targetDate.weekday],
+        'startHour': 10,
+        'endHour': 19,
         'bookedSlots': [
-          {'date': targetKey, 'time': '1:30 PM'},
+          {'date': targetKey, 'time': '1:00 PM'},
         ],
         'heldSlots': [
           {
             'date': targetKey,
-            'time': '3:00 PM',
+            'time': '5:00 PM',
             'expiresAt': now.add(const Duration(hours: 20)).toIso8601String(),
           },
         ],
@@ -522,8 +547,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('1:30 PM (Booked)'), findsOneWidget);
-      expect(find.text('3:00 PM (Held)'), findsOneWidget);
+      expect(find.text('1:00 PM (Booked)'), findsOneWidget);
+      expect(find.text('4:00 PM (Held)'), findsOneWidget);
       expect(find.text('10:00 AM'), findsOneWidget);
     });
 
@@ -542,8 +567,10 @@ void main() {
         'bookingWindowStart': DateTime(now.year, now.month, 1).toIso8601String(),
         'bookingWindowEnd': DateTime(now.year, now.month + 3, 1).toIso8601String(),
         'workingDays': [targetDate.weekday],
+        'startHour': 10,
+        'endHour': 19,
         'bookedSlots': [
-          {'date': targetKey, 'time': '1:30 PM'},
+          {'date': targetKey, 'time': '2:00 PM'},
         ],
       });
 
@@ -558,7 +585,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('1:30 PM (Booked)'), findsOneWidget);
+      expect(find.text('2:00 PM (Booked)'), findsOneWidget);
     });
 
     testWidgets('pre-payment double-booking check rejects slot booked concurrently in Firestore', (tester) async {
@@ -580,6 +607,8 @@ void main() {
         'bookingWindowStart': DateTime(now.year, now.month, 1).toIso8601String(),
         'bookingWindowEnd': DateTime(now.year, now.month + 3, 1).toIso8601String(),
         'workingDays': [targetDate.weekday],
+        'startHour': 10,
+        'endHour': 19,
         'bookedSlots': [],
       });
 
@@ -718,7 +747,9 @@ void main() {
       await tester.tap(find.byKey(const Key('lead_time_chip_0')));
       await tester.ensureVisible(find.byKey(const Key('weekly_cap_chip_none')));
       await tester.tap(find.byKey(const Key('weekly_cap_chip_none')));
-      await tester.drag(find.byType(SingleChildScrollView).first, const Offset(0, -500));
+      await tester.drag(find.byType(SingleChildScrollView).first, const Offset(0, -600));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('save_books_schedule_button')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('save_books_schedule_button')));
       await tester.pumpAndSettle();
