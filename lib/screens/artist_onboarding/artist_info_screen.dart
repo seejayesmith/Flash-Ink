@@ -348,7 +348,7 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
           'name': name,
           'displayName': name,
           'username': cleanUsername,
-          'isBooksOpen': true,
+          'isBooksOpen': false,
           'profileCompleted': false,
           'rating': 5.0,
           'availablePieces': 0,
@@ -624,7 +624,7 @@ class _ArtistInfoScreenState extends State<ArtistInfoScreen> {
   Widget build(BuildContext context) {
     return OnboardingStepScaffold(
       currentStep: 1,
-      totalSteps: 9,
+      totalSteps: 10,
       onBack: Navigator.canPop(context)
           ? () {
               FocusManager.instance.primaryFocus?.unfocus();

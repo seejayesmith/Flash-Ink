@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/utils/maps_directions_launcher.dart';
+import '../../../../models/artist_dashboard/artist_books_schedule.dart';
+import '../../../../repositories/artist_dashboard_repository.dart';
+import '../../../../screens/booking/touch_up_booking_screen.dart';
+import '../../../../services/booking_sync_service.dart';
+import '../../../../services/scheduling/touch_up_eligibility.dart';
+import '../../../../services/touch_up_service.dart';
 import '../../../../theme/app_buttons.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
@@ -8,24 +14,79 @@ import '../../../../theme/app_theme.dart';
 import '../../../../widgets/adaptive_glass_container.dart';
 import '../../../../widgets/flash_image.dart';
 import '../../../../widgets/flash_snack_bar.dart';
+import '../../../messages/domain/models/message_thread.dart';
+import '../../../messages/presentation/screens/chat_conversation_screen.dart';
 import '../../domain/models/appointment_item.dart';
 
-/// Comprehensive modal sheet displaying complete appointment session breakdown.
-class AppointmentDetailModal extends StatelessWidget {
+/// Comprehensive modal sheet displaying complete appointment session breakdown,
+/// including self-booked touch-up eligibility and booking for completed tattoos.
+class AppointmentDetailModal extends StatefulWidget {
   final ClientAppointment appointment;
+  final ArtistBooksSchedule? artistScheduleOverride;
+  final List<ClientAppointment>? allAppointmentsOverride;
+  final DateTime? nowOverride;
+  final TouchUpService? touchUpService;
 
   const AppointmentDetailModal({
     super.key,
     required this.appointment,
+    this.artistScheduleOverride,
+    this.allAppointmentsOverride,
+    this.nowOverride,
+    this.touchUpService,
   });
 
-  static Future<void> show(BuildContext context, ClientAppointment appointment) {
+  static Future<void> show(
+    BuildContext context,
+    ClientAppointment appointment, {
+    ArtistBooksSchedule? artistScheduleOverride,
+    List<ClientAppointment>? allAppointmentsOverride,
+    DateTime? nowOverride,
+    TouchUpService? touchUpService,
+  }) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => AppointmentDetailModal(appointment: appointment),
+      builder: (context) => AppointmentDetailModal(
+        appointment: appointment,
+        artistScheduleOverride: artistScheduleOverride,
+        allAppointmentsOverride: allAppointmentsOverride,
+        nowOverride: nowOverride,
+        touchUpService: touchUpService,
+      ),
     );
+  }
+
+  @override
+  State<AppointmentDetailModal> createState() => _AppointmentDetailModalState();
+}
+
+class _AppointmentDetailModalState extends State<AppointmentDetailModal> {
+  late ArtistBooksSchedule _artistSchedule;
+
+  ClientAppointment get appointment => widget.appointment;
+
+  @override
+  void initState() {
+    super.initState();
+    _artistSchedule =
+        widget.artistScheduleOverride ?? ArtistDashboardRepository.booksSchedule;
+    if (widget.artistScheduleOverride == null &&
+        appointment.status == AppointmentStatus.completed &&
+        !appointment.isTouchUp) {
+      _loadRemoteArtistSchedule();
+    }
+  }
+
+  Future<void> _loadRemoteArtistSchedule() async {
+    final artistId = (appointment.artistId ?? '').trim();
+    if (artistId.isEmpty) return;
+    final fetched =
+        await BookingSyncService.fetchArtistScheduleFromCloud(artistId);
+    if (fetched != null && mounted) {
+      setState(() => _artistSchedule = fetched);
+    }
   }
 
   String _formatDate(DateTime dt) {
@@ -34,6 +95,264 @@ class AppointmentDetailModal extends StatelessWidget {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+  }
+
+  MessageThread? _findArtistThread() {
+    final artistId = (appointment.artistId ?? '').trim();
+    final lowerName = appointment.artistName.trim().toLowerCase();
+    final currentUid = BookingSyncService.resolveCurrentUid('');
+    final clientThreads = MessageThread.threadsForClient(currentUid);
+    for (final t in clientThreads) {
+      if (artistId.isNotEmpty && t.artistId.trim() == artistId) return t;
+    }
+    for (final t in clientThreads) {
+      if (lowerName.isNotEmpty &&
+          t.artistName.trim().toLowerCase() == lowerName) {
+        return t;
+      }
+    }
+    return null;
+  }
+
+  void _openChatWithArtist(BuildContext context, {String? fallbackNotice}) {
+    final thread = _findArtistThread();
+    Navigator.pop(context);
+    if (thread != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatConversationScreen(thread: thread),
+        ),
+      );
+    } else {
+      FlashSnackBar.showInfo(
+        context,
+        fallbackNotice ??
+            'Message ${appointment.artistName} from your Messages tab to coordinate.',
+        duration: const Duration(seconds: 2),
+      );
+    }
+  }
+
+  Widget _buildTouchUpSection(BuildContext context) {
+    final eligibility = TouchUpEligibilityService.evaluate(
+      originalAppointment: appointment,
+      schedule: _artistSchedule,
+      allClientAppointments: widget.allAppointmentsOverride,
+      now: widget.nowOverride,
+    );
+
+    if (eligibility.isEligible) {
+      return Container(
+        key: const Key('touch_up_eligible_section'),
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F1C12),
+          borderRadius: BorderRadius.circular(AppRadius.radiusMd),
+          border: Border.all(color: AppTheme.goldBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.healing_outlined,
+                  color: AppTheme.gold,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Touch-up Available',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppTheme.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              eligibility.summary,
+              style: GoogleFonts.plusJakartaSans(
+                color: AppTheme.navInactive,
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 12),
+            AppButtons.primaryCTA(
+              key: const Key('book_touch_up_button'),
+              onPressed: () {
+                final existingThread = _findArtistThread();
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => TouchUpBookingScreen(
+                      originalAppointment: appointment,
+                      initialSchedule: _artistSchedule,
+                      threadId: existingThread?.id,
+                      touchUpService: widget.touchUpService,
+                    ),
+                  ),
+                );
+              },
+              icon: Icons.event_available_outlined,
+              text: eligibility.isFree
+                  ? 'Book Free Touch-up'
+                  : 'Book Touch-up (\$${eligibility.feeDollars})',
+              backgroundColor: AppTheme.gold,
+              foregroundColor: AppTheme.onyxBackground,
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (eligibility.status == TouchUpEligibilityStatus.tooEarlyToHeal) {
+      final unlockLabel = eligibility.availableAfter != null
+          ? 'Available after ${TouchUpEligibilityService.formatShortDate(eligibility.availableAfter!)}'
+          : 'Touch-up Healing Wait';
+      return Container(
+        key: const Key('touch_up_too_early_banner'),
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.cardBackground,
+          borderRadius: BorderRadius.circular(AppRadius.radiusMd),
+          border: Border.all(color: AppTheme.darkBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.hourglass_top_rounded,
+                  color: AppTheme.gold,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    unlockLabel,
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AppTheme.textPrimary,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              eligibility.summary,
+              style: GoogleFonts.plusJakartaSans(
+                color: AppTheme.navInactive,
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (eligibility.shouldDirectToChat) {
+      return Container(
+        key: const Key('touch_up_chat_only_banner'),
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.cardBackground,
+          borderRadius: BorderRadius.circular(AppRadius.radiusMd),
+          border: Border.all(color: AppTheme.darkBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.chat_bubble_outline_rounded,
+                  color: AppTheme.gold,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Need a Touch-up?',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AppTheme.textPrimary,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              eligibility.summary,
+              style: GoogleFonts.plusJakartaSans(
+                color: AppTheme.navInactive,
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 12),
+            AppButtons.secondaryCTA(
+              key: const Key('touch_up_message_artist_button'),
+              onPressed: () => _openChatWithArtist(context),
+              icon: Icons.chat_outlined,
+              text: 'Message ${appointment.artistName} in Chat',
+              borderColor: AppTheme.goldBorder,
+              foregroundColor: AppTheme.gold,
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (eligibility.status ==
+        TouchUpEligibilityStatus.hasActiveUpcomingTouchUp) {
+      return Container(
+        key: const Key('touch_up_active_upcoming_banner'),
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.cardBackground,
+          borderRadius: BorderRadius.circular(AppRadius.radiusMd),
+          border: Border.all(color: AppTheme.darkBorder),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.event_repeat_rounded,
+              color: AppTheme.gold,
+              size: 18,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                eligibility.summary,
+                style: GoogleFonts.plusJakartaSans(
+                  color: AppTheme.navInactive,
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 
   @override
@@ -197,26 +516,41 @@ class AppointmentDetailModal extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppRadius.radiusMd),
                 border: Border.all(color: AppTheme.darkBorder),
               ),
-              child: Column(
-                children: [
-                  _buildPriceLine('Total Session Price', '\$${appointment.totalPrice}'),
-                  const SizedBox(height: 6),
-                  _buildPriceLine(
-                    'Deposit Paid',
-                    '\$${appointment.depositAmount}',
-                    color: AppTheme.gold,
-                    isBold: true,
-                  ),
-                  const Divider(color: AppTheme.darkBorder, height: 16),
-                  _buildPriceLine(
-                    'Remaining Balance Due at Studio',
-                    '\$${appointment.balanceDue}',
-                    isBold: true,
-                  ),
-                ],
-              ),
+              child: appointment.isTouchUp && appointment.totalPrice <= 0
+                  ? _buildPriceLine(
+                      'Touch-up Session',
+                      'Complimentary (\$0)',
+                      color: const Color(0xFF4ADE80),
+                      isBold: true,
+                    )
+                  : Column(
+                      children: [
+                        _buildPriceLine(
+                          'Total Session Price',
+                          '\$${appointment.totalPrice}',
+                        ),
+                        const SizedBox(height: 6),
+                        _buildPriceLine(
+                          'Deposit Paid',
+                          '\$${appointment.depositAmount}',
+                          color: AppTheme.gold,
+                          isBold: true,
+                        ),
+                        const Divider(color: AppTheme.darkBorder, height: 16),
+                        _buildPriceLine(
+                          'Remaining Balance Due at Studio',
+                          '\$${appointment.balanceDue}',
+                          isBold: true,
+                        ),
+                      ],
+                    ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+
+            // Self-Booked Touch-Up Section (Completed Original Tattoos Only)
+            if (appointment.status == AppointmentStatus.completed &&
+                !appointment.isTouchUp)
+              _buildTouchUpSection(context),
 
             // Actions
             Row(
@@ -248,14 +582,11 @@ class AppointmentDetailModal extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: AppButtons.primaryCTA(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      FlashSnackBar.showInfo(
-                        context,
-                        'Message sent to ${appointment.artistName} regarding reschedule.',
-                        duration: const Duration(seconds: 2),
-                      );
-                    },
+                    onPressed: () => _openChatWithArtist(
+                      context,
+                      fallbackNotice:
+                          'Message sent to ${appointment.artistName} regarding reschedule.',
+                    ),
                     text: 'Contact',
                     backgroundColor: AppTheme.gold,
                     foregroundColor: AppTheme.onyxBackground,

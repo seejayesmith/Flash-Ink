@@ -147,6 +147,10 @@ class _ArtistDashboardScreenState extends State<ArtistDashboardScreen> {
           }
         }
         if (mounted) {
+          if (!MockDataConfig.isEnabled) {
+            ArtistDashboardRepository.stripePayoutsReady =
+                loaded.stripePayoutsReady;
+          }
           setState(() {
             _liveArtist = loaded;
           });

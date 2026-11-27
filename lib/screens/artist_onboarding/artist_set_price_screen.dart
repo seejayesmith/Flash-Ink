@@ -104,7 +104,7 @@ class _ArtistSetPriceScreenState extends State<ArtistSetPriceScreen> {
 
     return OnboardingStepScaffold(
       currentStep: 5,
-      totalSteps: 9,
+      totalSteps: 10,
       onBack: Navigator.canPop(context)
           ? () {
               FocusManager.instance.primaryFocus?.unfocus();

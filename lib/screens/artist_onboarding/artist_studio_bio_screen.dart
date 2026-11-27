@@ -328,7 +328,7 @@ class _ArtistStudioBioScreenState extends State<ArtistStudioBioScreen> {
 
     return OnboardingStepScaffold(
       currentStep: 3,
-      totalSteps: 9,
+      totalSteps: 10,
       title: 'Where do you tattoo?',
       subtitle: 'Search for your home shop or studio, and add a quick bio for clients.',
       ctaText: 'Continue',

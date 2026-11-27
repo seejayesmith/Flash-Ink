@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../config/dev_config.dart';
 import '../core/mock/mock_data_config.dart';
 import '../features/appointments/domain/models/appointment_item.dart';
@@ -57,6 +58,79 @@ typedef PaymentSheetPresenter = Future<void> Function({
   String? customerName,
 });
 
+/// Optional URL launcher override for unit/widget testing of Stripe Connect links.
+typedef StripeUrlLauncher = Future<bool> Function(Uri uri);
+
+/// Snapshot of an artist's live Stripe Connect Express account verification state.
+class StripeConnectAccountStatus {
+  final bool hasAccount;
+  final String stripeAccountId;
+  final bool stripePayoutsReady;
+  final bool payoutsEnabled;
+  final bool chargesEnabled;
+  final bool detailsSubmitted;
+  final List<String> currentlyDue;
+  final String externalAccountLabel;
+  final String? onboardingUrl;
+  final String? errorMessage;
+  final bool isSimulated;
+
+  const StripeConnectAccountStatus({
+    this.hasAccount = false,
+    this.stripeAccountId = '',
+    this.stripePayoutsReady = false,
+    this.payoutsEnabled = false,
+    this.chargesEnabled = false,
+    this.detailsSubmitted = false,
+    this.currentlyDue = const [],
+    this.externalAccountLabel = '',
+    this.onboardingUrl,
+    this.errorMessage,
+    this.isSimulated = false,
+  });
+
+  bool get hasError => errorMessage != null && errorMessage!.trim().isNotEmpty;
+
+  /// Details were submitted to Stripe, and Stripe is still verifying KYC/bank info.
+  bool get isPendingVerification =>
+      hasAccount && detailsSubmitted && !stripePayoutsReady;
+
+  /// Account was created, but the artist exited before submitting required details.
+  bool get isIncomplete =>
+      hasAccount && !detailsSubmitted && !stripePayoutsReady;
+
+  factory StripeConnectAccountStatus.fromMap(
+    Map<String, dynamic> data, {
+    String? onboardingUrl,
+    bool isSimulated = false,
+  }) {
+    final rawDue = data['currentlyDue'];
+    final dueList = rawDue is List
+        ? rawDue.map((e) => e.toString()).where((s) => s.isNotEmpty).toList()
+        : const <String>[];
+    final acctId = (data['stripeAccountId'] ?? '').toString().trim();
+    final payouts = data['payoutsEnabled'] == true;
+    final charges = data['chargesEnabled'] == true;
+    final submitted = data['detailsSubmitted'] == true;
+    final ready =
+        data['stripePayoutsReady'] == true || (submitted && payouts && charges);
+
+    return StripeConnectAccountStatus(
+      hasAccount: data['hasAccount'] == true || acctId.startsWith('acct_'),
+      stripeAccountId: acctId,
+      stripePayoutsReady: ready,
+      payoutsEnabled: payouts,
+      chargesEnabled: charges,
+      detailsSubmitted: submitted,
+      currentlyDue: dueList,
+      externalAccountLabel:
+          (data['externalAccountLabel'] ?? '').toString().trim(),
+      onboardingUrl: onboardingUrl ?? (data['url'] as String?),
+      isSimulated: isSimulated,
+    );
+  }
+}
+
 /// Service for managing Stripe payments, Stripe Connect API integration,
 /// available balance, and artist earnings.
 class StripeService {
@@ -65,6 +139,7 @@ class StripeService {
   final bool? isProductionOverride;
   final bool? isStripeConfiguredOverride;
   final PaymentSheetPresenter? paymentSheetPresenter;
+  final StripeUrlLauncher? urlLauncher;
 
   StripeService({
     ArtistEarningsData? initialData,
@@ -72,6 +147,7 @@ class StripeService {
     this.isProductionOverride,
     this.isStripeConfiguredOverride,
     this.paymentSheetPresenter,
+    this.urlLauncher,
   })  : _earningsData = initialData ?? ArtistDashboardRepository.earningsData,
         _injectedFunctions = functions;
 
@@ -136,6 +212,229 @@ class StripeService {
     }
   }
 
+  Future<bool> _openExternalOrInAppUrl(Uri uri) async {
+    if (urlLauncher != null) {
+      return urlLauncher!(uri);
+    }
+    try {
+      final openedInApp = await launchUrl(
+        uri,
+        mode: LaunchMode.inAppBrowserView,
+      );
+      if (openedInApp) return true;
+    } catch (_) {}
+    try {
+      return await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Creates (or resumes) a live Stripe Connect Express onboarding link via
+  /// the `createStripeConnectAccountLink` Cloud Function.
+  Future<StripeConnectAccountStatus> createStripeConnectAccountLink({
+    String? email,
+    String? artistName,
+  }) async {
+    if (_allowSimulatedPayments && _injectedFunctions == null) {
+      await Future.delayed(const Duration(milliseconds: 250));
+      ArtistDashboardRepository.stripePayoutsReady = true;
+      return const StripeConnectAccountStatus(
+        hasAccount: true,
+        stripeAccountId: 'acct_simulated_express',
+        stripePayoutsReady: true,
+        payoutsEnabled: true,
+        chargesEnabled: true,
+        detailsSubmitted: true,
+        onboardingUrl: 'https://connect.stripe.com/setup/s/simulated',
+        isSimulated: true,
+      );
+    }
+
+    try {
+      final callable = _resolveFunctions()
+          .httpsCallable('createStripeConnectAccountLink');
+      final payload = <String, dynamic>{
+        if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
+        if (artistName != null && artistName.trim().isNotEmpty)
+          'artistName': artistName.trim(),
+      };
+      final result = await callable.call<dynamic>(payload);
+      final rawData = result.data;
+      if (rawData is! Map) {
+        return const StripeConnectAccountStatus(
+          errorMessage:
+              'Unexpected response from the payout server. Please try again.',
+        );
+      }
+      final data = Map<String, dynamic>.from(rawData);
+      final status = StripeConnectAccountStatus.fromMap(data);
+      ArtistDashboardRepository.stripePayoutsReady = status.stripePayoutsReady;
+      return status;
+    } on FirebaseFunctionsException catch (e) {
+      return StripeConnectAccountStatus(
+        errorMessage: _mapConnectFunctionsError(e),
+      );
+    } catch (_) {
+      return const StripeConnectAccountStatus(
+        errorMessage:
+            'Could not reach Stripe right now. Check your connection and try again.',
+      );
+    }
+  }
+
+  /// Generates a live Stripe Connect Express Account Link and opens Stripe's
+  /// hosted KYC & bank-linking onboarding flow in an in-app browser.
+  Future<StripeConnectAccountStatus> launchStripeConnectOnboarding({
+    String? email,
+    String? artistName,
+  }) async {
+    final linkStatus = await createStripeConnectAccountLink(
+      email: email,
+      artistName: artistName,
+    );
+    if (linkStatus.hasError) return linkStatus;
+    if (linkStatus.isSimulated && urlLauncher == null) {
+      return linkStatus;
+    }
+
+    final rawUrl = linkStatus.onboardingUrl?.trim() ?? '';
+    final uri = Uri.tryParse(rawUrl);
+    if (uri == null || !uri.hasScheme) {
+      return const StripeConnectAccountStatus(
+        errorMessage:
+            'Stripe did not return a valid setup link. Please try again.',
+      );
+    }
+
+    final launched = await _openExternalOrInAppUrl(uri);
+    if (!launched) {
+      return StripeConnectAccountStatus(
+        hasAccount: linkStatus.hasAccount,
+        stripeAccountId: linkStatus.stripeAccountId,
+        stripePayoutsReady: linkStatus.stripePayoutsReady,
+        payoutsEnabled: linkStatus.payoutsEnabled,
+        chargesEnabled: linkStatus.chargesEnabled,
+        detailsSubmitted: linkStatus.detailsSubmitted,
+        currentlyDue: linkStatus.currentlyDue,
+        onboardingUrl: rawUrl,
+        errorMessage:
+            'Could not open Stripe setup on this device. Please try again.',
+      );
+    }
+
+    return linkStatus;
+  }
+
+  /// Queries live Stripe account readiness on the server (`syncStripeConnectStatus`),
+  /// updates Firestore `stripePayoutsReady`, and syncs local dashboard state.
+  Future<StripeConnectAccountStatus> syncStripeConnectStatus() async {
+    if (_allowSimulatedPayments && _injectedFunctions == null) {
+      final ready = ArtistDashboardRepository.stripePayoutsReady;
+      return StripeConnectAccountStatus(
+        hasAccount: ready,
+        stripeAccountId: ready ? 'acct_simulated_express' : '',
+        stripePayoutsReady: ready,
+        payoutsEnabled: ready,
+        chargesEnabled: ready,
+        detailsSubmitted: ready,
+        isSimulated: true,
+      );
+    }
+
+    try {
+      final callable =
+          _resolveFunctions().httpsCallable('syncStripeConnectStatus');
+      final result = await callable.call<dynamic>(const <String, dynamic>{});
+      final rawData = result.data;
+      if (rawData is! Map) {
+        return const StripeConnectAccountStatus(
+          errorMessage: 'Unable to verify Stripe account status right now.',
+        );
+      }
+      final status = StripeConnectAccountStatus.fromMap(
+        Map<String, dynamic>.from(rawData),
+      );
+      ArtistDashboardRepository.stripePayoutsReady = status.stripePayoutsReady;
+      return status;
+    } on FirebaseFunctionsException catch (e) {
+      return StripeConnectAccountStatus(
+        errorMessage: _mapConnectFunctionsError(e),
+      );
+    } catch (_) {
+      return const StripeConnectAccountStatus(
+        errorMessage:
+            'Could not verify Stripe status. Check your connection and try again.',
+      );
+    }
+  }
+
+  /// Opens the artist's live Stripe Express Dashboard (or resumes onboarding
+  /// if setup is still incomplete).
+  Future<({bool launched, String? errorMessage})>
+      launchStripeExpressDashboard() async {
+    if (_allowSimulatedPayments && _injectedFunctions == null) {
+      if (urlLauncher != null) {
+        await urlLauncher!(
+          Uri.parse('https://connect.stripe.com/express_login_simulated'),
+        );
+      }
+      return (launched: true, errorMessage: null);
+    }
+
+    try {
+      final callable =
+          _resolveFunctions().httpsCallable('createStripeExpressLoginLink');
+      final result = await callable.call<dynamic>(const <String, dynamic>{});
+      final rawData = result.data;
+      if (rawData is! Map) {
+        return (
+          launched: false,
+          errorMessage: 'Unexpected response from Stripe Express.',
+        );
+      }
+      final data = Map<String, dynamic>.from(rawData);
+      final rawUrl = (data['url'] ?? '').toString().trim();
+      final uri = Uri.tryParse(rawUrl);
+      if (uri == null || !uri.hasScheme) {
+        return (
+          launched: false,
+          errorMessage: 'Unable to generate Stripe Express link.',
+        );
+      }
+      final opened = await _openExternalOrInAppUrl(uri);
+      return (
+        launched: opened,
+        errorMessage: opened
+            ? null
+            : 'Could not open Stripe Express in your browser.',
+      );
+    } on FirebaseFunctionsException catch (e) {
+      return (launched: false, errorMessage: _mapConnectFunctionsError(e));
+    } catch (_) {
+      return (
+        launched: false,
+        errorMessage:
+            'Could not connect to Stripe Express. Please try again shortly.',
+      );
+    }
+  }
+
+  String _mapConnectFunctionsError(FirebaseFunctionsException e) {
+    final rawMessage = e.message?.trim();
+    if (rawMessage != null && rawMessage.isNotEmpty) {
+      return rawMessage;
+    }
+    switch (e.code) {
+      case 'unauthenticated':
+        return 'Please sign in as an artist to connect your Stripe account.';
+      case 'failed-precondition':
+        return 'Stripe payouts are not configured on the server yet.';
+      default:
+        return 'Unable to connect to Stripe right now. Please try again.';
+    }
+  }
+
   /// Presents the native Stripe PaymentSheet for deposit payment.
   ///
   /// Live/production builds ALWAYS verify pricing, artist Stripe Connect readiness,
@@ -150,6 +449,9 @@ class StripeService {
     required String flashTitle,
     String? flashId,
     String? customRequestId,
+    String? parentAppointmentId,
+    String? healedPhotoUrl,
+    String? threadId,
     String? clientSecret,
     String? customerEmail,
     String? customerName,
@@ -218,6 +520,13 @@ class StripeService {
           'flashId': flashId.trim(),
         if (customRequestId != null && customRequestId.trim().isNotEmpty)
           'customRequestId': customRequestId.trim(),
+        if (parentAppointmentId != null &&
+            parentAppointmentId.trim().isNotEmpty)
+          'parentAppointmentId': parentAppointmentId.trim(),
+        if (healedPhotoUrl != null && healedPhotoUrl.trim().isNotEmpty)
+          'healedPhotoUrl': healedPhotoUrl.trim(),
+        if (threadId != null && threadId.trim().isNotEmpty)
+          'threadId': threadId.trim(),
         'flashTitle': flashTitle,
         'customerEmail': customerEmail,
         'customerName': customerName,
@@ -477,6 +786,7 @@ class StripeService {
         ClientAppointment.addUpcomingAppointment(
           ClientAppointment(
             id: bookingId,
+            artistId: artistId,
             artistName: (metadata['artist_name'] ?? 'OddMaree').toString(),
             artistAvatar: '',
             studioName: 'Obsidian Atelier',

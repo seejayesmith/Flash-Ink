@@ -143,7 +143,8 @@ void main() {
       expect(find.text('ACCEPTED SESSION TYPES'), findsOneWidget);
       expect(find.text('Flash Tattoos'), findsOneWidget);
       expect(find.text('Custom Concepts'), findsOneWidget);
-      expect(find.text('Touch-ups & Consultations'), findsOneWidget);
+      expect(find.text('Touch-ups'), findsOneWidget);
+      expect(find.byKey(const Key('touch_up_settings_panel')), findsOneWidget);
 
       // Location
       expect(find.text('STUDIO OR GUEST SPOT LOCATION'), findsOneWidget);
@@ -228,5 +229,51 @@ void main() {
         'Guest Spot: Black Rabbit Tattoo, Seattle',
       );
     });
+
+    testWidgets(
+      'Touch-up sub-settings use progressive disclosure and persist custom fee',
+      (tester) async {
+        await tester.pumpWidget(buildTestWidget());
+        await tester.pumpAndSettle();
+
+        // Visible when acceptTouchUps is true
+        final touchUpSwitch = find.byKey(const Key('accept_touch_ups_switch'));
+        await tester.ensureVisible(touchUpSwitch);
+        expect(find.byKey(const Key('touch_up_settings_panel')), findsOneWidget);
+        expect(find.byKey(const Key('touch_up_duration_dropdown')), findsOneWidget);
+        expect(find.byKey(const Key('touch_up_buffer_dropdown')), findsOneWidget);
+        expect(find.byKey(const Key('touch_up_window_dropdown')), findsOneWidget);
+
+        // Toggle Touch-ups OFF -> all sub-settings hidden
+        await tester.tap(touchUpSwitch);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('touch_up_settings_panel')), findsNothing);
+        expect(find.byKey(const Key('touch_up_duration_dropdown')), findsNothing);
+        expect(find.byKey(const Key('touch_up_pricing_paid')), findsNothing);
+
+        // Toggle back ON -> sub-settings reappear, select Flat Fee $40 and Save
+        await tester.tap(touchUpSwitch);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('touch_up_settings_panel')), findsOneWidget);
+
+        final paidTab = find.byKey(const Key('touch_up_pricing_paid'));
+        await tester.ensureVisible(paidTab);
+        await tester.tap(paidTab);
+        await tester.pumpAndSettle();
+
+        final fee40 = find.byKey(const Key('touch_up_fee_40'));
+        await tester.ensureVisible(fee40);
+        await tester.tap(fee40);
+        await tester.pumpAndSettle();
+
+        final saveButton = find.byKey(const Key('save_books_schedule_button'));
+        await tester.ensureVisible(saveButton);
+        await tester.tap(saveButton);
+        await tester.pumpAndSettle();
+
+        expect(ArtistDashboardRepository.booksSchedule.acceptTouchUps, isTrue);
+        expect(ArtistDashboardRepository.booksSchedule.touchUpFeeDollars, 40);
+      },
+    );
   });
 }

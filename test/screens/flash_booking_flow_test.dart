@@ -845,6 +845,64 @@ void main() {
       expect(find.text('PAYMENT BREAKDOWN'), findsOneWidget);
       expect(find.textContaining('temporarily unavailable'), findsOneWidget);
     });
+
+    testWidgets(
+        'Step 2 displays artist custom enabled cancellation and refund policies and hides disabled policies',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final customPolicyArtist = testArtist.copyWith(
+        policies: const [
+          StudioPolicy(
+            title: '72-Hour Cancellation Rule',
+            description: 'Reschedules require 72 hours notice before the session.',
+            iconKey: 'cancellation',
+            isEnabled: true,
+          ),
+          StudioPolicy(
+            title: 'Refund Policy',
+            description: 'Full refund only if the artist cancels.',
+            iconKey: 'refund',
+            isEnabled: true,
+          ),
+          StudioPolicy(
+            title: 'Hidden Draft Policy',
+            description: 'This disabled policy should not show in checkout.',
+            iconKey: 'general',
+            isEnabled: false,
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FlashBookingScreen(
+            flash: testFlash,
+            artist: customPolicyArtist,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Continue to Details'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('72-Hour Cancellation Rule'), findsOneWidget);
+      expect(
+        find.text('Reschedules require 72 hours notice before the session.'),
+        findsOneWidget,
+      );
+      expect(find.text('Refund Policy'), findsOneWidget);
+      expect(
+        find.text('Full refund only if the artist cancels.'),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.event_busy_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.currency_exchange_outlined), findsOneWidget);
+      expect(find.text('Hidden Draft Policy'), findsNothing);
+    });
   });
 }
 

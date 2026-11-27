@@ -17,7 +17,11 @@ service cloud.firestore {
     // Collection: artists/{artistId}
     //   - Public read (marketplace discovery + embedded flashArtworks; guest browsing).
     //   - Owner-only create/update/delete.
-    //   - Immutable fields on update: ['id', 'createdAt', 'stripeAccountId', 'isVerified']
+    //   - stripePayoutsReady: Admin SDK only (written by payments.ts / onboarding.ts;
+    //     must be omitted or false on client create, unchanged on client update).
+    //   - isBooksOpen: must be omitted or false on client create, and cannot be set to true
+    //     on client update unless resource.data.stripePayoutsReady == true.
+    //   - Immutable fields on update: ['id', 'createdAt', 'stripeAccountId', 'stripePayoutsReady', 'isVerified']
     //   - Subcollection: private/{docId} -> owner-only read; write/delete restricted to docId == 'settings'.
     //     stripeAccountId / payoutSchedule on private/settings: Admin SDK only
     //     (forbidden on client create, unchanged on update).
@@ -134,10 +138,17 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isOwner(artistId)
         && isDocSizeValid()
-        && (!('id' in request.resource.data) || request.resource.data.id == artistId);
+        && (!('id' in request.resource.data) || request.resource.data.id == artistId)
+        && (!('stripePayoutsReady' in request.resource.data) || request.resource.data.stripePayoutsReady == false)
+        && (!('isBooksOpen' in request.resource.data) || request.resource.data.isBooksOpen == false);
       allow update: if isOwner(artistId)
         && isDocSizeValid()
-        && areImmutableFieldsUnchanged(['id', 'createdAt', 'stripeAccountId', 'isVerified']);
+        && areImmutableFieldsUnchanged(['id', 'createdAt', 'stripeAccountId', 'stripePayoutsReady', 'isVerified'])
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isBooksOpen'])
+          || request.resource.data.isBooksOpen == false
+          || resource.data.get('stripePayoutsReady', false) == true
+        );
       allow delete: if isOwner(artistId);
 
       match /private/{docId} {

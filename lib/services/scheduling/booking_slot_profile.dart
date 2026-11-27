@@ -55,10 +55,12 @@ class BookingSlotProfile {
           requireBufferBeforeClose: false,
         );
       case BookingSlotType.touchUp:
-        return const BookingSlotProfile(
+        return BookingSlotProfile(
           type: BookingSlotType.touchUp,
-          durationMinutes: touchUpSessionMinutes,
-          bufferMinutes: touchUpBufferMinutes,
+          durationMinutes:
+              (requestedDurationMinutes ?? schedule.touchUpDurationMinutes)
+                  .clamp(15, 720),
+          bufferMinutes: schedule.touchUpBufferMinutes.clamp(0, 240),
           filterDeadGaps: false,
           requireBufferBeforeClose: false,
         );

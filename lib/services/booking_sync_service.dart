@@ -135,8 +135,11 @@ class BookingSyncService {
     return '';
   }
 
-  /// Clears in-memory notification and sync logs (used for sign-out & test isolation).
+  /// Clears in-memory notification, sync logs, and active real-time chat listeners
+  /// (used for sign-out, account switching, and test isolation).
   static void resetSyncState() {
+    BookingCloudHydrator.stopUserChatsListener();
+    ChatCloudSync.clearTransientState();
     sentNotifications.clear();
     syncedPayloads.clear();
     claimedFlashPieceIds.clear();
@@ -290,6 +293,16 @@ class BookingSyncService {
       'artworkImageUrl': appointment.artworkImageUrl,
       'isConsultation': appointment.isConsultation,
       'visitType': appointment.effectiveVisitType,
+      if (appointment.isTouchUp) 'isTouchUp': true,
+      if (appointment.parentAppointmentId != null &&
+          appointment.parentAppointmentId!.isNotEmpty)
+        'parentAppointmentId': appointment.parentAppointmentId,
+      if (appointment.parentTattooTitle != null &&
+          appointment.parentTattooTitle!.isNotEmpty)
+        'parentTattooTitle': appointment.parentTattooTitle,
+      if (appointment.healedPhotoUrl != null &&
+          appointment.healedPhotoUrl!.isNotEmpty)
+        'healedPhotoUrl': appointment.healedPhotoUrl,
       'status': status,
       'updatedAt': DateTime.now().toIso8601String(),
     };
@@ -467,6 +480,10 @@ class BookingSyncService {
     String? clientName,
     String? clientAvatar,
     String? artistAvatar,
+    bool syncSubcollectionMessages = true,
+    List<ChatMessage>? newMessagesForSubcollection,
+    bool? incrementRecipientFromArtist,
+    FirebaseFirestore? firestore,
   }) =>
       ChatCloudSync.syncChatThreadToCloud(
         thread,
@@ -478,17 +495,179 @@ class BookingSyncService {
         clientName: clientName,
         clientAvatar: clientAvatar,
         artistAvatar: artistAvatar,
+        syncSubcollectionMessages: syncSubcollectionMessages,
+        newMessagesForSubcollection: newMessagesForSubcollection,
+        incrementRecipientFromArtist: incrementRecipientFromArtist,
+        firestore: firestore,
       );
+
+  /// Upserts [messages] into the single canonical `dm_<clientId>_<artistId>`
+  /// conversation thread, incrementing ONLY the recipient's unread count and
+  /// optionally syncing to Cloud Firestore.
+  static MessageThread postToCanonicalThread({
+    required String artistId,
+    String? clientId,
+    String? clientName,
+    String clientAvatar = '',
+    required String artistName,
+    required String artistAvatar,
+    required String studioName,
+    String? flashTitleContext,
+    required List<ChatMessage> messages,
+    required bool initiatedByArtist,
+    bool syncToCloud = true,
+    String? fallbackThreadId,
+    FirebaseFirestore? firestore,
+  }) {
+    final now = DateTime.now();
+    final canonicalId = MessageThread.resolveCanonicalThreadId(
+      clientId: clientId,
+      artistId: artistId,
+      clientName: clientName,
+      fallbackId: fallbackThreadId,
+    );
+    final existing = MessageThread.findExistingThread(
+      threadId: canonicalId,
+      clientId: clientId,
+      artistId: artistId,
+      clientName: clientName,
+    );
+
+    final mergedMessages = existing != null
+        ? MessageThread.mergeMessages(existing.messages, messages)
+        : MessageThread.mergeMessages(const [], messages);
+    final latest = mergedMessages.isNotEmpty ? mergedMessages.last : null;
+    final lastText = latest?.previewText ?? existing?.lastMessage ?? '';
+    final lastTime = latest?.timestamp ?? now;
+
+    final nextClientUnread = initiatedByArtist
+        ? (existing?.clientUnreadCount ?? 0) + 1
+        : 0;
+    final nextArtistUnread = initiatedByArtist
+        ? 0
+        : (existing?.artistUnreadCount ?? 0) + 1;
+
+    final resolvedClientId = (clientId != null && clientId.trim().isNotEmpty)
+        ? clientId.trim()
+        : existing?.clientId;
+    final resolvedClientName =
+        (clientName != null && clientName.trim().isNotEmpty)
+            ? clientName.trim()
+            : existing?.clientName;
+    final resolvedClientAvatar = clientAvatar.trim().isNotEmpty
+        ? clientAvatar.trim()
+        : (existing?.clientAvatar ?? '');
+    final resolvedArtistAvatar = artistAvatar.trim().isNotEmpty
+        ? artistAvatar.trim()
+        : (existing?.artistAvatar ?? '');
+    final resolvedStudio = studioName.trim().isNotEmpty
+        ? studioName.trim()
+        : (existing?.studioName ?? '');
+
+    final candidate = MessageThread(
+      id: canonicalId,
+      artistId: artistId,
+      clientId: resolvedClientId,
+      clientName: resolvedClientName,
+      clientAvatar: resolvedClientAvatar,
+      artistName: artistName.trim().isNotEmpty
+          ? artistName.trim()
+          : (existing?.artistName ?? 'Artist'),
+      artistAvatar: resolvedArtistAvatar,
+      studioName: resolvedStudio,
+      lastMessage: lastText,
+      lastMessageTime: lastTime,
+      clientUnreadCount: nextClientUnread,
+      artistUnreadCount: nextArtistUnread,
+      clientLastReadAt: initiatedByArtist ? existing?.clientLastReadAt : now,
+      artistLastReadAt: initiatedByArtist ? now : existing?.artistLastReadAt,
+      mergedLegacyIds: existing?.mergedLegacyIds ?? const [],
+      isOnline: true,
+      flashTitleContext: flashTitleContext ?? existing?.flashTitleContext,
+      messages: mergedMessages,
+    );
+
+    final saved = MessageThread.upsertThread(candidate);
+    if (syncToCloud) {
+      syncChatThreadToCloud(
+        saved,
+        clientId: resolvedClientId,
+        artistId: artistId,
+        clientName: resolvedClientName,
+        clientAvatar: resolvedClientAvatar,
+        artistAvatar: resolvedArtistAvatar,
+        newMessagesForSubcollection: messages,
+        incrementRecipientFromArtist: initiatedByArtist,
+        firestore: firestore,
+      );
+    }
+    return saved;
+  }
 
   static Future<void> appendAndSyncChatMessage({
     required String threadId,
     required ChatMessage message,
+    FirebaseFirestore? firestore,
   }) =>
       ChatCloudSync.appendAndSyncChatMessage(
         threadId: threadId,
         message: message,
         syncedPayloads: syncedPayloads,
         enableCloudWrites: enableCloudWrites,
+        resolveCurrentUid: resolveCurrentUid,
+        firestore: firestore,
+      );
+
+  /// Marks [threadId] as read locally and in Cloud Firestore for the active role
+  /// (`isArtistView`) so unread counts stay cleared across account/mode switches.
+  static Future<void> markThreadAsRead({
+    required String threadId,
+    required bool isArtistView,
+    List<String> legacyThreadIds = const [],
+    DateTime? readAt,
+    FirebaseFirestore? firestore,
+  }) =>
+      ChatCloudSync.markThreadAsRead(
+        threadId: threadId,
+        isArtistView: isArtistView,
+        syncedPayloads: syncedPayloads,
+        enableCloudWrites: enableCloudWrites,
+        legacyThreadIds: legacyThreadIds,
+        readAt: readAt,
+        firestore: firestore,
+      );
+
+  /// Attaches (or reuses) a live Firestore `.snapshots()` listener for all chat
+  /// threads belonging to [userId].
+  static StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+      ensureUserChatsListener(
+    String userId, {
+    FirebaseFirestore? firestore,
+  }) =>
+      BookingCloudHydrator.ensureUserChatsListener(
+        userId,
+        resolveCurrentUserPhotoUrlSync: resolveCurrentUserPhotoUrlSync,
+        extractPhotoUrl: extractPhotoUrl,
+        enableCloudWrites: enableCloudWrites,
+        syncedPayloads: syncedPayloads,
+        firestore: firestore,
+      );
+
+  /// Stops any active real-time user chats subscription.
+  static void stopUserChatsListener() =>
+      BookingCloudHydrator.stopUserChatsListener();
+
+  /// Attaches a real-time listener to `chats/{threadId}/messages`.
+  static StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+      listenToThreadMessages(
+    String threadId, {
+    required void Function(List<ChatMessage> messages) onMessages,
+    FirebaseFirestore? firestore,
+  }) =>
+      BookingCloudHydrator.listenToThreadMessages(
+        threadId,
+        onMessages: onMessages,
+        firestore: firestore,
       );
 
   static StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
@@ -510,6 +689,7 @@ class BookingSyncService {
         resolveCurrentUserPhotoUrlSync: resolveCurrentUserPhotoUrlSync,
         extractPhotoUrl: extractPhotoUrl,
         enableCloudWrites: enableCloudWrites,
+        syncedPayloads: syncedPayloads,
         firestore: firestore,
       );
 
@@ -522,6 +702,7 @@ class BookingSyncService {
         resolveCurrentUserPhotoUrl: resolveCurrentUserPhotoUrl,
         extractPhotoUrl: extractPhotoUrl,
         enableCloudWrites: enableCloudWrites,
+        syncedPayloads: syncedPayloads,
         firestore: firestore,
       );
 

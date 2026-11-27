@@ -61,8 +61,15 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
   int _currentStep = 0; // 0: Schedule, 1: Details, 2: Payment, 3: Confirmed
 
   ArtistBooksSchedule? _remoteArtistSchedule;
+  List<StudioPolicy>? _remoteArtistPolicies;
   ArtistBooksSchedule get _effectiveSchedule =>
       _remoteArtistSchedule ?? ArtistDashboardRepository.booksSchedule;
+
+  List<StudioPolicy> get _effectivePolicies {
+    final source =
+        _remoteArtistPolicies ?? widget.artist?.policies ?? const <StudioPolicy>[];
+    return source.where((p) => p.isEnabled).toList(growable: false);
+  }
 
   String get _effectiveArtistId {
     final fromArtist = widget.artist?.id.trim() ?? '';
@@ -248,10 +255,31 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       artistId,
       firestore: widget.firestore,
     );
-    if (!mounted || fetched == null) return;
+    List<StudioPolicy>? fetchedPolicies;
+    try {
+      final db = widget.firestore ?? FirebaseFirestore.instance;
+      final artistDoc = await db.collection('artists').doc(artistId).get();
+      final data = artistDoc.data();
+      if (artistDoc.exists && data != null && data['policies'] is List) {
+        final parsed = (data['policies'] as List)
+            .whereType<Map>()
+            .map((item) => StudioPolicy.fromMap(Map<String, dynamic>.from(item)))
+            .toList(growable: false);
+        if (parsed.isNotEmpty) {
+          fetchedPolicies = parsed;
+        }
+      }
+    } catch (_) {}
+
+    if (!mounted || (fetched == null && fetchedPolicies == null)) return;
     setState(() {
-      _remoteArtistSchedule = fetched;
-      _syncDefaultSelectionForSchedule();
+      if (fetched != null) {
+        _remoteArtistSchedule = fetched;
+        _syncDefaultSelectionForSchedule();
+      }
+      if (fetchedPolicies != null) {
+        _remoteArtistPolicies = fetchedPolicies;
+      }
     });
   }
 
@@ -549,11 +577,23 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
       }
     }
 
+    final checkoutClientId = BookingSyncService.resolveCurrentUid('');
+    final canonicalThreadId = MessageThread.hasCanonicalParticipants(
+      clientId: checkoutClientId,
+      artistId: _effectiveArtistId,
+    )
+        ? MessageThread.canonicalThreadId(
+            clientId: checkoutClientId,
+            artistId: _effectiveArtistId,
+          )
+        : null;
+
     final stripeService = widget.stripeService ?? StripeService();
     final paymentResult = await stripeService.presentDepositPaymentSheet(
       amountInDollars: widget.flash.deposit.toDouble(),
       flashTitle: widget.flash.title,
       flashId: widget.flash.id,
+      threadId: canonicalThreadId,
       customerEmail: _emailController.text.trim(),
       customerName: _nameController.text.trim(),
       customerPhone: _phoneController.text.trim(),
@@ -694,6 +734,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
 
       final clientApt = ClientAppointment(
         id: booking.id,
+        artistId: widget.artist?.id ?? widget.flash.artistId,
         artistName: _artistName,
         artistAvatar: widget.artist?.avatarUrl ?? '',
         studioName: widget.artist?.studioType ?? 'Obsidian Atelier',
@@ -723,8 +764,28 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
                 booking.selectedTimeSlot,
               ) ??
               booking.selectedDate;
-      final receiptThread = MessageThread(
-        id: 'thread_booking_${booking.id}',
+      final receiptMessage = ChatMessage(
+        id: 'msg_${booking.id}_receipt',
+        senderId: clientId,
+        senderName: booking.clientName,
+        text: receiptText,
+        timestamp: DateTime.now(),
+        isFromArtist: false,
+        type: ChatMessageType.receipt,
+        receiptAmount: booking.depositAmount.toDouble(),
+        appointmentDate: appointmentStartDateTime,
+        appointmentTimeSlot: booking.selectedTimeSlot,
+        appointmentDurationMinutes:
+            ArtistDashboardRepository.parseDurationMinutes(
+          widget.flash.estimatedTime,
+        ),
+        artistName: _artistName,
+        studioLocation: _artistLocation,
+        flashTitle: widget.flash.title,
+        placement: booking.placement,
+        flashImageUrl: widget.flash.imageUrl,
+      );
+      BookingSyncService.postToCanonicalThread(
         artistId: artistId,
         clientId: clientId,
         clientName: booking.clientName,
@@ -732,46 +793,13 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
         artistName: _artistName,
         artistAvatar: widget.artist?.avatarUrl ?? '',
         studioName: widget.artist?.studioType ?? 'Studio',
-        lastMessage: receiptText,
-        lastMessageTime: DateTime.now(),
-        unreadCount: 1,
-        isOnline: true,
         flashTitleContext: widget.flash.title,
-        messages: [
-          ChatMessage(
-            id: 'msg_${booking.id}_receipt',
-            senderId: clientId,
-            senderName: booking.clientName,
-            text: receiptText,
-            timestamp: DateTime.now(),
-            isFromArtist: false,
-            type: ChatMessageType.receipt,
-            receiptAmount: booking.depositAmount.toDouble(),
-            appointmentDate: appointmentStartDateTime,
-            appointmentTimeSlot: booking.selectedTimeSlot,
-            appointmentDurationMinutes:
-                ArtistDashboardRepository.parseDurationMinutes(
-              widget.flash.estimatedTime,
-            ),
-            artistName: _artistName,
-            studioLocation: _artistLocation,
-            flashTitle: widget.flash.title,
-            placement: booking.placement,
-            flashImageUrl: widget.flash.imageUrl,
-          ),
-        ],
+        messages: [receiptMessage],
+        initiatedByArtist: false,
+        syncToCloud: paymentResult.isSimulated || widget.firestore != null,
+        fallbackThreadId: 'thread_booking_${booking.id}',
+        firestore: widget.firestore,
       );
-      MessageThread.addThread(receiptThread);
-      if (paymentResult.isSimulated || widget.firestore != null) {
-        BookingSyncService.syncChatThreadToCloud(
-          receiptThread,
-          clientId: clientId,
-          artistId: artistId,
-          clientName: booking.clientName,
-          clientAvatar: clientAvatar,
-          artistAvatar: widget.artist?.avatarUrl,
-        );
-      }
       ArtistDashboardRepository.notifyPendingRequestsChanged();
 
       setState(() {
@@ -904,6 +932,7 @@ class _FlashBookingScreenState extends State<FlashBookingScreen> {
           notesController: _notesController,
           isUserPhoneVerified: _isUserPhoneVerified,
           agreedToPolicies: _agreedToPolicies,
+          policies: _effectivePolicies,
           onFieldChanged: () => setState(() {}),
           onVerifyPhoneTap: _showVerifiedPhoneRequiredSheet,
           onAgreedChanged: (val) => setState(() => _agreedToPolicies = val),

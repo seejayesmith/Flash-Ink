@@ -288,7 +288,7 @@ class _ArtistProfilePhotoScreenState extends State<ArtistProfilePhotoScreen> {
 
     return OnboardingStepScaffold(
       currentStep: 2,
-      totalSteps: 9,
+      totalSteps: 10,
       onBack: Navigator.canPop(context)
           ? () {
               FocusManager.instance.primaryFocus?.unfocus();

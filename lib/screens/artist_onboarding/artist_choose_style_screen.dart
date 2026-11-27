@@ -9,7 +9,7 @@ import '../../widgets/fade_page_route.dart';
 import '../../widgets/keyboard_collapse_button.dart';
 import '../../widgets/tattoo_background_wrapper.dart';
 import '../../features/onboarding/shared/onboarding_step_scaffold.dart';
-import 'artist_share_link_screen.dart';
+import 'artist_stripe_setup_screen.dart';
 
 class ArtistChooseStyleScreen extends StatefulWidget {
   final String artistName;
@@ -160,7 +160,7 @@ class _ArtistChooseStyleScreenState extends State<ArtistChooseStyleScreen> {
     Navigator.push(
       context,
       FadePageRoute(
-        builder: (_) => ArtistShareLinkScreen(
+        builder: (_) => ArtistStripeSetupScreen(
           artistName: widget.artistName,
           photoBytes: widget.photoBytes,
           photoUrl: widget.photoUrl,
@@ -182,7 +182,7 @@ class _ArtistChooseStyleScreenState extends State<ArtistChooseStyleScreen> {
   Widget build(BuildContext context) {
     return OnboardingStepScaffold(
       currentStep: 8,
-      totalSteps: 9,
+      totalSteps: 10,
       onBack: Navigator.canPop(context)
           ? () {
               FocusManager.instance.primaryFocus?.unfocus();

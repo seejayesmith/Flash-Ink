@@ -39,6 +39,10 @@ class ArtistBooksSchedule {
   final bool acceptFlash;
   final bool acceptCustom;
   final bool acceptTouchUps;
+  final int touchUpDurationMinutes; // default 30 min (15, 30, 45, 60, 90, 120)
+  final int touchUpBufferMinutes; // default 30 min (0, 15, 30, 45, 60)
+  final int touchUpWindowMonths; // default 6 months (3, 6, 12)
+  final int touchUpFeeDollars; // 0 = Free ($0) within window; >0 = flat setup fee/deposit
   final String locationNote;
 
   const ArtistBooksSchedule({
@@ -66,6 +70,10 @@ class ArtistBooksSchedule {
     this.acceptFlash = true,
     this.acceptCustom = true,
     this.acceptTouchUps = true,
+    this.touchUpDurationMinutes = 30,
+    this.touchUpBufferMinutes = 30,
+    this.touchUpWindowMonths = 6,
+    this.touchUpFeeDollars = 0,
     this.locationNote = 'OddMaree Studio • Portland, OR',
   });
 
@@ -122,6 +130,17 @@ class ArtistBooksSchedule {
   /// unblocked configured working weekday.
   bool isWorkingDay(DateTime date) {
     if (!isBooksOpen) return false;
+    final key = dateKey(date);
+    if (blockedDates.contains(key)) return false;
+    if (openOverrideDates.contains(key)) return true;
+    return workingDays.contains(date.weekday);
+  }
+
+  /// Returns true if touch-ups are enabled and [date] is an unblocked
+  /// working day (independent of [isBooksOpen], so existing clients can book
+  /// touch-ups even when public books are closed for new Flash/Custom clients).
+  bool isTouchUpWorkingDay(DateTime date) {
+    if (!acceptTouchUps) return false;
     final key = dateKey(date);
     if (blockedDates.contains(key)) return false;
     if (openOverrideDates.contains(key)) return true;
@@ -217,6 +236,10 @@ class ArtistBooksSchedule {
     bool? acceptFlash,
     bool? acceptCustom,
     bool? acceptTouchUps,
+    int? touchUpDurationMinutes,
+    int? touchUpBufferMinutes,
+    int? touchUpWindowMonths,
+    int? touchUpFeeDollars,
     String? locationNote,
   }) {
     return ArtistBooksSchedule(
@@ -250,6 +273,11 @@ class ArtistBooksSchedule {
       acceptFlash: acceptFlash ?? this.acceptFlash,
       acceptCustom: acceptCustom ?? this.acceptCustom,
       acceptTouchUps: acceptTouchUps ?? this.acceptTouchUps,
+      touchUpDurationMinutes:
+          touchUpDurationMinutes ?? this.touchUpDurationMinutes,
+      touchUpBufferMinutes: touchUpBufferMinutes ?? this.touchUpBufferMinutes,
+      touchUpWindowMonths: touchUpWindowMonths ?? this.touchUpWindowMonths,
+      touchUpFeeDollars: touchUpFeeDollars ?? this.touchUpFeeDollars,
       locationNote: locationNote ?? this.locationNote,
     );
   }
@@ -282,6 +310,10 @@ class ArtistBooksSchedule {
       'acceptFlash': acceptFlash,
       'acceptCustom': acceptCustom,
       'acceptTouchUps': acceptTouchUps,
+      'touchUpDurationMinutes': touchUpDurationMinutes,
+      'touchUpBufferMinutes': touchUpBufferMinutes,
+      'touchUpWindowMonths': touchUpWindowMonths,
+      'touchUpFeeDollars': touchUpFeeDollars,
       'locationNote': locationNote,
     };
   }
@@ -370,6 +402,15 @@ class ArtistBooksSchedule {
       acceptFlash: map['acceptFlash'] as bool? ?? true,
       acceptCustom: map['acceptCustom'] as bool? ?? true,
       acceptTouchUps: map['acceptTouchUps'] as bool? ?? true,
+      touchUpDurationMinutes:
+          ((map['touchUpDurationMinutes'] as num?)?.toInt() ?? 30)
+              .clamp(15, 720),
+      touchUpBufferMinutes:
+          ((map['touchUpBufferMinutes'] as num?)?.toInt() ?? 30).clamp(0, 240),
+      touchUpWindowMonths:
+          ((map['touchUpWindowMonths'] as num?)?.toInt() ?? 6).clamp(1, 36),
+      touchUpFeeDollars:
+          ((map['touchUpFeeDollars'] as num?)?.toInt() ?? 0).clamp(0, 10000),
       locationNote: map['locationNote'] as String? ??
           (MockDataConfig.isEnabled ? 'OddMaree Studio • Portland, OR' : ''),
     );

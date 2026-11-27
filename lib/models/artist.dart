@@ -198,6 +198,7 @@ class Artist {
   final String avatarUrl;
   final String bannerUrl;
   final bool isBooksOpen;
+  final bool stripePayoutsReady;
   final String location;
   final String studioType;
   final bool isPrivateStudio;
@@ -232,6 +233,7 @@ class Artist {
     required this.avatarUrl,
     this.bannerUrl = '',
     this.isBooksOpen = true,
+    this.stripePayoutsReady = false,
     required this.location,
     required this.studioType,
     this.isPrivateStudio = false,
@@ -352,6 +354,7 @@ class Artist {
     String? avatarUrl,
     String? bannerUrl,
     bool? isBooksOpen,
+    bool? stripePayoutsReady,
     String? location,
     String? studioType,
     bool? isPrivateStudio,
@@ -384,6 +387,7 @@ class Artist {
       avatarUrl: avatarUrl ?? this.avatarUrl,
       bannerUrl: bannerUrl ?? this.bannerUrl,
       isBooksOpen: isBooksOpen ?? this.isBooksOpen,
+      stripePayoutsReady: stripePayoutsReady ?? this.stripePayoutsReady,
       location: location ?? this.location,
       studioType: studioType ?? this.studioType,
       isPrivateStudio: isPrivateStudio ?? this.isPrivateStudio,
@@ -552,6 +556,7 @@ class Artist {
       avatarUrl: avatarUrl,
       bannerUrl: bannerUrl,
       isBooksOpen: map['isBooksOpen'] == true || map['isBooksOpen'] == null,
+      stripePayoutsReady: map['stripePayoutsReady'] == true,
       location: map['location']?.toString() ??
           studioInfo?.displayLocation ??
           map['city']?.toString() ??

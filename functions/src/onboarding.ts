@@ -29,6 +29,7 @@ export const completeArtistOnboarding = onCall(async (request) => {
     phoneNumber?: string;
     avatarUrl?: string;
     photoUrl?: string;
+    isBooksOpen?: boolean;
   };
 
   const artistName = (data.name || request.auth.token.name || 'Artist').trim();
@@ -91,8 +92,16 @@ export const completeArtistOnboarding = onCall(async (request) => {
   });
 
   const userRef = db.collection('users').doc(uid);
-  const existingUserSnap = await userRef.get();
+  const artistPublicRef = db.collection('artists').doc(uid);
+  const [existingUserSnap, existingArtistSnap] = await Promise.all([
+    userRef.get(),
+    artistPublicRef.get(),
+  ]);
   const existingUserData = existingUserSnap.data();
+  const existingArtistData = existingArtistSnap.data();
+  const stripePayoutsReady = existingArtistData?.stripePayoutsReady === true;
+  const resolvedBooksOpen =
+    stripePayoutsReady && (data.isBooksOpen !== false);
   const hasExistingClientName =
     existingUserData &&
     typeof existingUserData.displayName === 'string' &&
@@ -130,7 +139,6 @@ export const completeArtistOnboarding = onCall(async (request) => {
   );
 
   // 3. Save ONLY public discovery fields to `artists/{uid}`
-  const artistPublicRef = db.collection('artists').doc(uid);
   batch.set(
     artistPublicRef,
     {
@@ -146,7 +154,8 @@ export const completeArtistOnboarding = onCall(async (request) => {
         ? { avatarUrl: resolvedPhotoUrl, photoUrl: resolvedPhotoUrl }
         : {}),
       profileCompleted: true,
-      isBooksOpen: true,
+      stripePayoutsReady,
+      isBooksOpen: resolvedBooksOpen,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true }

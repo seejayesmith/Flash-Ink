@@ -19,6 +19,10 @@ import {
   parseTimeLabelToMinutes,
   throwTimeSlotConflict,
 } from './scheduling/intervalUtils';
+import {
+  formatDurationLabel,
+  validateTouchUpEligibility,
+} from './touchups';
 
 const stripeSecretKey = defineSecret('STRIPE_SECRET_KEY');
 const stripeWebhookSecret = defineSecret('STRIPE_WEBHOOK_SECRET');
@@ -110,7 +114,7 @@ async function cleanupCheckoutLocks(params: {
   markStatus?: 'payment_failed' | 'canceled';
 }): Promise<void> {
   const { slotLockId, flashLockId, bookingId, markStatus } = params;
-  const batch = db.batch();
+    const batch = db.batch();
   if (slotLockId) {
     batch.delete(db.collection(CHECKOUT_LOCKS_COLLECTION).doc(slotLockId));
   }
@@ -130,6 +134,469 @@ async function cleanupCheckoutLocks(params: {
   }
   await batch.commit();
 }
+
+interface PersistedStripeStatus {
+  hasAccount: boolean;
+  stripeAccountId: string;
+  stripePayoutsReady: boolean;
+  payoutsEnabled: boolean;
+  chargesEnabled: boolean;
+  detailsSubmitted: boolean;
+  currentlyDue: string[];
+  externalAccountLabel: string;
+}
+
+function resolveStripeConnectRedirectBaseUrl(overrideOrigin?: string): string {
+  const configured = (process.env.STRIPE_CONNECT_REDIRECT_URL || '').trim();
+  if (configured.startsWith('https://') || configured.startsWith('http://localhost')) {
+    return configured.replace(/\/+$/, '');
+  }
+  const cleanOrigin = (overrideOrigin || '').trim();
+  if (cleanOrigin.startsWith('https://') || cleanOrigin.startsWith('http://localhost')) {
+    return `${cleanOrigin.replace(/\/+$/, '')}/stripeConnectRedirect`;
+  }
+  const projectId =
+    process.env.GCLOUD_PROJECT ||
+    process.env.GCP_PROJECT ||
+    admin.app().options.projectId ||
+    'flash-ink';
+  const region = process.env.FUNCTION_REGION || 'us-central1';
+  if (process.env.FUNCTIONS_EMULATOR === 'true') {
+    return `http://127.0.0.1:5001/${projectId}/${region}/stripeConnectRedirect`;
+  }
+  return `https://${region}-${projectId}.cloudfunctions.net/stripeConnectRedirect`;
+}
+
+async function persistStripeAccountState(
+  uid: string,
+  account: Stripe.Account
+): Promise<PersistedStripeStatus> {
+  const isReady =
+    account.details_submitted === true &&
+    account.charges_enabled === true &&
+    account.payouts_enabled === true;
+
+  let externalAccountLabel = '';
+  let externalAccountLast4 = '';
+  let externalAccountType = '';
+  const externalAccounts = account.external_accounts?.data || [];
+  if (externalAccounts.length > 0) {
+    const primary = externalAccounts[0];
+    if (primary.object === 'bank_account') {
+      externalAccountType = 'bank_account';
+      externalAccountLast4 = primary.last4 || '';
+      externalAccountLabel = `${primary.bank_name || 'Bank Account'} •••• ${primary.last4 || ''}`.trim();
+    } else if (primary.object === 'card') {
+      externalAccountType = 'card';
+      externalAccountLast4 = primary.last4 || '';
+      externalAccountLabel = `${primary.brand || 'Debit Card'} •••• ${primary.last4 || ''}`.trim();
+    }
+  }
+
+  const currentlyDue = account.requirements?.currently_due || [];
+
+  if (isReady) {
+    await admin.auth().setCustomUserClaims(uid, {
+      role: 'artist',
+      isArtist: true,
+      isClient: true,
+      stripeAccountId: account.id,
+      verifiedArtist: true,
+    });
+  }
+
+  const batch = db.batch();
+  batch.set(
+    db.collection('artists').doc(uid).collection('private').doc('financials'),
+    {
+      stripeAccountId: account.id,
+      payoutsEnabled: account.payouts_enabled === true,
+      chargesEnabled: account.charges_enabled === true,
+      detailsSubmitted: account.details_submitted === true,
+      requirementsCurrentlyDue: currentlyDue,
+      ...(externalAccountLabel
+        ? {
+            externalAccountLabel,
+            externalAccountLast4,
+            externalAccountType,
+          }
+        : {}),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  batch.set(
+    db.collection('artists').doc(uid),
+    {
+      stripePayoutsReady: isReady,
+      ...(!isReady ? { isBooksOpen: false } : {}),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  await batch.commit();
+
+  return {
+    hasAccount: true,
+    stripeAccountId: account.id,
+    stripePayoutsReady: isReady,
+    payoutsEnabled: account.payouts_enabled === true,
+    chargesEnabled: account.charges_enabled === true,
+    detailsSubmitted: account.details_submitted === true,
+    currentlyDue,
+    externalAccountLabel,
+  };
+}
+
+/**
+ * Callable Cloud Function: Create or Resume Live Stripe Connect Express Onboarding Link
+ *
+ * Creates (or reuses) a Stripe Connect Express account tied to the authenticated artist's
+ * Firebase UID, stores `stripeAccountId` in `artists/{uid}/private/financials`, and issues
+ * a single-use hosted Stripe Account Link (`account_onboarding`).
+ */
+export const createStripeConnectAccountLink = onCall(
+  { secrets: [stripeSecretKey] },
+  async (request) => {
+    if (!request.auth || !request.auth.uid) {
+      throw new HttpsError(
+        'unauthenticated',
+        'Please sign in to connect your Stripe payout account.'
+      );
+    }
+    if (request.auth.token?.firebase?.sign_in_provider === 'anonymous') {
+      throw new HttpsError(
+        'unauthenticated',
+        'Please create an artist account before connecting Stripe.'
+      );
+    }
+
+    const uid = request.auth.uid;
+    const data = (request.data || {}) as {
+      email?: string;
+      artistName?: string;
+      returnOrigin?: string;
+    };
+
+    const stripe = getStripeClient();
+    const artistRef = db.collection('artists').doc(uid);
+    const financialsRef = artistRef.collection('private').doc('financials');
+    const settingsRef = artistRef.collection('private').doc('settings');
+
+    const [artistSnap, financialsSnap, settingsSnap] = await Promise.all([
+      artistRef.get(),
+      financialsRef.get(),
+      settingsRef.get(),
+    ]);
+
+    const artistData = (artistSnap.data() || {}) as Record<string, unknown>;
+    const financialsData = (financialsSnap.data() || {}) as Record<string, unknown>;
+    const settingsData = (settingsSnap.data() || {}) as Record<string, unknown>;
+
+    const resolvedEmail = (
+      (typeof data.email === 'string' ? data.email : '') ||
+      (typeof settingsData.email === 'string' ? settingsData.email : '') ||
+      request.auth.token.email ||
+      ''
+    ).trim();
+
+    const resolvedName = (
+      (typeof data.artistName === 'string' ? data.artistName : '') ||
+      (typeof artistData.name === 'string' ? artistData.name : '') ||
+      request.auth.token.name ||
+      ''
+    ).trim();
+
+    let existingAccountId =
+      typeof financialsData.stripeAccountId === 'string'
+        ? financialsData.stripeAccountId.trim()
+        : '';
+
+    let account: Stripe.Account | null = null;
+    if (existingAccountId.startsWith('acct_')) {
+      try {
+        const retrieved = await stripe.accounts.retrieve(existingAccountId, {
+          expand: ['external_accounts'],
+        });
+        if (!('deleted' in retrieved && retrieved.deleted)) {
+          account = retrieved as Stripe.Account;
+        }
+      } catch (_) {
+        account = null;
+      }
+    }
+
+    if (!account) {
+      account = await stripe.accounts.create({
+        type: 'express',
+        country: 'US',
+        ...(resolvedEmail ? { email: resolvedEmail } : {}),
+        business_type: 'individual',
+        capabilities: {
+          card_payments: { requested: true },
+          transfers: { requested: true },
+        },
+        business_profile: {
+          ...(resolvedName ? { name: resolvedName } : {}),
+          product_description:
+            'Tattoo artistry deposits and appointments booked through Flash.Ink.',
+        },
+        metadata: {
+          firebaseUid: uid,
+        },
+      });
+      existingAccountId = account.id;
+    } else if (account.metadata?.firebaseUid !== uid) {
+      account = await stripe.accounts.update(account.id, {
+        metadata: {
+          ...(account.metadata || {}),
+          firebaseUid: uid,
+        },
+      });
+    }
+
+    const persisted = await persistStripeAccountState(uid, account);
+    const redirectBase = resolveStripeConnectRedirectBaseUrl(data.returnOrigin);
+
+    const accountLink = await stripe.accountLinks.create({
+      account: account.id,
+      refresh_url: `${redirectBase}?state=refresh`,
+      return_url: `${redirectBase}?state=return`,
+      type: 'account_onboarding',
+    });
+
+    return {
+      url: accountLink.url,
+      expiresAt: accountLink.expires_at,
+      ...persisted,
+    };
+  }
+);
+
+/**
+ * Callable Cloud Function: Live Sync of Artist Stripe Connect Account Readiness
+ *
+ * Queries Stripe's live Accounts API directly when the artist returns from the
+ * hosted Stripe onboarding flow (so UI doesn't have to wait on webhook latency),
+ * persists `stripePayoutsReady` to Firestore, and returns full verification status.
+ */
+export const syncStripeConnectStatus = onCall(
+  { secrets: [stripeSecretKey] },
+  async (request) => {
+    if (!request.auth || !request.auth.uid) {
+      throw new HttpsError(
+        'unauthenticated',
+        'Please sign in to check your Stripe payout status.'
+      );
+    }
+
+    const uid = request.auth.uid;
+    const financialsSnap = await db
+      .collection('artists')
+      .doc(uid)
+      .collection('private')
+      .doc('financials')
+      .get();
+
+    const financialsData = (financialsSnap.data() || {}) as Record<string, unknown>;
+    const stripeAccountId =
+      typeof financialsData.stripeAccountId === 'string'
+        ? financialsData.stripeAccountId.trim()
+        : '';
+
+    if (!stripeAccountId.startsWith('acct_')) {
+      return {
+        hasAccount: false,
+        stripeAccountId: '',
+        stripePayoutsReady: false,
+        payoutsEnabled: false,
+        chargesEnabled: false,
+        detailsSubmitted: false,
+        currentlyDue: [] as string[],
+        externalAccountLabel: '',
+      };
+    }
+
+    const stripe = getStripeClient();
+    const retrieved = await stripe.accounts.retrieve(stripeAccountId, {
+      expand: ['external_accounts'],
+    });
+    if ('deleted' in retrieved && retrieved.deleted) {
+      await db.collection('artists').doc(uid).set(
+        {
+          stripePayoutsReady: false,
+          isBooksOpen: false,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      return {
+        hasAccount: false,
+        stripeAccountId: '',
+        stripePayoutsReady: false,
+        payoutsEnabled: false,
+        chargesEnabled: false,
+        detailsSubmitted: false,
+        currentlyDue: [] as string[],
+        externalAccountLabel: '',
+      };
+    }
+
+    return persistStripeAccountState(uid, retrieved as Stripe.Account);
+  }
+);
+
+/**
+ * Callable Cloud Function: Create Live Stripe Express Dashboard Login Link
+ *
+ * Generates a single-use login link to the Stripe Express Dashboard for artists
+ * who have submitted their details, or seamlessly falls back to an onboarding link
+ * if setup is still incomplete.
+ */
+export const createStripeExpressLoginLink = onCall(
+  { secrets: [stripeSecretKey] },
+  async (request) => {
+    if (!request.auth || !request.auth.uid) {
+      throw new HttpsError(
+        'unauthenticated',
+        'Please sign in to access your Stripe Express dashboard.'
+      );
+    }
+
+    const uid = request.auth.uid;
+    const financialsSnap = await db
+      .collection('artists')
+      .doc(uid)
+      .collection('private')
+      .doc('financials')
+      .get();
+
+    const financialsData = (financialsSnap.data() || {}) as Record<string, unknown>;
+    const stripeAccountId =
+      typeof financialsData.stripeAccountId === 'string'
+        ? financialsData.stripeAccountId.trim()
+        : '';
+
+    const stripe = getStripeClient();
+    if (stripeAccountId.startsWith('acct_')) {
+      const retrieved = await stripe.accounts.retrieve(stripeAccountId);
+      if (!('deleted' in retrieved && retrieved.deleted)) {
+        const account = retrieved as Stripe.Account;
+        await persistStripeAccountState(uid, account);
+        if (account.details_submitted) {
+          const loginLink = await stripe.accounts.createLoginLink(stripeAccountId);
+          return {
+            url: loginLink.url,
+            type: 'login_link',
+            stripeAccountId,
+          };
+        }
+        const redirectBase = resolveStripeConnectRedirectBaseUrl();
+        const onboardingLink = await stripe.accountLinks.create({
+          account: stripeAccountId,
+          refresh_url: `${redirectBase}?state=refresh`,
+          return_url: `${redirectBase}?state=return`,
+          type: 'account_onboarding',
+        });
+        return {
+          url: onboardingLink.url,
+          type: 'account_onboarding',
+          stripeAccountId,
+        };
+      }
+    }
+
+    throw new HttpsError(
+      'failed-precondition',
+      'No Stripe account is connected yet. Connect Stripe first to manage payouts.'
+    );
+  }
+);
+
+/**
+ * Public HTTPS Endpoint: Stripe Connect Return / Refresh Deep-Link Bridge
+ *
+ * Stripe requires HTTPS `return_url` and `refresh_url` targets. When Stripe finishes
+ * or requests a link refresh, this endpoint bounces the mobile browser straight back
+ * into Flash.Ink via `flashapp://stripe-connect?status=return|refresh` with a branded
+ * fallback button.
+ */
+export const stripeConnectRedirect = onRequest((req, res) => {
+  const rawState = String(req.query.state || 'return').toLowerCase();
+  const status = rawState === 'refresh' ? 'refresh' : 'return';
+  const deepLink = `flashapp://stripe-connect?status=${status}`;
+  const headline =
+    status === 'refresh'
+      ? 'Refreshing your Stripe session…'
+      : 'Stripe setup saved!';
+  const subtitle =
+    status === 'refresh'
+      ? 'Tap below to return to Flash.Ink and generate a fresh Stripe link.'
+      : 'Returning you to Flash.Ink to verify your payout status.';
+
+  res
+    .status(200)
+    .set('Content-Type', 'text/html; charset=utf-8')
+    .set('Cache-Control', 'no-store')
+    .send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="refresh" content="0;url=${deepLink}" />
+  <title>Flash.Ink • Stripe Connect</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #121414;
+      color: #F9FAFA;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .card {
+      max-width: 380px;
+      width: 100%;
+      background: #1A1C1C;
+      border: 1px solid #2E3232;
+      border-radius: 20px;
+      padding: 28px 24px;
+      text-align: center;
+    }
+    h1 { font-size: 22px; margin: 0 0 10px; font-weight: 800; }
+    p { font-size: 14px; line-height: 1.5; color: #919696; margin: 0 0 22px; }
+    a.btn {
+      display: inline-block;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 14px 20px;
+      background: #EEC200;
+      color: #121414;
+      font-weight: 700;
+      font-size: 15px;
+      text-decoration: none;
+      border-radius: 999px;
+    }
+    .hint { margin-top: 16px; font-size: 12px; color: #6B7272; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>${headline}</h1>
+    <p>${subtitle}</p>
+    <a class="btn" href="${deepLink}">Return to Flash.Ink</a>
+    <p class="hint">Using the in-app browser? You can also tap <strong>Done</strong> in the corner.</p>
+  </div>
+  <script>
+    window.location.replace(${JSON.stringify(deepLink)});
+  </script>
+</body>
+</html>`);
+});
 
 /**
  * Callable Cloud Function: Create Stripe PaymentIntent for Flash Deposit
@@ -163,6 +630,9 @@ export const createPaymentIntent = onCall(
       flashId?: string;
       flashTitle?: string;
       customRequestId?: string;
+      parentAppointmentId?: string;
+      healedPhotoUrl?: string;
+      threadId?: string;
       customerEmail?: string;
       customerName?: string;
       customerPhone?: string;
@@ -214,11 +684,19 @@ export const createPaymentIntent = onCall(
     const flashId = typeof data.flashId === 'string' ? data.flashId.trim() : '';
     const customRequestId =
       typeof data.customRequestId === 'string' ? data.customRequestId.trim() : '';
+    const parentAppointmentId =
+      typeof data.parentAppointmentId === 'string'
+        ? data.parentAppointmentId.trim()
+        : '';
+    const healedPhotoUrl =
+      typeof data.healedPhotoUrl === 'string' ? data.healedPhotoUrl.trim() : '';
+    const existingThreadId =
+      typeof data.threadId === 'string' ? data.threadId.trim() : '';
 
-    if (!flashId && !customRequestId) {
+    if (!flashId && !customRequestId && !parentAppointmentId) {
       throw new HttpsError(
         'invalid-argument',
-        'A flashId or customRequestId is required so pricing can be verified on the server.'
+        'A flashId, customRequestId, or parentAppointmentId is required so pricing can be verified on the server.'
       );
     }
 
@@ -277,7 +755,7 @@ export const createPaymentIntent = onCall(
       schedulePreData.slotDurationMinutes > 0
         ? Math.floor(schedulePreData.slotDurationMinutes)
         : DEFAULT_FALLBACK_DURATION_MINUTES;
-    const resolvedBufferMinutes =
+    let resolvedBufferMinutes =
       typeof schedulePreData.bufferDurationMinutes === 'number' &&
       schedulePreData.bufferDurationMinutes >= 0
         ? Math.floor(schedulePreData.bufferDurationMinutes)
@@ -297,6 +775,9 @@ export const createPaymentIntent = onCall(
         ? Math.floor(data.durationMinutes)
         : scheduleSlotDuration;
     let exclusiveFlash = false;
+    let isTouchUp = false;
+    let parentTattooTitle = '';
+    let resolvedPlacement = String(data.placement || 'Forearm').trim();
 
     if (flashId) {
       const flashList = Array.isArray(artistData.flashArtworks)
@@ -391,6 +872,28 @@ export const createPaymentIntent = onCall(
       }
       const hrs = resolvedDurationMinutes / 60;
       resolvedDuration = Number.isInteger(hrs) ? `${hrs} hrs` : `${hrs.toFixed(1)} hrs`;
+    } else if (parentAppointmentId) {
+      const validatedTouchUp = await validateTouchUpEligibility({
+        clientUid,
+        targetArtistId,
+        parentAppointmentId,
+      });
+      if (validatedTouchUp.feeDollars <= 0) {
+        throw new HttpsError(
+          'failed-precondition',
+          'This touch-up is complimentary ($0). Confirm directly without Stripe checkout.'
+        );
+      }
+      isTouchUp = true;
+      parentTattooTitle = validatedTouchUp.parentTitle;
+      depositCents = Math.round(validatedTouchUp.feeDollars * 100);
+      totalPriceCents = depositCents;
+      resolvedTitle = `Touch-up: ${validatedTouchUp.parentTitle}`;
+      resolvedImageUrl = healedPhotoUrl || validatedTouchUp.parentImageUrl;
+      resolvedDurationMinutes = validatedTouchUp.durationMinutes;
+      resolvedBufferMinutes = validatedTouchUp.bufferMinutes;
+      resolvedDuration = formatDurationLabel(resolvedDurationMinutes);
+      resolvedPlacement = validatedTouchUp.parentPlacement;
     }
 
     if (depositCents < 50 || depositCents > 1000000) {
@@ -429,6 +932,7 @@ export const createPaymentIntent = onCall(
         durationMinutes: resolvedDurationMinutes,
         bufferMinutes: resolvedBufferMinutes,
         ignoreHoldId: cleanHoldId,
+        isTouchUp,
       }
     );
 
@@ -472,6 +976,7 @@ export const createPaymentIntent = onCall(
           bufferMinutes: resolvedBufferMinutes,
           nowMs,
           ignoreHoldId: cleanHoldId,
+          isTouchUp,
         });
       }
 
@@ -571,6 +1076,15 @@ export const createPaymentIntent = onCall(
           studioLocation: String(artistData.location || ''),
           ...(flashId ? { flashId, flashIsExclusive: exclusiveFlash } : {}),
           ...(customRequestId ? { customRequestId } : {}),
+          ...(isTouchUp
+            ? {
+                isTouchUp: true,
+                parentAppointmentId,
+                parentTattooTitle,
+                ...(healedPhotoUrl ? { healedPhotoUrl } : {}),
+                ...(existingThreadId ? { threadId: existingThreadId } : {}),
+              }
+            : {}),
           flashTitle: resolvedTitle,
           flashImageUrl: resolvedImageUrl,
           artworkImageUrl: resolvedImageUrl,
@@ -582,7 +1096,7 @@ export const createPaymentIntent = onCall(
           durationMinutes: resolvedDurationMinutes,
           bufferMinutes: resolvedBufferMinutes,
           endMinutes: resolvedEndMinutes,
-          placement: String(data.placement || 'Forearm').trim(),
+          placement: resolvedPlacement,
           clientName: String(
             data.customerName || userData.displayName || userData.username || 'Client'
           ).trim(),
@@ -642,13 +1156,15 @@ export const createPaymentIntent = onCall(
           flash_is_exclusive: exclusiveFlash ? 'true' : 'false',
           flash_title: resolvedTitle,
           custom_request_id: customRequestId,
+          is_touch_up: isTouchUp ? 'true' : 'false',
+          parent_appointment_id: parentAppointmentId,
           customer_name: String(data.customerName || '').trim(),
           selected_date: dateKey,
           selected_time_slot: String(data.selectedTimeSlot || normalizedSlot).trim(),
           start_minutes: String(parsedStartMinutes),
           duration_minutes: String(resolvedDurationMinutes),
           buffer_minutes: String(resolvedBufferMinutes),
-          placement: String(data.placement || '').trim(),
+          placement: resolvedPlacement,
           deposit_cents: String(depositCents),
           platform_fee_cents: String(platformFeeCents),
           total_price_cents: String(totalPriceCents),
@@ -792,73 +1308,7 @@ export const stripeConnectWebhook = onRequest(
       const uid = account.metadata?.firebaseUid;
 
       if (uid) {
-        const isReady =
-          account.details_submitted === true &&
-          account.charges_enabled === true &&
-          account.payouts_enabled === true;
-
-        let externalAccountLabel = '';
-        let externalAccountLast4 = '';
-        let externalAccountType = '';
-        const externalAccounts = account.external_accounts?.data || [];
-        if (externalAccounts.length > 0) {
-          const primary = externalAccounts[0];
-          if (primary.object === 'bank_account') {
-            externalAccountType = 'bank_account';
-            externalAccountLast4 = primary.last4 || '';
-            externalAccountLabel = `${primary.bank_name || 'Bank Account'} •••• ${primary.last4 || ''}`.trim();
-          } else if (primary.object === 'card') {
-            externalAccountType = 'card';
-            externalAccountLast4 = primary.last4 || '';
-            externalAccountLabel = `${primary.brand || 'Debit Card'} •••• ${primary.last4 || ''}`.trim();
-          }
-        }
-
-        const currentlyDue = account.requirements?.currently_due || [];
-
-        if (isReady) {
-          await admin.auth().setCustomUserClaims(uid, {
-            role: 'artist',
-            isArtist: true,
-            isClient: true,
-            stripeAccountId: account.id,
-            verifiedArtist: true,
-          });
-        }
-
-        const batch = db.batch();
-        batch.set(
-          db
-            .collection('artists')
-            .doc(uid)
-            .collection('private')
-            .doc('financials'),
-          {
-            stripeAccountId: account.id,
-            payoutsEnabled: account.payouts_enabled === true,
-            chargesEnabled: account.charges_enabled === true,
-            detailsSubmitted: account.details_submitted === true,
-            requirementsCurrentlyDue: currentlyDue,
-            ...(externalAccountLabel
-              ? {
-                  externalAccountLabel,
-                  externalAccountLast4,
-                  externalAccountType,
-                }
-              : {}),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-        batch.set(
-          db.collection('artists').doc(uid),
-          {
-            stripePayoutsReady: isReady,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-        await batch.commit();
+        await persistStripeAccountState(uid, account);
       }
     } else if (event.type === 'payment_intent.succeeded') {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
@@ -882,8 +1332,7 @@ export const stripeConnectWebhook = onRequest(
         const artistRef = db.collection('artists').doc(artistId);
         const userRef = db.collection('users').doc(clientId);
         const appointmentRef = db.collection('appointments').doc(`cal_${bookingId}`);
-        const threadId = `thread_booking_${bookingId}`;
-        const threadRef = db.collection('chats').doc(threadId);
+        const defaultThreadId = `thread_booking_${bookingId}`;
 
         await db.runTransaction(async (tx) => {
           const [bookingSnap, artistSnap, userSnap] = await Promise.all([
@@ -896,6 +1345,26 @@ export const stripeConnectWebhook = onRequest(
             string,
             unknown
           >;
+          const threadId =
+            typeof existingBooking.threadId === 'string' &&
+            existingBooking.threadId.trim().length > 0
+              ? existingBooking.threadId.trim()
+              : defaultThreadId;
+          const threadRef = db.collection('chats').doc(threadId);
+          const isTouchUp =
+            existingBooking.isTouchUp === true ||
+            metadata.is_touch_up === 'true';
+          const parentAppointmentId = String(
+            existingBooking.parentAppointmentId ||
+              metadata.parent_appointment_id ||
+              ''
+          ).trim();
+          const parentTattooTitle = String(
+            existingBooking.parentTattooTitle || ''
+          ).trim();
+          const healedPhotoUrl = String(
+            existingBooking.healedPhotoUrl || ''
+          ).trim();
           const alreadyConfirmed = existingBooking.status === 'deposit_confirmed';
 
           const depositCents =
@@ -1029,8 +1498,20 @@ export const stripeConnectWebhook = onRequest(
                 : {}),
               studioName: String(existingBooking.studioName || 'Studio'),
               studioAddress: String(existingBooking.studioLocation || ''),
-              serviceType: `Flash: ${flashTitle}`,
+              serviceType: isTouchUp
+                ? (flashTitle.startsWith('Touch-up')
+                    ? flashTitle
+                    : `Touch-up: ${flashTitle}`)
+                : `Flash: ${flashTitle}`,
               flashTitle,
+              ...(isTouchUp
+                ? {
+                    isTouchUp: true,
+                    ...(parentAppointmentId ? { parentAppointmentId } : {}),
+                    ...(parentTattooTitle ? { parentTattooTitle } : {}),
+                    ...(healedPhotoUrl ? { healedPhotoUrl } : {}),
+                  }
+                : {}),
               duration: String(existingBooking.estimatedTime || '2.0 hrs'),
               ...(typeof existingBooking.startMinutes === 'number'
                 ? { startMinutes: existingBooking.startMinutes }
@@ -1054,7 +1535,7 @@ export const stripeConnectWebhook = onRequest(
               fullPrice: fullPriceDollars,
               balanceDue: Math.max(0, fullPriceDollars - depositDollars),
               artworkImageUrl: String(existingBooking.flashImageUrl || ''),
-              visitType: 'Flash Tattoo',
+              visitType: isTouchUp ? 'Touch-up' : 'Flash Tattoo',
               status: 'confirmed',
               escrowStatus: 'held',
               paymentIntentId: paymentIntent.id,

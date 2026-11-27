@@ -40,6 +40,16 @@
 				<string>app-1-787337126161-ios-6a98d61df244ad3075ecb0</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>ink.flash.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>flashapp</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>

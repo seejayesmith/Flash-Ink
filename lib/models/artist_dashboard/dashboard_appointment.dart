@@ -21,6 +21,10 @@ class DashboardAppointment {
   final Color dotColor;
   final DateTime? scheduledDate;
   final String? visitType;
+  final bool isTouchUp;
+  final String? parentAppointmentId;
+  final String? parentTattooTitle;
+  final String? healedPhotoUrl;
 
   const DashboardAppointment({
     required this.id,
@@ -41,6 +45,10 @@ class DashboardAppointment {
     this.dotColor = const Color(0xFF22C55E),
     this.scheduledDate,
     this.visitType,
+    this.isTouchUp = false,
+    this.parentAppointmentId,
+    this.parentTattooTitle,
+    this.healedPhotoUrl,
   });
 
   DashboardAppointment copyWith({
@@ -62,6 +70,10 @@ class DashboardAppointment {
     Color? dotColor,
     DateTime? scheduledDate,
     String? visitType,
+    bool? isTouchUp,
+    String? parentAppointmentId,
+    String? parentTattooTitle,
+    String? healedPhotoUrl,
   }) {
     return DashboardAppointment(
       id: id ?? this.id,
@@ -82,6 +94,10 @@ class DashboardAppointment {
       dotColor: dotColor ?? this.dotColor,
       scheduledDate: scheduledDate ?? this.scheduledDate,
       visitType: visitType ?? this.visitType,
+      isTouchUp: isTouchUp ?? this.isTouchUp,
+      parentAppointmentId: parentAppointmentId ?? this.parentAppointmentId,
+      parentTattooTitle: parentTattooTitle ?? this.parentTattooTitle,
+      healedPhotoUrl: healedPhotoUrl ?? this.healedPhotoUrl,
     );
   }
 
@@ -138,6 +154,13 @@ class DashboardAppointment {
       'artworkImageUrl': artworkImageUrl,
       'isConsultation': isConsultation,
       'visitType': effectiveVisitType,
+      if (isTouchUp) 'isTouchUp': true,
+      if (parentAppointmentId != null && parentAppointmentId!.isNotEmpty)
+        'parentAppointmentId': parentAppointmentId,
+      if (parentTattooTitle != null && parentTattooTitle!.isNotEmpty)
+        'parentTattooTitle': parentTattooTitle,
+      if (healedPhotoUrl != null && healedPhotoUrl!.isNotEmpty)
+        'healedPhotoUrl': healedPhotoUrl,
     };
   }
 
@@ -146,6 +169,12 @@ class DashboardAppointment {
     final parsedDate = map['scheduledDate'] is String
         ? DateTime.tryParse(map['scheduledDate'] as String)
         : null;
+    final visitTypeStr = map['visitType']?.toString();
+    final serviceTypeStr = map['serviceType']?.toString() ?? 'Tattoo Session';
+    final detectedTouchUp = map['isTouchUp'] == true ||
+        (visitTypeStr?.toLowerCase().contains('touch') ?? false) ||
+        serviceTypeStr.toLowerCase().contains('touch-up') ||
+        serviceTypeStr.toLowerCase().contains('touch up');
     return DashboardAppointment(
       id: (docId != null && docId.isNotEmpty)
           ? docId
@@ -157,7 +186,7 @@ class DashboardAppointment {
               map['clientPhotoUrl'] ??
               map['clientPhotoURL'])
           ?.toString(),
-      serviceType: map['serviceType']?.toString() ?? 'Tattoo Session',
+      serviceType: serviceTypeStr,
       duration: map['duration']?.toString() ?? '2 hrs',
       time: map['time']?.toString() ?? '1:00 PM',
       date: map['date']?.toString() ?? 'Today',
@@ -174,8 +203,14 @@ class DashboardAppointment {
           .toString()
           .trim(),
       isConsultation: isConsult,
-      visitType: map['visitType']?.toString(),
-      dotColor: isConsult ? AppTheme.navInactive : const Color(0xFF22C55E),
+      visitType: visitTypeStr,
+      isTouchUp: detectedTouchUp,
+      parentAppointmentId: map['parentAppointmentId']?.toString(),
+      parentTattooTitle: map['parentTattooTitle']?.toString(),
+      healedPhotoUrl: map['healedPhotoUrl']?.toString(),
+      dotColor: isConsult
+          ? AppTheme.navInactive
+          : (detectedTouchUp ? const Color(0xFFEEC200) : const Color(0xFF22C55E)),
     );
   }
 }

@@ -3,6 +3,18 @@ import '../../../../core/mock/mock_data_config.dart';
 import '../../../../core/mock/mock_fixtures.dart';
 import '../../../../models/artist_dashboard/schedule_slot_entry.dart';
 
+DateTime? _parseOptionalDateTime(dynamic raw) {
+  if (raw == null) return null;
+  if (raw is DateTime) return raw;
+  if (raw is String) return DateTime.tryParse(raw);
+  if (raw is int) return DateTime.fromMillisecondsSinceEpoch(raw);
+  try {
+    final dynamic converted = (raw as dynamic).toDate();
+    if (converted is DateTime) return converted;
+  } catch (_) {}
+  return null;
+}
+
 enum ChatMessageType { text, receipt, image, file, proposal }
 
 /// A single proposed date and time slot offered by an artist for a custom request.
@@ -257,15 +269,11 @@ class ChatMessage {
       senderId: map['senderId']?.toString() ?? '',
       senderName: map['senderName']?.toString() ?? '',
       text: map['text']?.toString() ?? '',
-      timestamp: map['timestamp'] is String
-          ? DateTime.tryParse(map['timestamp'] as String) ?? DateTime.now()
-          : DateTime.now(),
+      timestamp: _parseOptionalDateTime(map['timestamp']) ?? DateTime.now(),
       isFromArtist: map['isFromArtist'] == true,
       type: parsedType,
       receiptAmount: (map['receiptAmount'] as num?)?.toDouble(),
-      appointmentDate: map['appointmentDate'] is String
-          ? DateTime.tryParse(map['appointmentDate'] as String)
-          : null,
+      appointmentDate: _parseOptionalDateTime(map['appointmentDate']),
       appointmentTimeSlot: map['appointmentTimeSlot']?.toString(),
       appointmentDurationMinutes:
           (map['appointmentDurationMinutes'] as num?)?.toInt(),
@@ -298,12 +306,33 @@ class MessageThread {
   final String studioName;
   final String lastMessage;
   final DateTime lastMessageTime;
-  final int unreadCount;
+  final int clientUnreadCount;
+  final int artistUnreadCount;
+  final DateTime? clientLastReadAt;
+  final DateTime? artistLastReadAt;
+  final String? mergedInto;
+  final List<String> mergedLegacyIds;
   final bool isOnline;
   final String? flashTitleContext;
   final List<ChatMessage> messages;
 
-  bool get hasUnread => unreadCount > 0;
+  /// Backward-compatible getter returning the client-side unread count.
+  int get unreadCount => clientUnreadCount;
+
+  /// Backward-compatible getter returning whether the client has unread messages.
+  bool get hasUnread => clientUnreadCount > 0;
+
+  /// Returns the unread count for either Artist Mode or Client Mode.
+  int unreadCountFor({required bool isArtistView}) =>
+      isArtistView ? artistUnreadCount : clientUnreadCount;
+
+  /// Returns whether the viewer has unread messages for their active role.
+  bool hasUnreadFor({required bool isArtistView}) =>
+      unreadCountFor(isArtistView: isArtistView) > 0;
+
+  /// Returns the last read timestamp for either Artist Mode or Client Mode.
+  DateTime? lastReadAtFor({required bool isArtistView}) =>
+      isArtistView ? artistLastReadAt : clientLastReadAt;
 
   const MessageThread({
     required this.id,
@@ -316,11 +345,18 @@ class MessageThread {
     required this.studioName,
     required this.lastMessage,
     required this.lastMessageTime,
-    required this.unreadCount,
+    int unreadCount = 0,
+    int? clientUnreadCount,
+    int? artistUnreadCount,
+    this.clientLastReadAt,
+    this.artistLastReadAt,
+    this.mergedInto,
+    this.mergedLegacyIds = const [],
     this.isOnline = false,
     this.flashTitleContext,
     this.messages = const [],
-  });
+  })  : clientUnreadCount = clientUnreadCount ?? unreadCount,
+        artistUnreadCount = artistUnreadCount ?? unreadCount;
 
   MessageThread copyWith({
     String? id,
@@ -334,6 +370,12 @@ class MessageThread {
     String? lastMessage,
     DateTime? lastMessageTime,
     int? unreadCount,
+    int? clientUnreadCount,
+    int? artistUnreadCount,
+    DateTime? clientLastReadAt,
+    DateTime? artistLastReadAt,
+    String? mergedInto,
+    List<String>? mergedLegacyIds,
     bool? isOnline,
     String? flashTitleContext,
     List<ChatMessage>? messages,
@@ -349,7 +391,14 @@ class MessageThread {
       studioName: studioName ?? this.studioName,
       lastMessage: lastMessage ?? this.lastMessage,
       lastMessageTime: lastMessageTime ?? this.lastMessageTime,
-      unreadCount: unreadCount ?? this.unreadCount,
+      clientUnreadCount:
+          clientUnreadCount ?? unreadCount ?? this.clientUnreadCount,
+      artistUnreadCount:
+          artistUnreadCount ?? unreadCount ?? this.artistUnreadCount,
+      clientLastReadAt: clientLastReadAt ?? this.clientLastReadAt,
+      artistLastReadAt: artistLastReadAt ?? this.artistLastReadAt,
+      mergedInto: mergedInto ?? this.mergedInto,
+      mergedLegacyIds: mergedLegacyIds ?? this.mergedLegacyIds,
       isOnline: isOnline ?? this.isOnline,
       flashTitleContext: flashTitleContext ?? this.flashTitleContext,
       messages: messages ?? this.messages,
@@ -368,7 +417,15 @@ class MessageThread {
       'studioName': studioName,
       'lastMessage': lastMessage,
       'lastMessageTime': lastMessageTime.toIso8601String(),
-      'unreadCount': unreadCount,
+      'unreadCount': clientUnreadCount,
+      'clientUnreadCount': clientUnreadCount,
+      'artistUnreadCount': artistUnreadCount,
+      if (clientLastReadAt != null)
+        'clientLastReadAt': clientLastReadAt!.toIso8601String(),
+      if (artistLastReadAt != null)
+        'artistLastReadAt': artistLastReadAt!.toIso8601String(),
+      if (mergedInto != null && mergedInto!.isNotEmpty)
+        'mergedInto': mergedInto,
       'isOnline': isOnline,
       if (flashTitleContext != null) 'flashTitleContext': flashTitleContext,
       'messages': messages.map((m) => m.toMap()).toList(),
@@ -383,10 +440,42 @@ class MessageThread {
             .map((m) => ChatMessage.fromMap(Map<String, dynamic>.from(m)))
             .toList()
         : <ChatMessage>[];
+    parsedMsgs.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    final hasClientUnread = map.containsKey('clientUnreadCount');
+    final hasArtistUnread = map.containsKey('artistUnreadCount');
+    final legacyUnread = ((map['unreadCount'] as num?)?.toInt() ?? 0).clamp(0, 9999);
+
+    int resolvedClientUnread;
+    int resolvedArtistUnread;
+    if (hasClientUnread || hasArtistUnread) {
+      resolvedClientUnread =
+          ((map['clientUnreadCount'] as num?)?.toInt() ?? 0).clamp(0, 9999);
+      resolvedArtistUnread =
+          ((map['artistUnreadCount'] as num?)?.toInt() ?? 0).clamp(0, 9999);
+    } else if (legacyUnread > 0 && parsedMsgs.isNotEmpty) {
+      final latestMsg = parsedMsgs.last;
+      if (latestMsg.isFromArtist) {
+        resolvedClientUnread = legacyUnread;
+        resolvedArtistUnread = 0;
+      } else {
+        resolvedClientUnread = 0;
+        resolvedArtistUnread = legacyUnread;
+      }
+    } else {
+      resolvedClientUnread = legacyUnread;
+      resolvedArtistUnread = legacyUnread;
+    }
+
+    final parsedClientReadAt = _parseOptionalDateTime(map['clientLastReadAt']);
+    final parsedArtistReadAt = _parseOptionalDateTime(map['artistLastReadAt']);
+    final rawMergedInto = map['mergedInto']?.toString().trim();
+
     return MessageThread(
       id: (docId != null && docId.isNotEmpty)
           ? docId
-          : (map['id']?.toString() ?? 'thread_${DateTime.now().millisecondsSinceEpoch}'),
+          : (map['id']?.toString() ??
+              'thread_${DateTime.now().millisecondsSinceEpoch}'),
       artistId: map['artistId']?.toString() ?? '',
       clientId: map['clientId']?.toString(),
       clientName: map['clientName']?.toString(),
@@ -403,10 +492,15 @@ class MessageThread {
           .toString(),
       studioName: map['studioName']?.toString() ?? '',
       lastMessage: _normalizeLastMessage(map['lastMessage']?.toString() ?? ''),
-      lastMessageTime: map['lastMessageTime'] is String
-          ? DateTime.tryParse(map['lastMessageTime'] as String) ?? DateTime.now()
-          : DateTime.now(),
-      unreadCount: (map['unreadCount'] as num?)?.toInt() ?? 0,
+      lastMessageTime: _parseOptionalDateTime(map['lastMessageTime']) ??
+          (parsedMsgs.isNotEmpty ? parsedMsgs.last.timestamp : DateTime.now()),
+      clientUnreadCount: resolvedClientUnread,
+      artistUnreadCount: resolvedArtistUnread,
+      clientLastReadAt: parsedClientReadAt,
+      artistLastReadAt: parsedArtistReadAt,
+      mergedInto: (rawMergedInto != null && rawMergedInto.isNotEmpty)
+          ? rawMergedInto
+          : null,
       isOnline: map['isOnline'] == true,
       flashTitleContext: map['flashTitleContext']?.toString(),
       messages: parsedMsgs,
@@ -426,7 +520,90 @@ class MessageThread {
     return looksLikeFileName ? '📷 Photo' : raw;
   }
 
-  /// Notifier triggered whenever thread read states or unread counts change.
+  static String _sanitizeIdSegment(String raw) {
+    return raw.trim().replaceAll(RegExp(r'[/\s]+'), '_');
+  }
+
+  static bool _isValidParticipantId(String? raw, String placeholder) {
+    final clean = (raw ?? '').trim();
+    return clean.isNotEmpty && clean != placeholder;
+  }
+
+  /// Returns whether both [clientId] and [artistId] are real IDs suitable for a
+  /// canonical `dm_<clientId>_<artistId>` document key.
+  static bool hasCanonicalParticipants({String? clientId, String? artistId}) {
+    return _isValidParticipantId(clientId, 'client_unknown') &&
+        _isValidParticipantId(artistId, 'artist_unknown');
+  }
+
+  /// Returns `true` when [threadId] already uses the canonical `dm_` format.
+  static bool isCanonicalThreadId(String threadId) {
+    return threadId.trim().startsWith('dm_');
+  }
+
+  /// Deterministic canonical chat document ID for a `(clientId, artistId)` pair.
+  ///
+  /// Role-directional (`dm_<clientId>_<artistId>`) so dual-role users who book
+  /// each other maintain independent Client Mode and Artist Mode timelines.
+  static String canonicalThreadId({
+    required String clientId,
+    required String artistId,
+  }) {
+    final c = _sanitizeIdSegment(clientId);
+    final a = _sanitizeIdSegment(artistId);
+    if (c.isEmpty || a.isEmpty) {
+      return 'thread_${DateTime.now().millisecondsSinceEpoch}';
+    }
+    return 'dm_${c}_$a';
+  }
+
+  /// Resolves the best deterministic thread ID for a pair, falling back cleanly
+  /// when mock/offline fixtures omit a `clientId`.
+  static String resolveCanonicalThreadId({
+    String? clientId,
+    required String artistId,
+    String? clientName,
+    String? fallbackId,
+  }) {
+    if (hasCanonicalParticipants(clientId: clientId, artistId: artistId)) {
+      return canonicalThreadId(clientId: clientId!, artistId: artistId);
+    }
+    final cleanArtist = _sanitizeIdSegment(artistId);
+    final cleanName = (clientName ?? '')
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    if (cleanArtist.isNotEmpty && cleanName.isNotEmpty) {
+      return 'dm_guest_${cleanName}_$cleanArtist';
+    }
+    if (fallbackId != null && fallbackId.trim().isNotEmpty) {
+      return fallbackId.trim();
+    }
+    return 'thread_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  /// Merges two chronologically ordered message lists without duplicating IDs.
+  static List<ChatMessage> mergeMessages(
+    List<ChatMessage> existing,
+    List<ChatMessage> incoming,
+  ) {
+    final byId = <String, ChatMessage>{
+      for (final m in existing) m.id: m,
+      for (final m in incoming) m.id: m,
+    };
+    final merged = byId.values.toList()
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    return merged;
+  }
+
+  static List<MessageThread> _sortedByRecent(Iterable<MessageThread> threads) {
+    final list = threads.toList()
+      ..sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
+    return list;
+  }
+
+  /// Notifier triggered whenever thread read states, messages, or unread counts change.
   static final ValueNotifier<int> unreadUpdateNotifier = ValueNotifier<int>(0);
 
   /// Quarantined mock threads preserved in [MockFixtures].
@@ -435,58 +612,246 @@ class MessageThread {
   /// Live session threads populated during an active authenticated session.
   static final List<MessageThread> liveThreads = [];
 
+  /// Tracks the thread currently open in [ChatConversationScreen], if any, so
+  /// live listeners can automatically clear incoming unread counts.
+  static String? activeOpenThreadId;
+  static bool activeOpenThreadIsArtistView = false;
+
   /// Active message threads for the current runtime mode.
   static List<MessageThread> get activeThreads =>
       MockDataConfig.isEnabled ? mockThreads : liveThreads;
 
-  /// Total unread messages across active threads (optionally filtered by artist ID).
-  static int totalUnreadCount([String? artistId]) {
+  /// Threads visible in Client Mode for [clientUid], sorted newest-first.
+  static List<MessageThread> threadsForClient(String? clientUid) {
     final threads = activeThreads;
-    final relevant = (artistId != null && artistId.isNotEmpty)
-        ? threads.where((t) => t.artistId == artistId)
-        : threads;
-    return relevant.fold<int>(0, (sum, t) => sum + t.unreadCount);
+    if (MockDataConfig.isEnabled) return _sortedByRecent(threads);
+    final cleanUid = (clientUid ?? '').trim();
+    if (cleanUid.isEmpty) return _sortedByRecent(threads);
+    return _sortedByRecent(
+      threads.where((t) {
+        final cid = (t.clientId ?? '').trim();
+        if (cid.isNotEmpty) return cid == cleanUid;
+        return t.artistId.trim() != cleanUid;
+      }),
+    );
   }
 
-  /// Marks a specific conversation thread as read across active session lists.
-  static void markThreadAsRead(String threadId) {
+  /// Threads visible in Artist Mode for [artistUid], sorted newest-first.
+  static List<MessageThread> threadsForArtist(String? artistUid) {
+    final threads = activeThreads;
+    if (MockDataConfig.isEnabled) return _sortedByRecent(threads);
+    final cleanUid = (artistUid ?? '').trim();
+    if (cleanUid.isEmpty) return _sortedByRecent(threads);
+    return _sortedByRecent(
+      threads.where((t) => t.artistId.trim() == cleanUid),
+    );
+  }
+
+  /// Total unread messages for Client Mode (filtered by [clientUid] in live mode).
+  static int totalUnreadCountForClient([String? clientUid]) {
+    return threadsForClient(clientUid)
+        .fold<int>(0, (sum, t) => sum + t.clientUnreadCount);
+  }
+
+  /// Total unread messages for Artist Mode (filtered by [artistUid]).
+  static int totalUnreadCountForArtist([String? artistUid]) {
+    final cleanUid = (artistUid ?? '').trim();
+    final Iterable<MessageThread> relevant;
+    if (MockDataConfig.isEnabled) {
+      relevant = cleanUid.isNotEmpty
+          ? activeThreads.where((t) => t.artistId.trim() == cleanUid)
+          : activeThreads;
+    } else {
+      relevant = threadsForArtist(cleanUid);
+    }
+    return relevant.fold<int>(0, (sum, t) => sum + t.artistUnreadCount);
+  }
+
+  /// Total unread messages across active threads.
+  ///
+  /// When [artistId] is provided, sums artist-side unread counts for that artist;
+  /// otherwise sums client-side unread counts.
+  static int totalUnreadCount([String? artistId]) {
+    if (artistId != null && artistId.trim().isNotEmpty) {
+      return totalUnreadCountForArtist(artistId);
+    }
+    return totalUnreadCountForClient();
+  }
+
+  /// Finds an existing active thread matching [threadId] or the `(clientId, artistId)` pair.
+  static MessageThread? findExistingThread({
+    String? threadId,
+    String? clientId,
+    String? artistId,
+    String? clientName,
+  }) {
+    final threads = activeThreads;
+    final cleanThreadId = (threadId ?? '').trim();
+    if (cleanThreadId.isNotEmpty) {
+      for (final t in threads) {
+        if (t.id == cleanThreadId || t.mergedLegacyIds.contains(cleanThreadId)) {
+          return t;
+        }
+      }
+    }
+    if (hasCanonicalParticipants(clientId: clientId, artistId: artistId)) {
+      final canonical = canonicalThreadId(
+        clientId: clientId!,
+        artistId: artistId!,
+      );
+      for (final t in threads) {
+        if (t.id == canonical ||
+            (t.artistId.trim() == artistId.trim() &&
+                (t.clientId ?? '').trim() == clientId.trim())) {
+          return t;
+        }
+      }
+    }
+    final cleanArtist = (artistId ?? '').trim();
+    final lowerClient = (clientName ?? '').trim().toLowerCase();
+    if (cleanArtist.isNotEmpty && lowerClient.isNotEmpty) {
+      for (final t in threads) {
+        if (t.artistId.trim() == cleanArtist &&
+            (t.clientName ?? '').trim().toLowerCase() == lowerClient) {
+          return t;
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Marks a specific conversation thread as read locally for the viewer's role.
+  static bool markThreadAsRead(
+    String threadId, {
+    bool isArtistView = false,
+    DateTime? readAt,
+  }) {
+    final now = readAt ?? DateTime.now();
     bool updated = false;
-    final mockIndex = mockThreads.indexWhere((t) => t.id == threadId);
-    if (mockIndex != -1 && mockThreads[mockIndex].unreadCount > 0) {
-      mockThreads[mockIndex] = mockThreads[mockIndex].copyWith(unreadCount: 0);
-      updated = true;
+
+    bool applyToList(List<MessageThread> list) {
+      final idx = list.indexWhere(
+        (t) => t.id == threadId || t.mergedLegacyIds.contains(threadId),
+      );
+      if (idx == -1) return false;
+      final current = list[idx];
+      final currentUnread = current.unreadCountFor(isArtistView: isArtistView);
+      final currentReadAt = current.lastReadAtFor(isArtistView: isArtistView);
+      if (currentUnread == 0 &&
+          currentReadAt != null &&
+          !now.isAfter(currentReadAt)) {
+        return false;
+      }
+      list[idx] = isArtistView
+          ? current.copyWith(artistUnreadCount: 0, artistLastReadAt: now)
+          : current.copyWith(clientUnreadCount: 0, clientLastReadAt: now);
+      return true;
     }
 
-    final liveIndex = liveThreads.indexWhere((t) => t.id == threadId);
-    if (liveIndex != -1 && liveThreads[liveIndex].unreadCount > 0) {
-      liveThreads[liveIndex] = liveThreads[liveIndex].copyWith(unreadCount: 0);
-      updated = true;
-    }
+    if (applyToList(mockThreads)) updated = true;
+    if (applyToList(liveThreads)) updated = true;
 
     if (updated) {
       unreadUpdateNotifier.value++;
     }
+    return updated;
   }
 
-  /// Prepends a thread to the active session list (or mock list when sandboxed).
-  static void addThread(MessageThread thread) {
-    if (MockDataConfig.isEnabled) {
-      mockThreads.insert(0, thread);
+  /// Inserts or merges [thread] into the active session list without creating duplicates.
+  static MessageThread upsertThread(MessageThread thread) {
+    final targetList = MockDataConfig.isEnabled ? mockThreads : liveThreads;
+    final cleanArtist = thread.artistId.trim();
+    final cleanClient = (thread.clientId ?? '').trim();
+
+    final existingIndex = targetList.indexWhere((t) {
+      if (t.id == thread.id || t.mergedLegacyIds.contains(thread.id)) {
+        return true;
+      }
+      if (hasCanonicalParticipants(clientId: cleanClient, artistId: cleanArtist)) {
+        return t.artistId.trim() == cleanArtist &&
+            (t.clientId ?? '').trim() == cleanClient;
+      }
+      return false;
+    });
+
+    late final MessageThread resolved;
+    if (existingIndex != -1) {
+      final existing = targetList.removeAt(existingIndex);
+      final mergedMsgs = mergeMessages(existing.messages, thread.messages);
+      final newestTime = thread.lastMessageTime.isAfter(existing.lastMessageTime)
+          ? thread.lastMessageTime
+          : existing.lastMessageTime;
+      final newestPreview =
+          thread.lastMessageTime.isAfter(existing.lastMessageTime) ||
+                  existing.lastMessage.trim().isEmpty
+              ? thread.lastMessage
+              : existing.lastMessage;
+      final canonicalId =
+          hasCanonicalParticipants(clientId: cleanClient, artistId: cleanArtist)
+              ? canonicalThreadId(clientId: cleanClient, artistId: cleanArtist)
+              : (isCanonicalThreadId(thread.id) ? thread.id : existing.id);
+      final legacyIds = <String>{
+        ...existing.mergedLegacyIds,
+        ...thread.mergedLegacyIds,
+        if (existing.id != canonicalId) existing.id,
+        if (thread.id != canonicalId) thread.id,
+      }.toList(growable: false);
+
+      resolved = existing.copyWith(
+        id: canonicalId,
+        clientId: cleanClient.isNotEmpty ? cleanClient : existing.clientId,
+        clientName: (thread.clientName?.trim().isNotEmpty == true)
+            ? thread.clientName
+            : existing.clientName,
+        clientAvatar: thread.clientAvatar.trim().isNotEmpty
+            ? thread.clientAvatar
+            : existing.clientAvatar,
+        artistName: thread.artistName.trim().isNotEmpty
+            ? thread.artistName
+            : existing.artistName,
+        artistAvatar: thread.artistAvatar.trim().isNotEmpty
+            ? thread.artistAvatar
+            : existing.artistAvatar,
+        studioName: thread.studioName.trim().isNotEmpty
+            ? thread.studioName
+            : existing.studioName,
+        lastMessage: newestPreview,
+        lastMessageTime: newestTime,
+        clientUnreadCount: thread.clientUnreadCount,
+        artistUnreadCount: thread.artistUnreadCount,
+        clientLastReadAt: thread.clientLastReadAt ?? existing.clientLastReadAt,
+        artistLastReadAt: thread.artistLastReadAt ?? existing.artistLastReadAt,
+        flashTitleContext: thread.flashTitleContext ?? existing.flashTitleContext,
+        mergedLegacyIds: legacyIds,
+        messages: mergedMsgs,
+      );
     } else {
-      liveThreads.insert(0, thread);
+      resolved = thread;
     }
+
+    targetList.insert(0, resolved);
     unreadUpdateNotifier.value++;
+    return resolved;
+  }
+
+  /// Prepends or merges a thread into the active session list (or mock list when sandboxed).
+  static void addThread(MessageThread thread) {
+    upsertThread(thread);
   }
 
   /// Clears session-scoped message threads upon sign-out.
   static void clearSessionThreads() {
     liveThreads.clear();
+    activeOpenThreadId = null;
+    activeOpenThreadIsArtistView = false;
     unreadUpdateNotifier.value++;
   }
 
   /// Resets mock threads to initial fixture data (useful for test isolation).
   static void resetMockThreads() {
     mockThreads = MockFixtures.createMessageThreads();
+    activeOpenThreadId = null;
+    activeOpenThreadIsArtistView = false;
     unreadUpdateNotifier.value++;
   }
 }

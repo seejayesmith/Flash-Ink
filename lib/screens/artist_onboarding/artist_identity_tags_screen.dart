@@ -124,7 +124,7 @@ class _ArtistIdentityTagsScreenState extends State<ArtistIdentityTagsScreen> {
   Widget build(BuildContext context) {
     return OnboardingStepScaffold(
       currentStep: 7,
-      totalSteps: 9,
+      totalSteps: 10,
       onBack: Navigator.canPop(context)
           ? () {
               FocusManager.instance.primaryFocus?.unfocus();

@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../core/mock/mock_data_config.dart';
 import '../../core/mock/mock_fixtures.dart';
 import '../../models/artist.dart';
 import '../../models/studio_information.dart';
 import '../../providers/app_providers.dart';
+import '../../repositories/artist_dashboard_repository.dart';
 import '../../repositories/artist_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/auth/dev_mock_user.dart';
@@ -34,6 +36,7 @@ class ArtistShareLinkScreen extends StatefulWidget {
   final StudioInformation? studioInformation;
   final String? artistBio;
   final List<StudioPolicy>? policies;
+  final bool stripePayoutsReady;
 
   const ArtistShareLinkScreen({
     super.key,
@@ -50,6 +53,7 @@ class ArtistShareLinkScreen extends StatefulWidget {
     this.studioInformation,
     this.artistBio,
     this.policies,
+    this.stripePayoutsReady = false,
   });
 
   @override
@@ -149,6 +153,14 @@ class _ArtistShareLinkScreenState extends State<ArtistShareLinkScreen> {
         userPhone = user?.phoneNumber ?? '';
       } catch (_) {}
 
+      final shouldOpenBooks = widget.stripePayoutsReady;
+      if (!MockDataConfig.isEnabled) {
+        ArtistDashboardRepository.stripePayoutsReady = shouldOpenBooks;
+        if (!shouldOpenBooks) {
+          ArtistDashboardRepository.closeBooks();
+        }
+      }
+
       Artist buildLocalArtist() => Artist(
             id: uid,
             name: cleanDisplayName,
@@ -156,6 +168,8 @@ class _ArtistShareLinkScreenState extends State<ArtistShareLinkScreen> {
             instagramHandle: _displayHandle,
             studioName: hydratedStudio.name,
             avatarUrl: safePhotoUrl,
+            isBooksOpen: shouldOpenBooks,
+            stripePayoutsReady: shouldOpenBooks,
             location: hydratedStudio.displayLocation.isNotEmpty
                 ? hydratedStudio.displayLocation
                 : effectiveLocation,
@@ -205,7 +219,7 @@ class _ArtistShareLinkScreenState extends State<ArtistShareLinkScreen> {
                 studioInformation: hydratedStudio,
                 fallbackLocation: effectiveLocation,
                 minDeposit: deposit,
-                isBooksOpen: true,
+                isBooksOpen: shouldOpenBooks,
                 flashArtworks: widget.flashArtworks,
                 policies: effectivePolicies,
               )
@@ -319,8 +333,8 @@ class _ArtistShareLinkScreenState extends State<ArtistShareLinkScreen> {
   @override
   Widget build(BuildContext context) {
     return OnboardingStepScaffold(
-      currentStep: 9,
-      totalSteps: 9,
+      currentStep: 10,
+      totalSteps: 10,
       scrollable: false,
       onBack: Navigator.canPop(context)
           ? () {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../models/artist.dart';
 import '../../../theme/app_radius.dart';
 import '../../../theme/app_theme.dart';
 
@@ -11,6 +12,7 @@ class BookingStepDetails extends StatelessWidget {
   final TextEditingController notesController;
   final bool isUserPhoneVerified;
   final bool agreedToPolicies;
+  final List<StudioPolicy>? policies;
   final VoidCallback onFieldChanged;
   final VoidCallback onVerifyPhoneTap;
   final ValueChanged<bool> onAgreedChanged;
@@ -23,12 +25,13 @@ class BookingStepDetails extends StatelessWidget {
     required this.notesController,
     required this.isUserPhoneVerified,
     required this.agreedToPolicies,
+    this.policies,
     required this.onFieldChanged,
     required this.onVerifyPhoneTap,
     required this.onAgreedChanged,
   });
 
-  static const List<String> _policies = [
+  static const List<String> _fallbackPolicies = [
     'Deposits are non-refundable and credited toward your session balance.',
     '48-hour advance notice is required to reschedule your appointment.',
     'A valid government-issued photo ID (18+) is required at the studio.',
@@ -197,42 +200,118 @@ class BookingStepDetails extends StatelessWidget {
     );
   }
 
+  IconData _getPolicyIcon(String key) {
+    switch (key.toLowerCase()) {
+      case 'deposit':
+        return Icons.payments_outlined;
+      case 'cancellation':
+        return Icons.event_busy_outlined;
+      case 'refund':
+        return Icons.currency_exchange_outlined;
+      case 'health':
+        return Icons.health_and_safety_outlined;
+      case 'etiquette':
+        return Icons.groups_outlined;
+      case 'touchup':
+        return Icons.healing_outlined;
+      default:
+        return Icons.check_circle_outline;
+    }
+  }
+
   Widget _buildPoliciesCard() {
+    final activePolicies = (policies ?? const <StudioPolicy>[])
+        .where((p) => p.isEnabled)
+        .toList(growable: false);
+
     return Container(
+      key: const Key('booking_policies_card'),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppTheme.cardBackground,
         borderRadius: BorderRadius.circular(AppRadius.radiusMd),
         border: Border.all(color: const Color(0xFF2B2F2F)),
       ),
-      child: Column(
-        children: _policies.map((policy) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
+      child: activePolicies.isNotEmpty
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.check_circle_outline,
-                  color: Color(0xFF4ADE80),
-                  size: 16,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    policy,
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFFC0C5C5),
-                      fontSize: 12,
-                      height: 1.35,
-                    ),
+              children: activePolicies.map((policy) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 1),
+                        child: Icon(
+                          _getPolicyIcon(policy.iconKey),
+                          color: AppTheme.gold,
+                          size: 16,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (policy.title.trim().isNotEmpty)
+                              Text(
+                                policy.title,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: AppTheme.textPrimary,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.3,
+                                ),
+                              ),
+                            if (policy.title.trim().isNotEmpty &&
+                                policy.description.trim().isNotEmpty)
+                              const SizedBox(height: 2),
+                            if (policy.description.trim().isNotEmpty)
+                              Text(
+                                policy.description,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: const Color(0xFFC0C5C5),
+                                  fontSize: 12,
+                                  height: 1.35,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                );
+              }).toList(),
+            )
+          : Column(
+              children: _fallbackPolicies.map((policy) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.check_circle_outline,
+                        color: Color(0xFF4ADE80),
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          policy,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFFC0C5C5),
+                            fontSize: 12,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
-          );
-        }).toList(),
-      ),
     );
   }
 }

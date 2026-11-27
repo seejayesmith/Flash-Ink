@@ -30,6 +30,24 @@ class AppointmentsScreen extends StatefulWidget {
 class _AppointmentsScreenState extends State<AppointmentsScreen> {
   int _selectedTabIndex = 0; // 0: Upcoming, 1: Past
 
+  @override
+  void initState() {
+    super.initState();
+    ClientAppointment.appointmentsUpdateNotifier
+        .addListener(_onAppointmentsChanged);
+  }
+
+  @override
+  void dispose() {
+    ClientAppointment.appointmentsUpdateNotifier
+        .removeListener(_onAppointmentsChanged);
+    super.dispose();
+  }
+
+  void _onAppointmentsChanged() {
+    if (mounted) setState(() {});
+  }
+
   List<ClientAppointment> get _upcoming =>
       widget.mockUpcoming ?? ClientAppointment.activeUpcoming;
   List<ClientAppointment> get _past =>

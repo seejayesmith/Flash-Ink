@@ -626,6 +626,7 @@ class MockFixtures {
   static List<ClientAppointment> createUpcomingAppointments() => [
     ClientAppointment(
       id: 'APT-84021',
+      artistId: 'artist_1',
       artistName: 'OddMaree',
       artistAvatar:
           'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
@@ -645,6 +646,7 @@ class MockFixtures {
     ),
     ClientAppointment(
       id: 'APT-77291',
+      artistId: 'artist_2',
       artistName: 'Maree Raven',
       artistAvatar:
           'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80',
@@ -666,6 +668,7 @@ class MockFixtures {
   static List<ClientAppointment> createPastAppointments() => [
     ClientAppointment(
       id: 'APT-51092',
+      artistId: 'artist_3',
       artistName: 'Kora Sol',
       artistAvatar:
           'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',

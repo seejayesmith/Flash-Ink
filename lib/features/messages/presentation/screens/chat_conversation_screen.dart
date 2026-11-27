@@ -5,14 +5,22 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/mock/mock_data_config.dart';
+import '../../../../models/artist_dashboard/artist_books_schedule.dart';
+import '../../../../repositories/artist_dashboard_repository.dart';
+import '../../../../screens/booking/touch_up_booking_screen.dart';
 import '../../../../services/booking_sync_service.dart';
 import '../../../../services/chat_service.dart';
+import '../../../../services/scheduling/touch_up_eligibility.dart';
+import '../../../../services/touch_up_service.dart';
 import '../../../../theme/app_radius.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/adaptive_glass_container.dart';
+import '../../../../widgets/flash_image.dart';
+import '../../../../widgets/flash_snack_bar.dart';
 import '../../../../widgets/keyboard_collapse_button.dart';
 import '../../../../widgets/user_avatar.dart';
+import '../../../appointments/domain/models/appointment_item.dart';
 import '../../domain/models/message_thread.dart';
 import '../widgets/booking_receipt_message_tile.dart';
 import '../widgets/proposal_options_message_tile.dart';
@@ -21,11 +29,19 @@ import '../widgets/proposal_options_message_tile.dart';
 class ChatConversationScreen extends StatefulWidget {
   final MessageThread thread;
   final bool isArtistView;
+  final ArtistBooksSchedule? artistScheduleOverride;
+  final List<ClientAppointment>? allAppointmentsOverride;
+  final DateTime? nowOverride;
+  final TouchUpService? touchUpService;
 
   const ChatConversationScreen({
     super.key,
     required this.thread,
     this.isArtistView = false,
+    this.artistScheduleOverride,
+    this.allAppointmentsOverride,
+    this.nowOverride,
+    this.touchUpService,
   });
 
   @override
@@ -50,10 +66,16 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     _messages = List.from(widget.thread.messages);
     _messageFocusNode.addListener(_onFocusChange);
     _textController.addListener(_onTextChanged);
+    ClientAppointment.appointmentsUpdateNotifier
+        .addListener(_onAppointmentsUpdated);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       MessageThread.markThreadAsRead(widget.thread.id);
     });
     _backfillSenderAvatarIfNeeded();
+  }
+
+  void _onAppointmentsUpdated() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -139,6 +161,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   @override
   void dispose() {
+    ClientAppointment.appointmentsUpdateNotifier
+        .removeListener(_onAppointmentsUpdated);
     _messageFocusNode.removeListener(_onFocusChange);
     _textController.removeListener(_onTextChanged);
     _messageFocusNode.unfocus();
@@ -188,6 +212,256 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         );
       }
     });
+  }
+
+  List<ClientAppointment> _completedTattoosWithArtist() {
+    return TouchUpEligibilityService.findCompletedTattoosForArtist(
+      artistId: _thread.artistId,
+      artistName: _thread.artistName,
+      appointments: widget.allAppointmentsOverride,
+    );
+  }
+
+  Future<void> _handleChatTouchUpRequest() async {
+    _dismissKeyboard();
+    final completed = _completedTattoosWithArtist();
+    if (completed.isEmpty) {
+      FlashSnackBar.showInfo(
+        context,
+        'Self-booked touch-ups unlock once you have a completed tattoo with ${_thread.artistName}.',
+      );
+      return;
+    }
+
+    ArtistBooksSchedule schedule =
+        widget.artistScheduleOverride ?? ArtistDashboardRepository.booksSchedule;
+    if (widget.artistScheduleOverride == null && _thread.artistId.isNotEmpty) {
+      final fetched = await BookingSyncService.fetchArtistScheduleFromCloud(
+        _thread.artistId,
+      );
+      if (fetched != null) schedule = fetched;
+    }
+    if (!mounted) return;
+
+    if (completed.length == 1) {
+      await _processTouchUpForTattoo(completed.first, schedule);
+      return;
+    }
+
+    // Client has 2+ completed tattoos with this artist -> show picker sheet.
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return AdaptiveGlassContainer.bottomSheet(
+          key: const Key('chat_touch_up_tattoo_picker'),
+          glassEnabled: false,
+          androidSurfaceColor: AppTheme.onyxContainer,
+          selectedBorderColor: AppTheme.goldBorder,
+          unselectedBorderColor: AppTheme.goldBorder,
+          topRadius: AppRadius.radiusSheet,
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.darkBorder,
+                    borderRadius: BorderRadius.circular(AppRadius.dragHandle),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Select Tattoo for Touch-up',
+                style: GoogleFonts.plusJakartaSans(
+                  color: AppTheme.textPrimary,
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Choose which completed tattoo with ${_thread.artistName} needs a touch-up.',
+                style: GoogleFonts.plusJakartaSans(
+                  color: AppTheme.navInactive,
+                  fontSize: 12.5,
+                ),
+              ),
+              const SizedBox(height: 14),
+              ...completed.map((tattoo) {
+                final eligibility = TouchUpEligibilityService.evaluate(
+                  originalAppointment: tattoo,
+                  schedule: schedule,
+                  allClientAppointments: widget.allAppointmentsOverride,
+                  now: widget.nowOverride,
+                );
+                final badgeText = eligibility.isEligible
+                    ? (eligibility.isFree
+                        ? 'Eligible • Free'
+                        : 'Eligible • \$${eligibility.feeDollars}')
+                    : (eligibility.status ==
+                                TouchUpEligibilityStatus.tooEarlyToHeal &&
+                            eligibility.availableAfter != null
+                        ? 'After ${TouchUpEligibilityService.formatShortDate(eligibility.availableAfter!)}'
+                        : 'Message in Chat');
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: InkWell(
+                    key: Key('touch_up_picker_item_${tattoo.id}'),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusMd),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      _processTouchUpForTattoo(tattoo, schedule);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.cardBackground,
+                        borderRadius: BorderRadius.circular(AppRadius.radiusMd),
+                        border: Border.all(
+                          color: eligibility.isEligible
+                              ? AppTheme.goldBorder
+                              : AppTheme.darkBorder,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.radiusSm),
+                            child: SizedBox(
+                              width: 48,
+                              height: 48,
+                              child: FlashImage(
+                                urlOrPath: tattoo.flashImageUrl,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  tattoo.flashTitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: AppTheme.textPrimary,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${TouchUpEligibilityService.formatShortDate(tattoo.dateTime)} • ${tattoo.placement}',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: AppTheme.navInactive,
+                                    fontSize: 11.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: eligibility.isEligible
+                                  ? const Color(0xFF1E2E20)
+                                  : AppTheme.onyxSurface,
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.radiusSm),
+                              border: Border.all(
+                                color: eligibility.isEligible
+                                    ? const Color(0xFF4ADE80)
+                                    : AppTheme.darkBorder,
+                              ),
+                            ),
+                            child: Text(
+                              badgeText,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: eligibility.isEligible
+                                    ? const Color(0xFF4ADE80)
+                                    : AppTheme.navInactive,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _processTouchUpForTattoo(
+    ClientAppointment tattoo,
+    ArtistBooksSchedule schedule,
+  ) async {
+    final eligibility = TouchUpEligibilityService.evaluate(
+      originalAppointment: tattoo,
+      schedule: schedule,
+      allClientAppointments: widget.allAppointmentsOverride,
+      now: widget.nowOverride,
+    );
+
+    if (eligibility.isEligible) {
+      final result = await Navigator.push<TouchUpBookingResult>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TouchUpBookingScreen(
+            originalAppointment: tattoo,
+            initialSchedule: schedule,
+            threadId: _thread.id,
+            touchUpService: widget.touchUpService,
+          ),
+        ),
+      );
+      if (result != null && result.success && mounted) {
+        final refreshed = MessageThread.activeThreads
+            .where((t) => t.id == _thread.id)
+            .firstOrNull;
+        if (refreshed != null) {
+          setState(() {
+            _thread = refreshed;
+            _messages = List.from(refreshed.messages);
+          });
+          _scrollToBottom();
+        }
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    if (eligibility.shouldDirectToChat) {
+      _textController.text =
+          'Hi ${_thread.artistName}, could we schedule a touch-up for my "${tattoo.flashTitle}" piece?';
+      _messageFocusNode.requestFocus();
+    }
+    FlashSnackBar.showInfo(
+      context,
+      eligibility.summary,
+      duration: const Duration(seconds: 4),
+    );
   }
 
   Future<void> _showAttachmentOptions() async {
@@ -646,6 +920,48 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             ),
           ],
         ),
+          actions: [
+            if (!widget.isArtistView && _completedTattoosWithArtist().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Center(
+                  child: GestureDetector(
+                    key: const Key('chat_book_touch_up_button'),
+                    onTap: _handleChatTouchUpRequest,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF332B14),
+                        borderRadius: BorderRadius.circular(AppRadius.radiusFull),
+                        border: Border.all(color: AppTheme.goldBorder),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.healing_outlined,
+                            color: AppTheme.gold,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Touch-up',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: AppTheme.gold,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
       ),
       body: SafeArea(
         bottom: false,

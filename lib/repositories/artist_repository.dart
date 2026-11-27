@@ -256,6 +256,7 @@ class ArtistRepository {
     final existingData = existingUser.data();
     final existingArtist = await artistRef.get();
     final existingArtistData = existingArtist.data();
+    final existingStripeReady = existingArtistData?['stripePayoutsReady'] == true;
 
     String effectiveAvatarUrl = safeAvatarUrl;
     if (effectiveAvatarUrl.isEmpty) {
@@ -298,10 +299,13 @@ class ArtistRepository {
     }
 
     final resolvedArtist =
-        (effectiveAvatarUrl != safeAvatarUrl || effectiveBannerUrl != safeBannerUrl)
+        (effectiveAvatarUrl != safeAvatarUrl ||
+                effectiveBannerUrl != safeBannerUrl ||
+                existingStripeReady != artist.stripePayoutsReady)
             ? artist.copyWith(
                 avatarUrl: effectiveAvatarUrl,
                 bannerUrl: effectiveBannerUrl,
+                stripePayoutsReady: existingStripeReady,
               )
             : artist;
 

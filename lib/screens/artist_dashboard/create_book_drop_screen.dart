@@ -5,18 +5,22 @@ import '../../models/artist.dart';
 import '../../models/artist_dashboard/book_drop.dart';
 import '../../repositories/artist_dashboard_repository.dart';
 import '../../models/waitlist_entry.dart';
+import '../../services/stripe_service.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';
 import '../../widgets/flash_snack_bar.dart';
 import '../../widgets/flash_switch.dart';
+import 'stripe_payout_gate_sheet.dart';
 
 /// Dedicated full-screen wizard for creating, configuring, and scheduling a Book Drop.
 class CreateBookDropScreen extends StatefulWidget {
   final Artist? artist;
+  final StripeService? stripeService;
 
   const CreateBookDropScreen({
     super.key,
     this.artist,
+    this.stripeService,
   });
 
   static Future<bool?> show(BuildContext context, {Artist? artist}) {
@@ -135,6 +139,16 @@ class _CreateBookDropScreenState extends State<CreateBookDropScreen> {
   }
 
   void _commitDrop() {
+    if (!ArtistDashboardRepository.stripePayoutsReady) {
+      StripePayoutGateSheet.show(
+        context,
+        stripeService: widget.stripeService,
+        artistName: widget.artist?.name,
+        onVerified: _commitDrop,
+      );
+      return;
+    }
+
     final start = DateTime(_displayedMonth.year, _displayedMonth.month, _selectedDays.isEmpty ? 1 : _selectedDays.reduce((a, b) => a < b ? a : b));
     final end = DateTime(_displayedMonth.year, _displayedMonth.month, _selectedDays.isEmpty ? 28 : _selectedDays.reduce((a, b) => a > b ? a : b));
     final opensAt = _launchImmediately
@@ -676,7 +690,7 @@ class _CreateBookDropScreenState extends State<CreateBookDropScreen> {
         ),
         const SizedBox(height: 10),
         _buildCheckboxTile(
-          title: 'Touch-ups & Consultations',
+          title: 'Touch-ups',
           subtitle: 'Short follow-up sessions for previous clients.',
           value: _acceptTouchUps,
           onChanged: (val) => setState(() => _acceptTouchUps = val ?? false),

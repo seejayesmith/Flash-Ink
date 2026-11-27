@@ -95,6 +95,10 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
     switch (iconKey.toLowerCase()) {
       case 'deposit':
         return Icons.payments_outlined;
+      case 'cancellation':
+        return Icons.event_busy_outlined;
+      case 'refund':
+        return Icons.currency_exchange_outlined;
       case 'health':
         return Icons.health_and_safety_outlined;
       case 'etiquette':
@@ -381,6 +385,8 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
 
     final icons = [
       {'key': 'deposit', 'label': 'Deposit', 'icon': Icons.payments_outlined},
+      {'key': 'cancellation', 'label': 'Cancellation', 'icon': Icons.event_busy_outlined},
+      {'key': 'refund', 'label': 'Refunds', 'icon': Icons.currency_exchange_outlined},
       {'key': 'health', 'label': 'Health', 'icon': Icons.health_and_safety_outlined},
       {'key': 'etiquette', 'label': 'Etiquette', 'icon': Icons.groups_outlined},
       {'key': 'touchup', 'label': 'Touch-up', 'icon': Icons.healing_outlined},
@@ -677,7 +683,7 @@ class _ArtistPoliciesScreenState extends State<ArtistPoliciesScreen> {
   Widget build(BuildContext context) {
     return OnboardingStepScaffold(
       currentStep: 4,
-      totalSteps: 9,
+      totalSteps: 10,
       title: 'Studio Policies & Rules',
       subtitle: 'Review industry-standard client rules or tailor them to match your workflow.',
       ctaText: 'Continue',

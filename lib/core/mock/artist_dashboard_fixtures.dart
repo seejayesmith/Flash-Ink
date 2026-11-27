@@ -34,7 +34,7 @@ class ArtistDashboardFixtures {
   static ArtistBooksSchedule createDefaultLiveBooksSchedule() {
     final now = DateTime.now();
     return ArtistBooksSchedule(
-      isBooksOpen: true,
+      isBooksOpen: false,
       isEarlyAccessOnly: false,
       bookingWindowStart: DateTime(now.year, now.month, 1),
       bookingWindowEnd: DateTime(now.year, now.month + 3, 0),

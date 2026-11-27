@@ -325,7 +325,7 @@ class _ArtistPhoneVerificationScreenState extends State<ArtistPhoneVerificationS
   Widget build(BuildContext context) {
     return OnboardingStepScaffold(
       currentStep: 1,
-      totalSteps: 9,
+      totalSteps: 10,
       onBack: Navigator.canPop(context)
           ? () {
               FocusManager.instance.primaryFocus?.unfocus();

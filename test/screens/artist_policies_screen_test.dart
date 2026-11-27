@@ -295,5 +295,33 @@ void main() {
 
       expect(find.text('Deposits & Cancellations'), findsNothing);
     });
+
+    testWidgets('Add Custom Policy modal exposes Cancellation and Refunds icon chips', (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('add_custom_policy_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('policy_icon_chip_cancellation')), findsOneWidget);
+      expect(find.byKey(const Key('policy_icon_chip_refund')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('policy_icon_chip_refund')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('custom_policy_title_field')),
+        'Refund Policy',
+      );
+      await tester.enterText(
+        find.byKey(const Key('custom_policy_desc_field')),
+        'Deposits are refundable within 24 hours of booking.',
+      );
+      await tester.tap(find.byKey(const Key('add_custom_policy_submit_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Refund Policy'), findsOneWidget);
+      expect(find.byIcon(Icons.currency_exchange_outlined), findsOneWidget);
+    });
   });
 }

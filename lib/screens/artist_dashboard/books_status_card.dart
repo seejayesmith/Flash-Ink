@@ -3,9 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/artist_dashboard/book_drop.dart';
 import '../../repositories/artist_dashboard_repository.dart';
 import '../../models/waitlist_entry.dart';
+import '../../services/stripe_service.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';
 import '../../widgets/flash_switch.dart';
+import 'stripe_payout_gate_sheet.dart';
 
 /// The hero status card displayed on the Artist Dashboard and Books management view.
 /// Reflects the 7 distinct lifecycle states:
@@ -22,6 +24,7 @@ class BooksStatusCard extends StatelessWidget {
   final VoidCallback? onAddDays;
   final VoidCallback? onOpenSettings;
   final VoidCallback? onStatusChanged;
+  final StripeService? stripeService;
 
   const BooksStatusCard({
     super.key,
@@ -30,13 +33,26 @@ class BooksStatusCard extends StatelessWidget {
     this.onAddDays,
     this.onOpenSettings,
     this.onStatusChanged,
+    this.stripeService,
   });
+
+  void _openStripeGate(BuildContext context, {VoidCallback? onReadyAction}) {
+    StripePayoutGateSheet.show(
+      context,
+      stripeService: stripeService,
+      onVerified: () {
+        onReadyAction?.call();
+        onStatusChanged?.call();
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final schedule = ArtistDashboardRepository.booksSchedule;
     final mode = ArtistDashboardRepository.bookingMode;
     final isPaused = ArtistDashboardRepository.isPaused;
+    final payoutsReady = ArtistDashboardRepository.stripePayoutsReady;
     final drop = ArtistDashboardRepository.currentBookDrop;
     final waitingCount = ArtistDashboardRepository.waitlistEntries
         .where((e) => e.status == WaitlistStatus.waiting)
@@ -65,7 +81,15 @@ class BooksStatusCard extends StatelessWidget {
     String? secondaryButtonText;
     VoidCallback? onSecondaryTap;
 
-    if (isPaused) {
+    if (!payoutsReady) {
+      accentColor = const Color(0xFFEEC200); // Gold warning
+      statusBadge = 'PAYOUT SETUP REQUIRED';
+      title = 'Connect Stripe to Open Books';
+      description =
+          'Link or create your Stripe account so clients can pay deposits when your books open.';
+      primaryButtonText = 'Connect Stripe';
+      onPrimaryTap = () => _openStripeGate(context);
+    } else if (isPaused) {
       accentColor = const Color(0xFFF97316); // Orange
       statusBadge = 'INQUIRIES PAUSED';
       primaryButtonText = 'Resume Books';
@@ -230,14 +254,21 @@ class BooksStatusCard extends StatelessWidget {
                         // Main switch for backwards-compatible test assertions
                         FlashSwitch(
                           key: const Key('books_status_switch'),
-                          value: schedule.isBooksOpen && !isPaused,
+                          value: payoutsReady && schedule.isBooksOpen && !isPaused,
                           onChanged: (val) {
                             if (!val) {
                               ArtistDashboardRepository.closeBooks();
+                              onStatusChanged?.call();
+                            } else if (!payoutsReady) {
+                              _openStripeGate(
+                                context,
+                                onReadyAction:
+                                    ArtistDashboardRepository.openBooksPublicly,
+                              );
                             } else {
                               ArtistDashboardRepository.openBooksPublicly();
+                              onStatusChanged?.call();
                             }
-                            onStatusChanged?.call();
                           },
                         ),
                       ],

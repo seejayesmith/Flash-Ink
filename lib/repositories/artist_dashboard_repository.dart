@@ -80,6 +80,24 @@ class ArtistDashboardRepository {
     notifyPendingRequestsChanged();
   }
 
+  static bool _mockStripePayoutsReady = true;
+  static bool _liveStripePayoutsReady = false;
+
+  /// Whether the artist's Stripe Connect Express account has completed KYC
+  /// and has both charges and payouts enabled. Required before opening books.
+  static bool get stripePayoutsReady => MockDataConfig.isEnabled
+      ? _mockStripePayoutsReady
+      : _liveStripePayoutsReady;
+
+  static set stripePayoutsReady(bool ready) {
+    if (MockDataConfig.isEnabled) {
+      _mockStripePayoutsReady = ready;
+    } else {
+      _liveStripePayoutsReady = ready;
+    }
+    notifyPendingRequestsChanged();
+  }
+
   static void pauseInquiries() => isPaused = true;
   static void resumeInquiries() => isPaused = false;
 
@@ -379,6 +397,7 @@ class ArtistDashboardRepository {
     int? durationMinutes,
     int? bufferMinutes,
     String? ignoreHoldId,
+    BookingSlotType slotType = BookingSlotType.flash,
   }) =>
       ArtistAvailabilityCalculator.isSlotBookable(
         date: date,
@@ -395,6 +414,7 @@ class ArtistDashboardRepository {
         durationMinutes: durationMinutes,
         bufferMinutes: bufferMinutes,
         ignoreHoldId: ignoreHoldId,
+        slotType: slotType,
       );
 
   static bool isDateBookable({
@@ -764,6 +784,8 @@ class ArtistDashboardRepository {
       pendingCount: _mockPendingRequests.length,
     );
     _mockBooksSchedule = ArtistDashboardFixtures.createMockBooksSchedule();
+    _mockStripePayoutsReady = true;
+    _liveStripePayoutsReady = false;
     livePendingRequests = [];
     liveTodaySchedule = [];
     liveWaitlistEntries = [];
@@ -948,6 +970,7 @@ class ArtistDashboardRepository {
         _resolveArtistMessagingProfile(fallbackArtistName: request.artistName);
     final clientApt = ClientAppointment(
       id: 'CUST-${request.id.hashCode.abs() % 90000 + 10000}',
+      artistId: request.artistId,
       artistName: request.artistName,
       artistAvatar: profile.artistAvatar,
       studioName: profile.studioName,
@@ -1001,8 +1024,7 @@ class ArtistDashboardRepository {
       isFromArtist: true,
     );
 
-    final thread = MessageThread(
-      id: 'thread_custom_${request.id}',
+    BookingSyncService.postToCanonicalThread(
       artistId: resolvedArtistId,
       clientId: resolvedClientId,
       clientName: request.clientName,
@@ -1010,21 +1032,10 @@ class ArtistDashboardRepository {
       artistName: request.artistName,
       artistAvatar: profile.artistAvatar,
       studioName: profile.studioName,
-      lastMessage: followUpMessage.text,
-      lastMessageTime: DateTime.now(),
-      unreadCount: 1,
-      isOnline: true,
       flashTitleContext: 'Custom: ${request.category}',
       messages: [receiptMessage, followUpMessage],
-    );
-    MessageThread.addThread(thread);
-    BookingSyncService.syncChatThreadToCloud(
-      thread,
-      clientId: resolvedClientId,
-      artistId: resolvedArtistId,
-      clientName: request.clientName,
-      clientAvatar: request.clientAvatar,
-      artistAvatar: profile.artistAvatar,
+      initiatedByArtist: true,
+      fallbackThreadId: 'thread_custom_${request.id}',
     );
 
     return calendarApt;
@@ -1082,47 +1093,18 @@ class ArtistDashboardRepository {
       proposedSlots: cappedSlots,
     );
 
-    final threadId = 'thread_custom_${request.id}';
-    final existingIdx =
-        MessageThread.activeThreads.indexWhere((t) => t.id == threadId);
-    final MessageThread thread;
-    if (existingIdx != -1) {
-      final existing = MessageThread.activeThreads[existingIdx];
-      thread = existing.copyWith(
-        lastMessage: summaryText,
-        lastMessageTime: now,
-        unreadCount: existing.unreadCount + 1,
-        messages: [...existing.messages, proposalMessage],
-      );
-      MessageThread.activeThreads[existingIdx] = thread;
-      MessageThread.unreadUpdateNotifier.value++;
-    } else {
-      thread = MessageThread(
-        id: threadId,
-        artistId: resolvedArtistId,
-        clientId: resolvedClientId,
-        clientName: request.clientName,
-        clientAvatar: request.clientAvatar ?? '',
-        artistName: request.artistName,
-        artistAvatar: profile.artistAvatar,
-        studioName: profile.studioName,
-        lastMessage: summaryText,
-        lastMessageTime: now,
-        unreadCount: 1,
-        isOnline: true,
-        flashTitleContext: 'Custom: ${request.category}',
-        messages: [proposalMessage],
-      );
-      MessageThread.addThread(thread);
-    }
-
-    BookingSyncService.syncChatThreadToCloud(
-      thread,
-      clientId: resolvedClientId,
+    final thread = BookingSyncService.postToCanonicalThread(
       artistId: resolvedArtistId,
+      clientId: resolvedClientId,
       clientName: request.clientName,
-      clientAvatar: request.clientAvatar,
+      clientAvatar: request.clientAvatar ?? '',
+      artistName: request.artistName,
       artistAvatar: profile.artistAvatar,
+      studioName: profile.studioName,
+      flashTitleContext: 'Custom: ${request.category}',
+      messages: [proposalMessage],
+      initiatedByArtist: true,
+      fallbackThreadId: 'thread_custom_${request.id}',
     );
     BookingSyncService.syncCustomRequestToCloud(
       request,
@@ -1291,6 +1273,7 @@ class ArtistDashboardRepository {
 
     final clientApt = ClientAppointment(
       id: 'PROP-${aptId.hashCode.abs() % 90000 + 10000}',
+      artistId: effectiveArtistId,
       artistName: effectiveArtistName,
       artistAvatar: thread?.artistAvatar ?? '',
       studioName: thread?.studioName.isNotEmpty == true
@@ -1336,8 +1319,9 @@ class ArtistDashboardRepository {
     );
 
     if (thread != null) {
-      final idx =
-          MessageThread.activeThreads.indexWhere((t) => t.id == thread.id);
+      final idx = MessageThread.activeThreads.indexWhere(
+        (t) => t.id == thread.id || t.mergedLegacyIds.contains(thread.id),
+      );
       if (idx != -1) {
         final existing = MessageThread.activeThreads[idx];
         final updatedMessages = existing.messages
@@ -1347,6 +1331,9 @@ class ArtistDashboardRepository {
         final updatedThread = existing.copyWith(
           lastMessage: receiptMessage.text,
           lastMessageTime: now,
+          clientUnreadCount: 0,
+          artistUnreadCount: existing.artistUnreadCount + 1,
+          clientLastReadAt: now,
           messages: updatedMessages,
         );
         MessageThread.activeThreads[idx] = updatedThread;
@@ -1358,6 +1345,8 @@ class ArtistDashboardRepository {
           clientName: updatedThread.clientName,
           clientAvatar: updatedThread.clientAvatar,
           artistAvatar: updatedThread.artistAvatar,
+          newMessagesForSubcollection: [receiptMessage],
+          incrementRecipientFromArtist: false,
         );
       }
     }
@@ -1669,8 +1658,7 @@ class ArtistDashboardRepository {
       timestamp: DateTime.now(),
       isFromArtist: true,
     );
-    final thread = MessageThread(
-      id: 'thread_resched_$appointmentId',
+    BookingSyncService.postToCanonicalThread(
       artistId: resolvedArtistId,
       clientId: updatedApt.clientId,
       clientName: updatedApt.clientName,
@@ -1678,21 +1666,10 @@ class ArtistDashboardRepository {
       artistName: profile.artistName,
       artistAvatar: profile.artistAvatar,
       studioName: profile.studioName,
-      lastMessage: msg.text,
-      lastMessageTime: DateTime.now(),
-      unreadCount: 1,
-      isOnline: true,
       flashTitleContext: updatedApt.serviceType,
       messages: [msg],
-    );
-    MessageThread.addThread(thread);
-    BookingSyncService.syncChatThreadToCloud(
-      thread,
-      clientId: updatedApt.clientId,
-      artistId: resolvedArtistId,
-      clientName: updatedApt.clientName,
-      clientAvatar: updatedApt.clientAvatar,
-      artistAvatar: profile.artistAvatar,
+      initiatedByArtist: true,
+      fallbackThreadId: 'thread_resched_$appointmentId',
     );
 
     // 6. Sync to Cloud Firestore & send notification
@@ -1779,8 +1756,7 @@ class ArtistDashboardRepository {
       timestamp: DateTime.now(),
       isFromArtist: true,
     );
-    final thread = MessageThread(
-      id: 'thread_cancel_$appointmentId',
+    BookingSyncService.postToCanonicalThread(
       artistId: resolvedArtistId,
       clientId: removedApt.clientId,
       clientName: removedApt.clientName,
@@ -1788,21 +1764,10 @@ class ArtistDashboardRepository {
       artistName: profile.artistName,
       artistAvatar: profile.artistAvatar,
       studioName: profile.studioName,
-      lastMessage: msg.text,
-      lastMessageTime: DateTime.now(),
-      unreadCount: 1,
-      isOnline: true,
       flashTitleContext: removedApt.serviceType,
       messages: [msg],
-    );
-    MessageThread.addThread(thread);
-    BookingSyncService.syncChatThreadToCloud(
-      thread,
-      clientId: removedApt.clientId,
-      artistId: resolvedArtistId,
-      clientName: removedApt.clientName,
-      clientAvatar: removedApt.clientAvatar,
-      artistAvatar: profile.artistAvatar,
+      initiatedByArtist: true,
+      fallbackThreadId: 'thread_cancel_$appointmentId',
     );
 
     BookingSyncService.syncAppointmentToCloud(

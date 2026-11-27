@@ -6,6 +6,10 @@ export {
   createPaymentIntent,
   releaseCheckoutLock,
   stripeConnectWebhook,
+  createStripeConnectAccountLink,
+  syncStripeConnectStatus,
+  createStripeExpressLoginLink,
+  stripeConnectRedirect,
 } from './payments';
 export {
   setArtistRoleClaim,
@@ -22,3 +26,4 @@ export {
   syncArtistBookedSlotsOnAppointment,
   syncArtistBookedSlotsOnBooking,
 } from './schedule';
+export { bookFreeTouchUp } from './touchups';

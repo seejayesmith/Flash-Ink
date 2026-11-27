@@ -70,24 +70,61 @@ class AppointmentCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: isConfirmed ? const Color(0xFF1E2E20) : AppTheme.onyxContainer,
-                    borderRadius: BorderRadius.circular(AppRadius.radiusSm),
-                    border: Border.all(
-                      color: isConfirmed ? const Color(0xFF4ADE80) : AppTheme.darkBorder,
+                Row(
+                  children: [
+                    if (appointment.isTouchUp) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF332B14),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.radiusSm),
+                          border: Border.all(color: AppTheme.goldBorder),
+                        ),
+                        child: Text(
+                          'TOUCH-UP',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: AppTheme.gold,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isConfirmed
+                            ? const Color(0xFF1E2E20)
+                            : AppTheme.onyxContainer,
+                        borderRadius: BorderRadius.circular(AppRadius.radiusSm),
+                        border: Border.all(
+                          color: isConfirmed
+                              ? const Color(0xFF4ADE80)
+                              : AppTheme.darkBorder,
+                        ),
+                      ),
+                      child: Text(
+                        appointment.status.label.toUpperCase(),
+                        style: GoogleFonts.plusJakartaSans(
+                          color: isConfirmed
+                              ? const Color(0xFF4ADE80)
+                              : AppTheme.navInactive,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
                     ),
-                  ),
-                  child: Text(
-                    appointment.status.label.toUpperCase(),
-                    style: GoogleFonts.plusJakartaSans(
-                      color: isConfirmed ? const Color(0xFF4ADE80) : AppTheme.navInactive,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
+                  ],
                 ),
               ],
             ),
@@ -152,38 +189,48 @@ class AppointmentCard extends StatelessWidget {
             const SizedBox(height: 12),
 
             // Financial Summary Pills
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'Deposit: ',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: AppTheme.navInactive,
-                        fontSize: 11,
-                      ),
-                    ),
-                    Text(
-                      '\$${appointment.depositAmount} Paid',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: AppTheme.gold,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+            if (appointment.isTouchUp && appointment.totalPrice <= 0)
+              Text(
+                'Complimentary Touch-up (\$0)',
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFF4ADE80),
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
                 ),
-                Text(
-                  'Due: \$${appointment.balanceDue}',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: AppTheme.textPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+              )
+            else
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Deposit: ',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: AppTheme.navInactive,
+                          fontSize: 11,
+                        ),
+                      ),
+                      Text(
+                        '\$${appointment.depositAmount} Paid',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: AppTheme.gold,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
+                  Text(
+                    'Due: \$${appointment.balanceDue}',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AppTheme.textPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
           ],
         ),
       ),

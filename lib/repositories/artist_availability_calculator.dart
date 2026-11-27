@@ -317,9 +317,30 @@ class ArtistAvailabilityCalculator {
     required bool isPaused,
     required String? artistId,
     required DateTime now,
+    BookingSlotType slotType = BookingSlotType.flash,
   }) {
-    if (!schedule.isBooksOpen) return false;
     if (dayOnly.isBefore(today)) return false;
+
+    if (slotType == BookingSlotType.touchUp) {
+      if (!schedule.isTouchUpWorkingDay(dayOnly)) return false;
+      if (mode == BookingMode.alwaysOpen &&
+          isClosedByWeeklyCap(
+            date: dayOnly,
+            schedule: schedule,
+            repoSchedule: repoSchedule,
+            calendarAppointments: calendarAppointments,
+            customHolds: customHolds,
+            mode: mode,
+            isPaused: isPaused,
+            artistId: artistId,
+            now: now,
+          )) {
+        return false;
+      }
+      return true;
+    }
+
+    if (!schedule.isBooksOpen) return false;
 
     if (mode == BookingMode.alwaysOpen) {
       if (!schedule.isWorkingDay(dayOnly)) return false;
@@ -361,15 +382,23 @@ class ArtistAvailabilityCalculator {
     int? durationMinutes,
     int? bufferMinutes,
     String? ignoreHoldId,
+    BookingSlotType slotType = BookingSlotType.flash,
   }) {
     final resolvedStart =
         startMinutes ?? ScheduleSlotEntry.parseTimeLabelToMinutes(timeSlot);
     if (resolvedStart != null) {
+      final isTouchUp = slotType == BookingSlotType.touchUp;
+      final defaultDuration = isTouchUp
+          ? schedule.touchUpDurationMinutes
+          : schedule.slotDurationMinutes;
+      final defaultBuffer = isTouchUp
+          ? schedule.touchUpBufferMinutes
+          : schedule.bufferDurationMinutes;
       return SlotAvailabilityEngine.isIntervalAvailable(
         date: dayOnly,
         startMinutes: resolvedStart,
-        durationMinutes: durationMinutes ?? schedule.slotDurationMinutes,
-        bufferMinutes: bufferMinutes ?? schedule.bufferDurationMinutes,
+        durationMinutes: durationMinutes ?? defaultDuration,
+        bufferMinutes: bufferMinutes ?? defaultBuffer,
         schedule: schedule,
         localAppointments: matchingAppointments(
           schedule: schedule,
@@ -387,6 +416,7 @@ class ArtistAvailabilityCalculator {
         enforceLeadTime: mode == BookingMode.alwaysOpen,
         hasBookingOrHoldOnDay: hasBookingOrHoldOnDay,
         requireBufferBeforeClose: false,
+        isTouchUp: isTouchUp,
         ignoreHoldId: ignoreHoldId,
       );
     }
@@ -441,6 +471,7 @@ class ArtistAvailabilityCalculator {
     int? durationMinutes,
     int? bufferMinutes,
     String? ignoreHoldId,
+    BookingSlotType slotType = BookingSlotType.flash,
   }) {
     final effectiveNow = now ?? DateTime.now();
     final dayOnly = DateTime(date.year, date.month, date.day);
@@ -458,6 +489,7 @@ class ArtistAvailabilityCalculator {
       isPaused: isPaused,
       artistId: artistId,
       now: effectiveNow,
+      slotType: slotType,
     )) {
       return false;
     }
@@ -486,6 +518,7 @@ class ArtistAvailabilityCalculator {
       durationMinutes: durationMinutes,
       bufferMinutes: bufferMinutes,
       ignoreHoldId: ignoreHoldId,
+      slotType: slotType,
     );
   }
 
@@ -518,6 +551,7 @@ class ArtistAvailabilityCalculator {
       isPaused: isPaused,
       artistId: artistId,
       now: effectiveNow,
+      slotType: slotType,
     )) {
       return false;
     }

@@ -58,6 +58,7 @@ export interface SlotValidationOptions {
   durationMinutes?: number;
   bufferMinutes?: number;
   ignoreHoldId?: string;
+  isTouchUp?: boolean;
 }
 
 /**
@@ -130,6 +131,7 @@ export async function assertSlotIsAvailable(
     bufferMinutes,
     nowMs,
     ignoreHoldId: options?.ignoreHoldId,
+    isTouchUp: options?.isTouchUp === true,
   });
 
   // 2. Check active 10-minute checkout locks on the same artist + date for interval overlap.

@@ -183,6 +183,7 @@ export function assertIntervalIsAvailable(params: {
   nowMs?: number;
   ignoreHoldId?: string;
   requireBufferBeforeClose?: boolean;
+  isTouchUp?: boolean;
 }): void {
   const {
     scheduleData,
@@ -193,11 +194,19 @@ export function assertIntervalIsAvailable(params: {
     nowMs = Date.now(),
     ignoreHoldId,
     requireBufferBeforeClose = false,
+    isTouchUp = false,
   } = params;
 
   if (!scheduleData) return;
 
-  if (scheduleData.isBooksOpen === false) {
+  if (isTouchUp) {
+    if (scheduleData.acceptTouchUps === false) {
+      throw new HttpsError(
+        'failed-precondition',
+        'This artist is not currently accepting self-booked touch-ups.'
+      );
+    }
+  } else if (scheduleData.isBooksOpen === false) {
     throw new HttpsError(
       'failed-precondition',
       "This artist's books are currently closed."

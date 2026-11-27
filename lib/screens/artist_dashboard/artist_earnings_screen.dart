@@ -8,6 +8,7 @@ import '../../models/artist_dashboard/dashboard_appointment.dart';
 import '../../repositories/artist_dashboard_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/booking_sync_service.dart';
+import '../../services/stripe_service.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';
 import '../../theme/app_spacing.dart';
@@ -645,12 +646,20 @@ class _ArtistEarningsScreenState extends State<ArtistEarningsScreen> {
                 const SizedBox(height: 10),
                 Center(
                   child: TextButton.icon(
-                    onPressed: () {
+                    onPressed: () async {
+                      final hostContext = this.context;
                       Navigator.pop(sheetContext);
                       FlashSnackBar.showInfo(
-                        context,
+                        hostContext,
                         'Redirecting to Stripe Express Dashboard...',
                       );
+                      final res =
+                          await StripeService().launchStripeExpressDashboard();
+                      if (!res.launched &&
+                          res.errorMessage != null &&
+                          hostContext.mounted) {
+                        FlashSnackBar.showError(hostContext, res.errorMessage!);
+                      }
                     },
                     icon: const Icon(Icons.open_in_new, size: 14, color: Color(0xFF8C9191)),
                     label: Text(

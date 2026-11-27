@@ -525,6 +525,66 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
                     ),
                     const SizedBox(height: 16),
                   ],
+                  if (_appointment.isTouchUp &&
+                      _appointment.parentTattooTitle != null &&
+                      _appointment.parentTattooTitle!.isNotEmpty) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF332B14),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF5A4B1B)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.healing_outlined,
+                            color: Color(0xFFEEC200),
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Touch-up for: ${_appointment.parentTattooTitle}',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: const Color(0xFFEEC200),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (_appointment.healedPhotoUrl != null &&
+                      _appointment.healedPhotoUrl!.isNotEmpty) ...[
+                    Text(
+                      'CLIENT HEALED PHOTO',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF8C9191),
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: AspectRatio(
+                        aspectRatio: 16 / 9,
+                        child: FlashImage(
+                          urlOrPath: _appointment.healedPhotoUrl!,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   Text(
                     _appointment.serviceType,
                     style: GoogleFonts.plusJakartaSans(

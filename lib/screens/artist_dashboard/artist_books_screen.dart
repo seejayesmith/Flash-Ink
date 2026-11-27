@@ -10,6 +10,8 @@ import '../../repositories/artist_dashboard_repository.dart';
 import '../../models/waitlist_entry.dart';
 import '../../services/auth_service.dart';
 import '../../services/booking_sync_service.dart';
+import '../../services/stripe_service.dart';
+import 'stripe_payout_gate_sheet.dart';
 import '../../theme/app_buttons.dart';
 import '../../theme/app_radius.dart';
 import '../../theme/app_spacing.dart';
@@ -36,6 +38,7 @@ import '../../features/messages/presentation/screens/messages_screen.dart';
 class ArtistBooksScreen extends StatefulWidget {
   final Artist? artist;
   final AuthService? authService;
+  final StripeService? stripeService;
   final bool isEmbeddedInTab;
   final VoidCallback? onBack;
   final VoidCallback? onNavigateToCalendar;
@@ -45,6 +48,7 @@ class ArtistBooksScreen extends StatefulWidget {
     super.key,
     this.artist,
     this.authService,
+    this.stripeService,
     this.isEmbeddedInTab = false,
     this.onBack,
     this.onNavigateToCalendar,
@@ -76,6 +80,10 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
   late bool _acceptFlash;
   late bool _acceptCustom;
   late bool _acceptTouchUps;
+  late int _touchUpDurationMinutes;
+  late int _touchUpBufferMinutes;
+  late int _touchUpWindowMonths;
+  late int _touchUpFeeDollars;
   late final TextEditingController _locationController;
 
   bool _isSaving = false;
@@ -118,6 +126,19 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
     _acceptFlash = schedule.acceptFlash;
     _acceptCustom = schedule.acceptCustom;
     _acceptTouchUps = schedule.acceptTouchUps;
+    _touchUpDurationMinutes = const [15, 30, 45, 60, 90, 120]
+            .contains(schedule.touchUpDurationMinutes)
+        ? schedule.touchUpDurationMinutes
+        : 30;
+    _touchUpBufferMinutes =
+        const [0, 15, 30, 45, 60].contains(schedule.touchUpBufferMinutes)
+            ? schedule.touchUpBufferMinutes
+            : 30;
+    _touchUpWindowMonths =
+        const [3, 6, 12].contains(schedule.touchUpWindowMonths)
+            ? schedule.touchUpWindowMonths
+            : 6;
+    _touchUpFeeDollars = schedule.touchUpFeeDollars.clamp(0, 10000);
     final defaultLoc = schedule.locationNote.isNotEmpty
         ? schedule.locationNote
         : (widget.artist != null
@@ -672,6 +693,21 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
   }
 
   Future<void> _handleSave() async {
+    if (_isBooksOpen && !ArtistDashboardRepository.stripePayoutsReady) {
+      setState(() => _isBooksOpen = false);
+      StripePayoutGateSheet.show(
+        context,
+        stripeService: widget.stripeService,
+        artistName: _artistDisplayName,
+        onVerified: () {
+          if (!mounted) return;
+          setState(() => _isBooksOpen = true);
+          _handleSave();
+        },
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     final updated = ArtistDashboardRepository.booksSchedule.copyWith(
@@ -693,6 +729,10 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
       acceptFlash: _acceptFlash,
       acceptCustom: _acceptCustom,
       acceptTouchUps: _acceptTouchUps,
+      touchUpDurationMinutes: _touchUpDurationMinutes,
+      touchUpBufferMinutes: _touchUpBufferMinutes,
+      touchUpWindowMonths: _touchUpWindowMonths,
+      touchUpFeeDollars: _touchUpFeeDollars,
       locationNote: _locationController.text.trim().isEmpty
           ? 'OddMaree Studio • Portland, OR'
           : _locationController.text.trim(),
@@ -1053,35 +1093,51 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
               ),
               FlashSwitch(
                 key: const Key('books_status_switch'),
-                value: _isBooksOpen && !isPaused,
+                value: ArtistDashboardRepository.stripePayoutsReady &&
+                    _isBooksOpen &&
+                    !isPaused,
                 onChanged: (val) {
-                  setState(() => _isBooksOpen = val);
                   if (!val) {
+                    setState(() => _isBooksOpen = false);
                     ArtistDashboardRepository.closeBooks();
-                  } else {
-                    ArtistDashboardRepository.openBooksPublicly();
-                    final waitingCount = ArtistDashboardRepository.waitlistEntries
-                        .where((e) => e.status.name == 'waiting')
-                        .length;
-                    if (waitingCount > 0) {
-                      BooksOpenOptionsModal.show(
-                        context: context,
-                        onEarlyAccessSelected: () {
-                          setState(() {
-                            _isBooksOpen = true;
-                          });
-                          EarlyAccessOutreachSheet.show(
-                            context: context,
-                            onBooksUpdated: () => setState(() {}),
-                          );
-                        },
-                        onPublicOpenSelected: () {
-                          setState(() {
-                            _isBooksOpen = true;
-                          });
-                        },
-                      );
-                    }
+                    return;
+                  }
+                  if (!ArtistDashboardRepository.stripePayoutsReady) {
+                    StripePayoutGateSheet.show(
+                      context,
+                      stripeService: widget.stripeService,
+                      artistName: _artistDisplayName,
+                      onVerified: () {
+                        if (!mounted) return;
+                        setState(() => _isBooksOpen = true);
+                        ArtistDashboardRepository.openBooksPublicly();
+                      },
+                    );
+                    return;
+                  }
+                  setState(() => _isBooksOpen = true);
+                  ArtistDashboardRepository.openBooksPublicly();
+                  final waitingCount = ArtistDashboardRepository.waitlistEntries
+                      .where((e) => e.status.name == 'waiting')
+                      .length;
+                  if (waitingCount > 0) {
+                    BooksOpenOptionsModal.show(
+                      context: context,
+                      onEarlyAccessSelected: () {
+                        setState(() {
+                          _isBooksOpen = true;
+                        });
+                        EarlyAccessOutreachSheet.show(
+                          context: context,
+                          onBooksUpdated: () => setState(() {}),
+                        );
+                      },
+                      onPublicOpenSelected: () {
+                        setState(() {
+                          _isBooksOpen = true;
+                        });
+                      },
+                    );
                   }
                 },
               ),
@@ -2404,10 +2460,356 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
           ),
           const Divider(color: Color(0xFF282C2C), height: 1),
           _buildToggleRow(
-            title: 'Touch-ups & Consultations',
-            subtitle: 'Follow-ups and sizing discussions',
+            title: 'Touch-ups',
+            subtitle: 'Past clients can self-book even while public books are closed',
             value: _acceptTouchUps,
+            switchKey: const Key('accept_touch_ups_switch'),
             onChanged: (val) => setState(() => _acceptTouchUps = val),
+          ),
+          if (_acceptTouchUps) _buildTouchUpSettingsPanel(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTouchUpSettingsPanel() {
+    final isPaidTouchUp = _touchUpFeeDollars > 0;
+    const feePresets = [20, 30, 40, 50, 75];
+
+    return Container(
+      key: const Key('touch_up_settings_panel'),
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161818),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF2C2F30)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'TOUCH-UP SESSION RULES',
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFFEEC200),
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.0,
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Duration & Buffer side-by-side
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Session Duration',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF8C9191),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.onyxContainer,
+                        borderRadius: BorderRadius.circular(AppRadius.radiusSm),
+                        border: Border.all(color: const Color(0xFF2C2F30)),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<int>(
+                          key: const Key('touch_up_duration_dropdown'),
+                          isExpanded: true,
+                          isDense: true,
+                          value: _touchUpDurationMinutes,
+                          dropdownColor: AppTheme.onyxContainer,
+                          iconEnabledColor: AppTheme.gold,
+                          style: AppTypography.bodySmallBold.copyWith(
+                            color: AppTheme.textPrimary,
+                            fontSize: 13,
+                          ),
+                          items: const [15, 30, 45, 60, 90, 120]
+                              .map(
+                                (mins) => DropdownMenuItem<int>(
+                                  value: mins,
+                                  child: Text('$mins min'),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() => _touchUpDurationMinutes = val);
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Cleanup Buffer',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF8C9191),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.onyxContainer,
+                        borderRadius: BorderRadius.circular(AppRadius.radiusSm),
+                        border: Border.all(color: const Color(0xFF2C2F30)),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<int>(
+                          key: const Key('touch_up_buffer_dropdown'),
+                          isExpanded: true,
+                          isDense: true,
+                          value: _touchUpBufferMinutes,
+                          dropdownColor: AppTheme.onyxContainer,
+                          iconEnabledColor: AppTheme.gold,
+                          style: AppTypography.bodySmallBold.copyWith(
+                            color: AppTheme.textPrimary,
+                            fontSize: 13,
+                          ),
+                          items: const [0, 15, 30, 45, 60]
+                              .map(
+                                (mins) => DropdownMenuItem<int>(
+                                  value: mins,
+                                  child: Text(mins == 0 ? 'None' : '$mins min'),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() => _touchUpBufferMinutes = val);
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Eligibility window
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Self-Booking Window',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Opens 7 days after session; 1 per tattoo',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF8C9191),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.onyxContainer,
+                  borderRadius: BorderRadius.circular(AppRadius.radiusSm),
+                  border: Border.all(color: const Color(0xFF2C2F30)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    key: const Key('touch_up_window_dropdown'),
+                    isDense: true,
+                    value: _touchUpWindowMonths,
+                    dropdownColor: AppTheme.onyxContainer,
+                    iconEnabledColor: AppTheme.gold,
+                    style: AppTypography.bodySmallBold.copyWith(
+                      color: AppTheme.textPrimary,
+                      fontSize: 13,
+                    ),
+                    items: const [3, 6, 12]
+                        .map(
+                          (months) => DropdownMenuItem<int>(
+                            value: months,
+                            child: Text('$months months'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() => _touchUpWindowMonths = val);
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // Pricing Rule (Free vs Flat Fee / Deposit)
+          Text(
+            'TOUCH-UP PRICING',
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFF8C9191),
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  key: const Key('touch_up_pricing_free'),
+                  onTap: () => setState(() => _touchUpFeeDollars = 0),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: !isPaidTouchUp
+                          ? const Color(0xFFEEC200)
+                          : AppTheme.onyxContainer,
+                      borderRadius: BorderRadius.circular(AppRadius.radiusSm),
+                      border: Border.all(
+                        color: !isPaidTouchUp
+                            ? const Color(0xFFEEC200)
+                            : const Color(0xFF2C2F30),
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'Free (\$0)',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: !isPaidTouchUp
+                              ? const Color(0xFF121414)
+                              : Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: GestureDetector(
+                  key: const Key('touch_up_pricing_paid'),
+                  onTap: () => setState(() {
+                    if (_touchUpFeeDollars <= 0) {
+                      _touchUpFeeDollars = 30;
+                    }
+                  }),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isPaidTouchUp
+                          ? const Color(0xFFEEC200)
+                          : AppTheme.onyxContainer,
+                      borderRadius: BorderRadius.circular(AppRadius.radiusSm),
+                      border: Border.all(
+                        color: isPaidTouchUp
+                            ? const Color(0xFFEEC200)
+                            : const Color(0xFF2C2F30),
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'Flat Fee / Deposit',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: isPaidTouchUp
+                              ? const Color(0xFF121414)
+                              : Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (isPaidTouchUp) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: feePresets.map((amount) {
+                final isSelected = _touchUpFeeDollars == amount;
+                return GestureDetector(
+                  key: Key('touch_up_fee_$amount'),
+                  onTap: () => setState(() => _touchUpFeeDollars = amount),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? const Color(0xFFEEC200).withValues(alpha: 0.18)
+                          : AppTheme.onyxContainer,
+                      borderRadius: BorderRadius.circular(AppRadius.radiusFull),
+                      border: Border.all(
+                        color: isSelected
+                            ? const Color(0xFFEEC200)
+                            : const Color(0xFF2C2F30),
+                      ),
+                    ),
+                    child: Text(
+                      '\$$amount',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: isSelected
+                            ? const Color(0xFFEEC200)
+                            : Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Text(
+            'Touch-ups can fill shorter gaps between larger tattoos (dead-gap protection is skipped). Past the window or after 1 touch-up, clients are directed to message you.',
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFF8C9191),
+              fontSize: 11,
+              height: 1.35,
+            ),
           ),
         ],
       ),
@@ -2419,6 +2821,7 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
     required String subtitle,
     required bool value,
     required ValueChanged<bool> onChanged,
+    Key? switchKey,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -2448,6 +2851,7 @@ class _ArtistBooksScreenState extends State<ArtistBooksScreen> {
             ),
           ),
           FlashSwitch(
+            key: switchKey,
             value: value,
             onChanged: onChanged,
           ),

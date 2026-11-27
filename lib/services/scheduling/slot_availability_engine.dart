@@ -189,14 +189,17 @@ class SlotAvailabilityEngine {
     String? ignoreHoldId,
     bool includeConflicted = false,
   }) {
-    if (!schedule.isBooksOpen) return const [];
-
     final resolvedProfile = profile ??
         BookingSlotProfile.forType(
           slotType,
           schedule: schedule,
           requestedDurationMinutes: requestedDurationMinutes,
         );
+
+    final isOpenForType = resolvedProfile.type == BookingSlotType.touchUp
+        ? schedule.acceptTouchUps
+        : schedule.isBooksOpen;
+    if (!isOpenForType) return const [];
 
     final dayStart = schedule.startTime.hour * 60 + schedule.startTime.minute;
     final dayEnd = schedule.endTime.hour * 60 + schedule.endTime.minute;
@@ -360,9 +363,12 @@ class SlotAvailabilityEngine {
     bool enforceLeadTime = false,
     bool hasBookingOrHoldOnDay = false,
     bool requireBufferBeforeClose = false,
+    bool isTouchUp = false,
     String? ignoreHoldId,
   }) {
-    if (!schedule.isBooksOpen) return false;
+    final isOpenForType =
+        isTouchUp ? schedule.acceptTouchUps : schedule.isBooksOpen;
+    if (!isOpenForType) return false;
     final dayStart = schedule.startTime.hour * 60 + schedule.startTime.minute;
     final dayEnd = schedule.endTime.hour * 60 + schedule.endTime.minute;
     final sessionEnd = startMinutes + durationMinutes;

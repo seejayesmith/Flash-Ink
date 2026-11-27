@@ -509,7 +509,7 @@ class _ArtistFlashUploadScreenState extends State<ArtistFlashUploadScreen> {
   Widget build(BuildContext context) {
     return OnboardingStepScaffold(
       currentStep: 6,
-      totalSteps: 9,
+      totalSteps: 10,
       showCta: !_isEditingDetails,
       onBack: _isEditingDetails
           ? () {
